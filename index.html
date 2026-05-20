@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>🏫 校园垃圾分类AI助手</title>
+    <style>
+        /* ========== 全局样式重置 ========== */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, 
+                         "Helvetica Neue", Arial, "PingFang SC", sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        /* ========== 主容器 ========== */
+        .container {
+            max-width: 480px;
+            margin: 0 auto;
+            padding: 16px;
+            min-height: 100vh;
+        }
+
+        /* ========== 头部区域 ========== */
+        .header {
+            text-align: center;
+            padding: 24px 0 16px;
+            color: white;
+        }
+        .header h1 { font-size: 22px; font-weight: 700; letter-spacing: 1px; }
+        .header p { font-size: 13px; opacity: 0.85; margin-top: 6px; }
+
+        /* ========== 卡片容器 ========== */
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            margin-bottom: 16px;
+        }
+
+        /* ========== 拍照上传区域 ========== */
+        .upload-area {
+            border: 2px dashed #ccc;
+            border-radius: 12px;
+            padding: 36px 16px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .upload-area:hover, .upload-area.active {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.05);
+        }
+        .upload-area .icon { font-size: 48px; margin-bottom: 8px; }
+        .upload-area .text { font-size: 14px; color: #888; }
+        .upload-area .sub-text { font-size: 12px; color: #aaa; margin-top: 4px; }
+        .upload-area img {
+            max-width: 100%;
+            max-height: 240px;
+            border-radius: 8px;
+            display: none;
+        }
+        .upload-area.has-image img { display: block; }
+        .upload-area.has-image .icon,
+        .upload-area.has-image .text,
+        .upload-area.has-image .sub-text { display: none; }
+
+        /* 隐藏的原生input */
+        .hidden-input { display: none; }
+
+        /* ========== 分割线 ========== */
+        .divider {
+            display: flex;
+            align-items: center;
+            margin: 16px 0;
+            color: #999;
+            font-size: 13px;
+        }
+        .divider::before, .divider::after {
+            content: "";
+            flex: 1;
+            height: 1px;
+            background: #ddd;
+        }
+        .divider span { padding: 0 12px; }
+
+        /* ========== 搜索区域 ========== */
+        .search-box {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .search-input {
+            flex: 1;
+            height: 44px;
+            border: 1px solid #ddd;
+            border-radius: 22px;
+            padding: 0 16px;
+            font-size: 15px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        .search-input:focus { border-color: #667eea; }
+        .voice-btn {
+            width: 44px;
+            height: 44px;
+            border: none;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            transition: transform 0.2s, opacity 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .voice-btn:hover { opacity: 0.9; }
+        .voice-btn:active { transform: scale(0.95); }
+        .voice-btn.listening {
+            animation: pulse 1s infinite;
+            background: linear-gradient(135deg, #dc3545, #c82333);
+        }
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.4); }
+            50% { box-shadow: 0 0 0 12px rgba(220, 53, 69, 0); }
+        }
+
+        /* ========== 操作按钮 ========== */
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+        }
+        .btn {
+            flex: 1;
+            height: 46px;
+            border: none;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+        .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .btn-secondary {
+            background: #f5f5f5;
+            color: #666;
+        }
+        .btn-secondary:hover { background: #eee; }
+
+        /* ========== 结果展示区 ========== */
+        .result-section { display: none; }
+        .result-section.show { display: block; animation: fadeInUp 0.4s ease; }
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(16px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .result-header {
+            text-align: center;
+            padding: 16px 0;
+        }
+        .category-badge {
+            display: inline-block;
+            padding: 8px 24px;
+            border-radius: 24px;
+            color: white;
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .item-name { font-size: 22px; font-weight: 700; color: #333; }
+        .confidence-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 8px;
+            font-size: 14px;
+            color: #666;
+        }
+        .confidence-bar {
+            width: 120px;
+            height: 8px;
+            background: #eee;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .confidence-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.6s ease;
+        }
+        .confidence-fill.high { background: linear-gradient(90deg, #28a745, #5cb85c); }
+        .confidence-fill.medium { background: linear-gradient(90deg, #ffc107, #ffca28); }
+        .confidence-fill.low { background: linear-gradient(90deg, #dc3545, #fd7e14); }
+
+        .guidance-box {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 14px 16px;
+            margin-top: 12px;
+            border-left: 4px solid #667eea;
+        }
+        .guidance-label { font-size: 13px; color: #888; margin-bottom: 4px; }
+        .guidance-text { font-size: 15px; color: #333; line-height: 1.5; }
+
+        .inference-info {
+            text-align: center;
+            font-size: 12px;
+            color: #bbb;
+            margin-top: 12px;
+        }
+
+        /* ========== 搜索结果列表 ========== */
+        .search-results { margin-top: 12px; }
+        .search-item {
+            padding: 12px;
+            border-bottom: 1px solid #f0f0f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .search-item:last-child { border-bottom: none; }
+        .search-item:hover { background: #fafafa; }
+        .search-item-left { display: flex; align-items: center; gap: 10px; }
+        .search-item-icon { font-size: 24px; }
+        .search-item-label { font-size: 15px; font-weight: 600; }
+        .search-item-category { font-size: 12px; color: #888; margin-top: 2px; }
+        .search-score {
+            font-size: 13px;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 12px;
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        /* ========== 加载状态 ========== */
+        .loading-overlay {
+            display: none;
+            position: absolute;
+            inset: 0;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 12px;
+            z-index: 10;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .loading-overlay.show { display: flex; }
+        .spinner {
+            width: 36px;
+            height: 36px;
+            border: 3px solid #eee;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-text { font-size: 14px; color: #666; }
+
+        /* ========== 错误状态 ========== */
+        .error-msg {
+            display: none;
+            color: #dc3545;
+            font-size: 14px;
+            text-align: center;
+            padding: 12px;
+            background: #fff5f5;
+            border-radius: 8px;
+            margin-top: 12px;
+        }
+        .error-msg.show { display: block; }
+
+        /* ========== 底部 ========== */
+        .footer {
+            text-align: center;
+            padding: 20px 0;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <!-- 头部 -->
+    <div class="header">
+        <h1>🏫 校园垃圾分类AI助手</h1>
+        <p>拍照识别 · 语音搜索 · 智能分类</p>
+    </div>
+
+    <!-- 拍照识别卡片 -->
+    <div class="card" style="position: relative;">
+        <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
+            <div class="icon">📷</div>
+            <div class="text">点击拍照或选择图片</div>
+            <div class="sub-text">支持 JPG / PNG 格式</div>
+            <img id="previewImg" alt="预览图">
+        </div>
+        <input type="file" id="fileInput" class="hidden-input" accept="image/*" capture="environment">
+
+        <div class="loading-overlay" id="loadingOverlay">
+            <div class="spinner"></div>
+            <div class="loading-text" id="loadingText">正在识别中...</div>
+        </div>
+
+        <div class="error-msg" id="errorMsg"></div>
+
+        <div class="divider"><span>或</span></div>
+
+        <!-- 搜索框 -->
+        <div class="search-box">
+            <input type="text" class="search-input" id="searchInput" placeholder="🔍 输入垃圾名称搜索...">
+            <button class="voice-btn" id="voiceBtn" title="语音输入">🎤</button>
+        </div>
+
+        <div class="btn-group">
+            <button class="btn btn-primary" id="predictBtn" disabled onclick="doPredict()">开始识别</button>
+            <button class="btn btn-secondary" onclick="resetAll()">🔄 重置</button>
+        </div>
+    </div>
+
+    <!-- 结果展示卡片 -->
+    <div class="card result-section" id="resultSection">
+        <div class="result-header">
+            <span class="category-badge" id="categoryBadge">可回收物</span>
+            <div class="item-name" id="itemName">塑料瓶</div>
+            <div class="confidence-row">
+                <span>置信度:</span>
+                <div class="confidence-bar">
+                    <div class="confidence-fill high" id="confidenceFill" style="width: 0%"></div>
+                </div>
+                <span id="confidenceText">92%</span>
+            </div>
+        </div>
+        <div class="guidance-box">
+            <div class="guidance-label">📌 投放指引</div>
+            <div class="guidance-text" id="guidanceText"></div>
+        </div>
+        <div class="inference-info" id="inferenceInfo"></div>
+    </div>
+
+    <!-- 搜索结果卡片 -->
+    <div class="card result-section" id="searchResultSection">
+        <div class="guidance-label" style="margin-bottom: 8px;">🔍 搜索结果</div>
+        <div class="search-results" id="searchResults"></div>
+    </div>
+
+    <!-- 底部 -->
+    <div class="footer">
+        © 2026 校园垃圾分类AI助手 · 基于YOLOv8深度学习
+    </div>
+</div>
+
+<script>
+// ==================== 全局状态 ====================
+let selectedImage = null; // 当前选中的图片Base64字符串
+const API_BASE = ""; // 同源部署，不需要前缀
+
+// ==================== DOM 元素引用 ====================
+const fileInput = document.getElementById("fileInput");
+const uploadArea = document.getElementById("uploadArea");
+const previewImg = document.getElementById("previewImg");
+const predictBtn = document.getElementById("predictBtn");
+const loadingOverlay = document.getElementById("loadingOverlay");
+const loadingText = document.getElementById("loadingText");
+const errorMsg = document.getElementById("errorMsg");
+const resultSection = document.getElementById("resultSection");
+const searchResultSection = document.getElementById("searchResultSection");
+const searchInput = document.getElementById("searchInput");
+const voiceBtn = document.getElementById("voiceBtn");
+
+// ==================== 图片选择事件 ====================
+fileInput.addEventListener("change", function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // 文件大小校验（限制5MB）
+    if (file.size > 5 * 1024 * 1024) {
+        showError("图片过大，请选择5MB以内的图片");
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function(event) {
+        selectedImage = event.target.result;
+        previewImg.src = selectedImage;
+        uploadArea.classList.add("has-image");
+        predictBtn.disabled = false;
+        hideError();
+        hideResults();
+    };
+    reader.readAsDataURL(file);
+});
+
+// 拖拽上传支持
+uploadArea.addEventListener("dragover", function(e) {
+    e.preventDefault();
+    uploadArea.classList.add("active");
+});
+uploadArea.addEventListener("dragleave", function() {
+    uploadArea.classList.remove("active");
+});
+uploadArea.addEventListener("drop", function(e) {
+    e.preventDefault();
+    uploadArea.classList.remove("active");
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith("image/")) {
+        fileInput.files = e.dataTransfer.files;
+        fileInput.dispatchEvent(new Event("change"));
+    }
+});
+
+// ==================== 识别操作 ====================
+async function doPredict() {
+    if (!selectedImage) return;
+
+    showLoading("正在识别中...");
+    hideError();
+    hideResults();
+
+    try {
+        const response = await fetch(`${API_BASE}/api/predict`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image: selectedImage })
+        });
+
+        const data = await response.json();
+        hideLoading();
+
+        if (data.success) {
+            showPredictResult(data.result, data.inference_time_ms);
+        } else {
+            showError(data.error?.message || "识别失败，请重试");
+        }
+    } catch (err) {
+        hideLoading();
+        showError("网络连接失败，请检查网络");
+        console.error(err);
+    }
+}
+
+// ==================== 显示识别结果 ====================
+function showPredictResult(result, inferTime) {
+    const badge = document.getElementById("categoryBadge");
+    const nameEl = document.getElementById("itemName");
+    const fill = document.getElementById("confidenceFill");
+    const confText = document.getElementById("confidenceText");
+    const guidance = document.getElementById("guidanceText");
+    const info = document.getElementById("inferenceInfo");
+
+    badge.textContent = result.category || "未知";
+    badge.style.background = result.bin_color || "#666";
+    nameEl.textContent = result.label_cn || "未知物品";
+
+    const conf = Math.round((result.confidence || 0) * 100);
+    fill.style.width = conf + "%";
+
+    fill.className = "confidence-fill";
+    if (conf >= 90) fill.classList.add("high");
+    else if (conf >= 70) fill.classList.add("medium");
+    else fill.classList.add("low");
+
+    confText.textContent = conf + "%";
+    guidance.textContent = result.guidance || "暂无投放指引";
+    info.textContent = inferTime ? `⏱ 推理耗时 ${inferTime}ms` : "";
+
+    resultSection.classList.add("show");
+    searchResultSection.classList.remove("show");
+}
+
+// ==================== 搜索功能 ====================
+searchInput.addEventListener("keydown", async function(e) {
+    if (e.key === "Enter") await doSearch();
+});
+
+async function doSearch() {
+    const query = searchInput.value.trim();
+    if (!query) return;
+
+    loadingText.textContent = "搜索中...";
+    showLoading();
+    hideError();
+    hideResults();
+
+    try {
+        const response = await fetch(`${API_BASE}/api/search?query=${encodeURIComponent(query)}`);
+        const data = await response.json();
+        hideLoading();
+
+        if (data.success && data.results.length > 0) {
+            showSearchResults(data.results, data.query);
+        } else {
+            showError(`未找到"${query}"相关结果，请尝试其他关键词`);
+        }
+    } catch (err) {
+        hideLoading();
+        showError("搜索失败，请重试");
+    }
+}
+
+function showSearchResults(results, query) {
+    const container = document.getElementById("searchResults");
+    container.innerHTML = "";
+
+    results.forEach(function(item) {
+        const div = document.createElement("div");
+        div.className = "search-item";
+        div.innerHTML =
+            `<div class="search-item-left">
+                <span class="search-item-icon">${item.bin_icon || "📦"}</span>
+                <div>
+                    <div class="search-item-label">${item.label}</div>
+                    <div class="search-item-category">${item.category} · 相似度 ${item.similarity_score}%</div>
+                </div>
+            </div>
+            <span class="search-score">${item.similarity_score}%</span>`;
+        div.onclick = function() {
+            showPredictResult(item, 0);
+        };
+        container.appendChild(div);
+    });
+
+    searchResultSection.classList.add("show");
+    resultSection.classList.remove("show");
+}
+
+// ==================== 语音识别 ====================
+let recognition = null;
+
+function initSpeechRecognition() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+        alert("您的浏览器不支持语音识别，请使用Chrome或Edge浏览器");
+        return false;
+    }
+
+    recognition = new SpeechRecognition();
+    recognition.lang = "zh-CN";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onstart = function() {
+        voiceBtn.classList.add("listening");
+        voiceBtn.textContent = "●";
+    };
+
+    recognition.onresult = function(event) {
+        const transcript = event.results[0][0].transcript;
+        searchInput.value = transcript;
+        doSearch();
+    };
+
+    recognition.onerror = function(event) {
+        console.warn("语音识别错误:", event.error);
+        stopVoiceListening();
+        if (event.error === "no-speech") {
+            showError("未检测到语音，请重试");
+        }
+    };
+
+    recognition.onend = function() {
+        stopVoiceListening();
+    };
+
+    return true;
+}
+
+function stopVoiceListening() {
+    voiceBtn.classList.remove("listening");
+    voiceBtn.textContent = "🎤";
+}
+
+voiceBtn.onclick = function() {
+    if (!recognition) {
+        if (!initSpeechRecognition()) return;
+    }
+
+    if (voiceBtn.classList.contains("listening")) {
+        recognition.stop();
+    } else {
+        try {
+            recognition.start();
+        } catch (e) {
+            console.warn("语音启动失败:", e);
+        }
+    }
+};
+
+// ==================== UI 工具函数 ====================
+function showLoading(text) {
+    if (text) loadingText.textContent = text;
+    loadingOverlay.classList.add("show");
+}
+
+function hideLoading() {
+    loadingOverlay.classList.remove("show");
+}
+
+function showError(msg) {
+    errorMsg.textContent = msg;
+    errorMsg.classList.add("show");
+}
+
+function hideError() {
+    errorMsg.classList.remove("show");
+    errorMsg.textContent = "";
+}
+
+function hideResults() {
+    resultSection.classList.remove("show");
+    searchResultSection.classList.remove("show");
+}
+
+function resetAll() {
+    selectedImage = null;
+    fileInput.value = "";
+    previewImg.src = "";
+    uploadArea.classList.remove("has-image");
+    predictBtn.disabled = true;
+    searchInput.value = "";
+    hideError();
+    hideResults();
+    hideLoading();
+}
+
+// ==================== 初始化 ====================
+console.log("🏫 校园垃圾分类AI助手 已加载");
+</script>
+</body>
+</html>

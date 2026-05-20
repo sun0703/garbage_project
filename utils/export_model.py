@@ -23,7 +23,7 @@ def export_yolov8_cls_to_onnx():
     output_path = models_dir / "waste_classifier.onnx"
 
     # 确保输出目录存在
-    models_dir.mkdir(parents=True, exist_ok=True=True)
+    models_dir.mkdir(parents=True, exist_ok=True)
 
     print("=" * 50)
     print("  YOLOv8n-cls → ONNX 导出工具")
@@ -62,6 +62,7 @@ def export_yolov8_cls_to_onnx():
         exported_file = Path(result)
         if exported_file.exists() and str(exported_file) != str(output_path):
             import shutil
+
             shutil.move(str(exported_file), str(output_path))
             print(f"  ✅ 模型已复制到: {output_path}")
     except Exception as e:
@@ -72,10 +73,11 @@ def export_yolov8_cls_to_onnx():
     print("\n[步骤3] 验证ONNX模型...")
     try:
         import onnxruntime as ort
+
         session = ort.InferenceSession(str(output_path))
         inputs = session.get_inputs()
         outputs = session.get_outputs()
-        print(f"  ✅ 模型验证通过")
+        print("  ✅ 模型验证通过")
         print(f"     输入: {inputs[0].name} {inputs[0].shape} {inputs[0].type}")
         print(f"     输出: {outputs[0].name} {outputs[0].shape} {outputs[0].type}")
         print(f"     文件大小: {output_path.stat().st_size / 1024 / 1024:.2f} MB")
@@ -84,7 +86,7 @@ def export_yolov8_cls_to_onnx():
 
     print("\n" + "=" * 50)
     print("  🎉 导出完成！现在可以启动服务了:")
-    print(f"     uvicorn main:app --host 0.0.0.0 --port 8000 --reload")
+    print("     uvicorn main:app --host 0.0.0.0 --port 8000 --reload")
     print("=" * 50)
 
     return True

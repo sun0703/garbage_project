@@ -44,7 +44,7 @@ good first issue:
   - "简单"
   - "入门"
 
-priority: critical:
+"priority: critical":
   - "紧急"
   - "严重"
   - "critical"

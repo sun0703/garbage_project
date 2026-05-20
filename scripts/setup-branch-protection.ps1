@@ -1,75 +1,108 @@
-# 分支保护规则配置脚本
-# 使用前请确保已运行: gh auth login --web
+# Branch Protection Setup Script - Final Stable Version
+# Based on verified working version with improvements
 
-param(
-    [string]$Owner = "sun0703",
-    [string]$Repo = "garbage_project",
-    [string]$Branch = "main"
-)
+$Owner = "sun0703"
+$Repo = "garbage_project"
+$Branch = "main"
 
-# 检查 gh 是否已安装
-if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
-    Write-Host "❌ 错误: GitHub CLI (gh) 未安装" -ForegroundColor Red
-    Write-Host "请运行: winget install --id GitHub.cli" -ForegroundColor Yellow
-    exit 1
-}
+Write-Host "========================================"
+Write-Host "  GitHub Branch Protection Setup v2.0"
+Write-Host "========================================"
+Write-Host ""
 
-# 检查是否已登录
-$authStatus = gh auth status 2>&1
+Write-Host "[*] Checking authentication..."
+$authCheck = gh auth status 2>&1
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "⚠️  未检测到 GitHub 登录，正在启动登录..." -ForegroundColor Yellow
-    gh auth login --web
+    Write-Host "[!] Not logged in. Starting login..." -ForegroundColor Yellow
+    gh auth login --web --git-protocol https
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "❌ 登录失败，请手动运行: gh auth login --web" -ForegroundColor Red
+        Write-Host "[ERROR] Login failed" -ForegroundColor Red
         exit 1
     }
 }
 
-Write-Host "`n🔒 开始设置分支保护规则..." -ForegroundColor Cyan
-Write-Host "📦 仓库: $Owner/$Repo" -ForegroundColor White
-Write-Host "🌿 分支: $Branch`n" -ForegroundColor White
+$userInfo = gh api user --jq '.login' 2>&1
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "[OK] Logged in as: $userInfo" -ForegroundColor Green
+} else {
+    Write-Host "[ERROR] Verification failed" -ForegroundColor Red
+    exit 1
+}
 
-try {
-    # 设置分支保护规则
-    $body = @{
-        required_status_checks = @{
-            strict = $true
-            contexts = @("ci/test", "ci/lint", "ci/build")
-        }
-        enforce_admins = $true
-        required_pull_request_reviews = @{
-            dismiss_stale_reviews = $true
-            require_code_owner_reviews = $false
-            required_approving_review_count = 1
-        }
-        restrictions = $null  # 不限制谁能推送，只限制方式
-        required_linear_history = $true
-        allow_force_pushes = $false
-        allow_deletions = $false
-        block_creations = $false
-    } | ConvertTo-Json -Depth 5
+Write-Host ""
+Write-Host "Target: $Owner/$Repo | Branch: $Branch"
+Write-Host ""
 
-    $result = gh api --method PUT `
-        "/repos/$Owner/$Repo/branches/$Branch/protection" `
-        --input - <<< $body
-    
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "✅ 分支保护规则设置成功！" -ForegroundColor Green
-        
-        Write-Host "`n📋 已启用的保护规则:" -ForegroundColor Cyan
-        Write-Host "  ✓ 需要 PR 审查（至少 1 人批准）" -ForegroundColor Green
-        Write-Host "  ✓ 状态检查必须通过（test/lint/build）" -ForegroundColor Green
-        Write-Host "  ✓ 禁止强制推送（Force Push）" -ForegroundColor Green
-        Write-Host "  ✓ 禁止删除主分支" -ForegroundColor Green
-        Write-Host "  ✓ 要求线性提交历史（Squash Merge）" -ForegroundColor Green
-        Write-Host "  ✓ 管理员也受规则约束" -ForegroundColor Green
-        Write-Host "  ✓ 过期的审查意见会自动忽略" -ForegroundColor Green
-    }
-} catch {
-    Write-Host "❌ 设置失败: $_" -ForegroundColor Red
-    Write-Host "`n💡 可能的原因:" -ForegroundColor Yellow
-    Write-Host "  1. 没有仓库管理员权限" -ForegroundColor Yellow
-    Write-Host "  2. 网络连接问题" -ForegroundColor Yellow
-    Write-Host "  3. 分支名称不正确" -ForegroundColor Yellow
+$branchInfo = gh api "/repos/$Owner/$Repo/branches/$Branch" 2>$null
+if (-not $branchInfo) {
+    Write-Host "[ERROR] Branch '$Branch' does not exist" -ForegroundColor Red
+    exit 1
+}
+
+Write-Host "[*] Building JSON payload..."
+
+$nl = [Environment]::NewLine
+$sb = New-Object System.Text.StringBuilder
+
+[void]$sb.Append("{$nl")
+[void]$sb.Append("  ""required_status_checks"": {$nl")
+[void]$sb.Append("    ""strict"": true,$nl")
+[void]$sb.Append("    ""contexts"": [$nl")
+[void]$sb.Append("      ""CI/CD Pipeline / Code Style Check"",$nl")
+[void]$sb.Append("      ""CI/CD Pipeline / Unit Tests"",$nl")
+[void]$sb.Append("      ""CI/CD Pipeline / Build Verification""$nl")
+[void]$sb.Append("    ]$nl")
+[void]$sb.Append("  },$nl")
+[void]$sb.Append("  ""enforce_admins"": true,$nl")
+[void]$sb.Append("  ""required_pull_request_reviews"": {$nl")
+[void]$sb.Append("    ""dismiss_stale_reviews"": true,$nl")
+[void]$sb.Append("    ""require_code_owner_reviews"": false,$nl")
+[void]$sb.Append("    ""required_approving_review_count"": 1$nl")
+[void]$sb.Append("  },$nl")
+[void]$sb.Append("  ""restrictions"": null,$nl")
+[void]$sb.Append("  ""required_linear_history"": true,$nl")
+[void]$sb.Append("  ""allow_force_pushes"": false,$nl")
+[void]$sb.Append("  ""allow_deletions"": false$nl")
+[void]$sb.Append("}")
+
+$jsonPayload = $sb.ToString()
+
+Write-Host "[*] Configuring branch protection..."
+
+$tempFile = "$env:TEMP\branch-protection-$((Get-Random)).json"
+[System.IO.File]::WriteAllText($tempFile, $jsonPayload, [System.Text.UTF8Encoding]::new($false))
+
+$result = gh api --method PUT "/repos/$Owner/$Repo/branches/$Branch/protection" --input $tempFile 2>&1
+
+if (Test-Path $tempFile) {
+    Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
+}
+
+if ($LASTEXITCODE -eq 0) {
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Green
+    Write-Host "[SUCCESS] Branch protection configured!" -ForegroundColor Green
+    Write-Host "========================================" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "Enabled protections:"
+    Write-Host "  [v] PR review required (min 1 approval)"
+    Write-Host "  [v] Status checks required (test/lint/build)"
+    Write-Host "  [v] Strict mode enabled"
+    Write-Host "  [v] Linear history enforced (Squash merge)"
+    Write-Host "  [x] Force push disabled"
+    Write-Host "  [x] Branch deletion disabled"
+    Write-Host "  [x] Admins must follow rules too"
+    Write-Host ""
+    Write-Host "View settings: " -NoNewline
+    Write-Host "https://github.com/$Owner/$Repo/settings/branches" -ForegroundColor Blue
+    Write-Host ""
+    exit 0
+} else {
+    Write-Host ""
+    Write-Host "[ERROR] Failed to configure branch protection" -ForegroundColor Red
+    Write-Host "Details: $result" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "Manual setup:" -ForegroundColor Yellow
+    Write-Host "  https://github.com/$Owner/$Repo/settings/branches" -ForegroundColor Yellow
     exit 1
 }

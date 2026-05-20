@@ -1,0 +1,21 @@
+[MASTER]
+# 忽略第三方包导入错误（CI环境未安装依赖）
+extension-pkg-whitelist=
+ignore=third_party,.venv,__pycache__,.git,node_modules,models,data,static
+
+# 禁用CI环境不适用的规则
+disable=
+    C0114,  # missing-module-docstring（已有）
+    C0115,  # missing-class-docstring（已有）
+    C0103,  # invalid-name（FastAPI全局变量 vision_engine/search_engine）
+    W0603,  # global-statement（FastAPI生命周期必需）
+    C0415,  # import-outside-toplevel（延迟导入优化）
+    R0903,  # too-few-methods（Pydantic模型类只有字段定义）
+    W0718,  # broad-exception-caught（顶层容错场景保留）
+    E0401,  # import-error（CI无依赖安装）
+
+[FORMAT]
+max-line-length=127
+
+[BASIC]
+good-names=i,e,f,_,id

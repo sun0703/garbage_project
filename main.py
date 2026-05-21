@@ -49,7 +49,7 @@ USE_YOLO_PT_MODEL = True  # 使用PyTorch格式模型（推荐）
 # USE_YOLO_PT_MODEL = False
 VOCAB_PATH = BASE_DIR / "data" / "waste.json"
 STATIC_DIR = BASE_DIR / "static"
-INDEX_HTML_PATH = BASE_DIR / "index.html"
+INDEX_HTML_PATH = BASE_DIR / "static" / "index.html"
 
 INPUT_SIZE = (224, 224)
 YOLO_INPUT_SIZE = (640, 640)

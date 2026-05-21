@@ -14,6 +14,7 @@ import json
 import logging
 import random
 import time
+import uuid
 from io import BytesIO
 from pathlib import Path
 from typing import Optional, Tuple
@@ -245,6 +246,123 @@ app = FastAPI(
 class PredictRequest(BaseModel):
     """图像预测请求体"""
     image: str  # Base64编码的图片数据
+
+
+class BatchPredictRequest(BaseModel):
+    """批量图像预测请求体"""
+    images: list[str]  # Base64编码的图片数组，最多5张
+
+
+class FeedbackRequest(BaseModel):
+    """用户反馈请求体"""
+    image_base64: str           # 原始图片Base64
+    predicted_category_id: int  # 模型预测的类别 0-3
+    correct_category_id: int    # 用户认为的正确类别 0-3
+    comment: str = ""           # 用户备注（可选）
+
+
+# ==================== 内存存储层 ====================
+
+class HistoryStore:
+    """识别历史记录存储（内存 + JSON文件备份）"""
+
+    def __init__(self, max_items: int = 200, backup_path: Path | None = None):
+        self.max_items = max_items
+        self._records: list[dict] = []
+        self._backup_path = backup_path
+        self._load_from_disk()
+
+    def add(self, record: dict) -> str:
+        record["id"] = uuid.uuid4().hex[:10]
+        record["created_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ")
+        self._records.insert(0, record)
+        if len(self._records) > self.max_items:
+            self._records = self._records[:self.max_items]
+        self._save_to_disk()
+        return record["id"]
+
+    def get_all(self, page: int = 1, page_size: int = 20) -> dict:
+        total = len(self._records)
+        start = (page - 1) * page_size
+        end = start + page_size
+        page_data = self._records[start:end]
+        return {
+            "data": page_data,
+            "pagination": {
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": max(1, (total + page_size - 1) // page_size),
+            },
+        }
+
+    def delete(self, record_id: str) -> bool:
+        for i, r in enumerate(self._records):
+            if r.get("id") == record_id:
+                self._records.pop(i)
+                self._save_to_disk()
+                return True
+        return False
+
+    def clear(self) -> None:
+        self._records.clear()
+        self._save_to_disk()
+
+    def _save_to_disk(self) -> None:
+        if not self._backup_path:
+            return
+        try:
+            # 只存最近100条到磁盘
+            with open(self._backup_path, "w", encoding="utf-8") as f:
+                json.dump(self._records[:100], f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+    def _load_from_disk(self) -> None:
+        if not self._backup_path or not self._backup_path.exists():
+            return
+        try:
+            with open(self._backup_path, "r", encoding="utf-8") as f:
+                self._records = json.load(f)
+        except Exception:
+            pass
+
+
+class FeedbackStore:
+    """用户反馈存储（内存 + JSON文件追加）"""
+
+    def __init__(self, backup_path: Path | None = None):
+        self._records: list[dict] = []
+        self._backup_path = backup_path
+        self._load_from_disk()
+
+    def add(self, feedback: dict) -> str:
+        feedback["feedback_id"] = f"fb_{uuid.uuid4().hex[:8]}"
+        feedback["created_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ")
+        self._records.append(feedback)
+        self._save_to_disk()
+        return feedback["feedback_id"]
+
+    def get_all(self) -> list[dict]:
+        return list(self._records)
+
+    def _save_to_disk(self) -> None:
+        if not self._backup_path:
+            return
+        try:
+            with open(self._backup_path, "w", encoding="utf-8") as f:
+                json.dump(self._records, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+    def _load_from_disk(self) -> None:
+        if not self._backup_path or not self._backup_path.exists():
+            return
+        try:
+            with open(self._backup_path, "r", encoding="utf-8") as f:
+                self._records = json.load(f)
+        except Exception:
+            pass
 
 
 # ==================== 图像特征分析器 ====================
@@ -1051,15 +1169,19 @@ class SearchEngine:
 # ==================== 全局实例初始化 ====================
 vision_engine: Optional[VisionEngine] = None
 search_engine: Optional[SearchEngine] = None
+history_store: Optional[HistoryStore] = None
+feedback_store: Optional[FeedbackStore] = None
 
 
 @app.on_event("startup")
 def startup_event() -> None:
     """应用启动时初始化"""
-    global vision_engine, search_engine
+    global vision_engine, search_engine, history_store, feedback_store
     logger.info("正在初始化服务...")
     vision_engine = VisionEngine(str(MODEL_PATH))
     search_engine = SearchEngine(str(VOCAB_PATH))
+    history_store = HistoryStore(backup_path=BASE_DIR / "data" / "history.json")
+    feedback_store = FeedbackStore(backup_path=BASE_DIR / "data" / "feedback.json")
 
     if STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -1140,6 +1262,7 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
     try:
         result = vision_engine.predict(image)
         inference_ms = int((time.time() - start_time) * 1000)
+        req_id = uuid.uuid4().hex[:12]
 
         # ===== 智能策略选择 =====
         # 40类专用模型：直接使用YOLO检测结果（无需特征分析）
@@ -1224,11 +1347,24 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
             "success": True,
             "result": {**result, **class_info},
             "inference_time_ms": inference_ms,
+            "request_id": req_id,
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
-        
+
         if result.get("is_demo_mode"):
             response_data["demo_notice"] = "🔬 智能演示模式：基于图像特征分析（颜色、透明度、形状等），非专门训练的垃圾分类模型"
+
+        # 写入历史记录（仅存必要字段，不存完整base64图片）
+        if history_store:
+            history_store.add({
+                "category": class_info.get("category", ""),
+                "category_id": class_info.get("category_id", -1),
+                "label_cn": class_info.get("label_cn", ""),
+                "bin_color": class_info.get("bin_color", ""),
+                "confidence": result.get("confidence", 0),
+                "guidance": class_info.get("guidance", ""),
+                "is_demo_mode": result.get("is_demo_mode", False),
+            })
 
         return JSONResponse(content=response_data)
 
@@ -1419,6 +1555,190 @@ def _get_class_info(class_index: int, is_demo_mode: bool = False,
                     })
 
     return info
+
+
+
+# ==================== batch_predict 批量识别 ====================
+
+@app.post("/api/batch_predict")
+async def batch_predict_waste(request: BatchPredictRequest) -> JSONResponse:
+    """
+    批量图像分类识别接口
+    支持单次最多5张图片并行推理
+    """
+    start_time = time.time()
+    req_id = uuid.uuid4().hex[:12]
+
+    images = request.images
+    if len(images) > 5:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "success": False,
+                "error": {"code": "E001", "message": "批量识别最多支持5张图片"},
+                "request_id": req_id,
+            },
+        )
+
+    if not vision_engine or not vision_engine.is_loaded:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "success": False,
+                "error": {"code": "E002", "message": "模型未就绪"},
+                "request_id": req_id,
+            },
+        )
+
+    results = []
+    for idx, img_str in enumerate(images):
+        try:
+            _, encoded_data = img_str.split(",", 1)
+            image_data = base64.b64decode(encoded_data)
+            image = Image.open(BytesIO(image_data)).convert("RGB")
+        except Exception:
+            results.append({
+                "index": idx,
+                "error": "图片解码失败",
+            })
+            continue
+
+        try:
+            img_start = time.time()
+            result = vision_engine.predict(image)
+            img_ms = int((time.time() - img_start) * 1000)
+
+            class_index = result.get("class_index", 2)
+
+            # 40类映射
+            if vision_engine.is_pt_model and vision_engine.num_classes >= 40:
+                original_class_id = result.get("original_class_id", -1)
+                if original_class_id in GARBAGE_40CLASSES:
+                    mapping = GARBAGE_40CLASSES[original_class_id]
+                    class_index = mapping["category"]
+                    result["original_class_name"] = mapping["name_cn"]
+                    result["is_demo_mode"] = False
+
+            class_info = _get_class_info(
+                class_index,
+                result.get("is_demo_mode", False),
+                result.get("item_type", "unknown"),
+                result.get("feature_analysis", {}).get("is_metallic", "False") == "True",
+                result.get("original_class_name"),
+            )
+
+            item = {
+                "index": idx,
+                "category": class_info.get("category", ""),
+                "category_id": class_info.get("category_id", -1),
+                "bin_color": class_info.get("bin_color", ""),
+                "bin_icon": class_info.get("bin_icon", ""),
+                "label_cn": class_info.get("label_cn", ""),
+                "confidence": result.get("confidence", 0),
+                "guidance": class_info.get("guidance", ""),
+                "is_demo_mode": result.get("is_demo_mode", False),
+                "inference_time_ms": img_ms,
+            }
+            results.append(item)
+
+            # 写入历史
+            if history_store:
+                history_store.add({
+                    "category": item["category"],
+                    "category_id": item["category_id"],
+                    "label_cn": item["label_cn"],
+                    "bin_color": item["bin_color"],
+                    "confidence": item["confidence"],
+                    "guidance": item["guidance"],
+                    "is_demo_mode": item["is_demo_mode"],
+                })
+
+        except Exception as e:
+            logger.error("批量推理-第%d张出错: %s", idx, e)
+            results.append({
+                "index": idx,
+                "error": str(e),
+            })
+
+    total_ms = int((time.time() - start_time) * 1000)
+    return JSONResponse(content={
+        "success": True,
+        "results": results,
+        "total_time_ms": total_ms,
+        "request_id": req_id,
+    })
+
+
+# ==================== history 历史记录 ====================
+
+@app.get("/api/history")
+async def get_history(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=50)) -> JSONResponse:
+    """获取识别历史记录（分页）"""
+    if not history_store:
+        return JSONResponse(content={
+            "success": True,
+            "data": [],
+            "pagination": {"total": 0, "page": page, "page_size": page_size, "total_pages": 0},
+        })
+
+    result = history_store.get_all(page=page, page_size=page_size)
+    result["success"] = True
+    return JSONResponse(content=result)
+
+
+@app.delete("/api/history/{record_id}")
+async def delete_history(record_id: str) -> JSONResponse:
+    """删除单条历史记录"""
+    if not history_store:
+        return JSONResponse(
+            status_code=404,
+            content={"success": False, "error": {"code": "E004", "message": "记录不存在"}},
+        )
+
+    deleted = history_store.delete(record_id)
+    if deleted:
+        return JSONResponse(content={"success": True, "message": "已删除"})
+    return JSONResponse(
+        status_code=404,
+        content={"success": False, "error": {"code": "E004", "message": "记录不存在"}},
+    )
+
+
+# ==================== feedback 用户反馈 ====================
+
+@app.post("/api/feedback")
+async def submit_feedback(request: FeedbackRequest) -> JSONResponse:
+    """提交识别结果反馈"""
+    if request.correct_category_id not in (0, 1, 2, 3):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "success": False,
+                "error": {"code": "E001", "message": "correct_category_id 必须为 0-3"},
+            },
+        )
+
+    if not feedback_store:
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": {"code": "E006", "message": "反馈服务未就绪"}},
+        )
+
+    feedback_id = feedback_store.add({
+        "image_base64": request.image_base64,
+        "predicted_category_id": request.predicted_category_id,
+        "correct_category_id": request.correct_category_id,
+        "comment": request.comment,
+    })
+
+    logger.info("📝 收到用户反馈: %s, 预测=%d, 正确=%d", feedback_id,
+                request.predicted_category_id, request.correct_category_id)
+
+    return JSONResponse(content={
+        "success": True,
+        "message": "反馈已提交，感谢您的帮助",
+        "feedback_id": feedback_id,
+    })
 
 
 # ==================== 程序入口 ====================

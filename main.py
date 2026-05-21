@@ -1345,9 +1345,7 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
 
         response_data = {
             "success": True,
-            "result": {**result, **class_info},
-            "inference_time_ms": inference_ms,
-            "request_id": req_id,
+            "data": {**result, **class_info, "inference_time_ms": inference_ms, "request_id": req_id},
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
 
@@ -1409,8 +1407,7 @@ async def search_waste(query: str = Query(..., min_length=1)) -> JSONResponse:
     return JSONResponse(
         content={
             "success": True,
-            "query": query,
-            "results": results,
+            "data": results,
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
     )
@@ -1560,7 +1557,7 @@ def _get_class_info(class_index: int, is_demo_mode: bool = False,
 
 # ==================== batch_predict 批量识别 ====================
 
-@app.post("/api/batch_predict")
+@app.post("/api/batch-predict")
 async def batch_predict_waste(request: BatchPredictRequest) -> JSONResponse:
     """
     批量图像分类识别接口
@@ -1663,7 +1660,7 @@ async def batch_predict_waste(request: BatchPredictRequest) -> JSONResponse:
     total_ms = int((time.time() - start_time) * 1000)
     return JSONResponse(content={
         "success": True,
-        "results": results,
+        "data": results,
         "total_time_ms": total_ms,
         "request_id": req_id,
     })

@@ -1184,7 +1184,7 @@ def startup_event() -> None:
     feedback_store = FeedbackStore(backup_path=BASE_DIR / "data" / "feedback.json")
 
     if STATIC_DIR.exists():
-        app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+        app.mount("/static", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
 
     logger.info("服务初始化完成")
 

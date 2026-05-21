@@ -179,6 +179,13 @@ class Store {
         return value;
     }
 
+    /** 别名：get() → getState()，兼容页面模块的调用习惯 */
+    get(key) { return this.getState(key); }
+    /** 别名：set() → setState()，兼容页面模块的调用习惯 */
+    set(key, value) { return this.setState(key, value); }
+    /** 别名：remove() → setState(key, null)，兼容页面模块的调用习惯 */
+    remove(key) { return this.setState(key, null); }
+
     /**
      * 批量更新多个状态字段（原子操作）
      * 所有字段更新完毕后统一触发回调，适用于关联状态同时变更场景

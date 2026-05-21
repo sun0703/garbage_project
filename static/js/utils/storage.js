@@ -295,3 +295,6 @@ export class Storage {
     return history.length;
   }
 }
+
+/** 单例实例 */
+export const storage = new Storage();

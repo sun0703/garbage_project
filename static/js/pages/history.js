@@ -9,7 +9,7 @@
 
 // ==================== 模块依赖导入 ====================
 import { store } from '../store.js';
-import { Storage } from '../utils/storage.js';
+import { storage } from '../utils/storage.js';
 import { showToast, confirm, showModal } from '../utils/ui.js';
 
 // ==================== 页面类定义 ====================
@@ -152,7 +152,7 @@ export class HistoryPage {
     _loadRecords() {
         try {
             /* 通过 Storage 工具类获取全部历史记录 */
-            this._records = Storage.getHistory() || [];
+            this._records = storage.getHistory() || [];
 
             /* 更新统计信息 */
             this._updateStats();
@@ -468,7 +468,7 @@ export class HistoryPage {
             await new Promise(resolve => setTimeout(resolve, 300));
 
             /* 从存储中删除 */
-            Storage.deleteHistory(recordId);
+            storage.deleteHistory(recordId);
 
             /* 从内存数据中移除 */
             this._records = this._records.filter(r => r.id !== recordId);
@@ -502,17 +502,15 @@ export class HistoryPage {
 
         /* 二次确认弹窗 */
         const confirmed = await confirm(
-            '确认清空',
             `确定要清空全部 ${this._records.length} 条识别历史吗？此操作不可撤销。`,
-            '取消',
-            '确认清空'
+            { title: '确认清空', confirmText: '确认清空', cancelText: '取消' }
         );
 
         if (!confirmed) return; /* 用户取消 */
 
         try {
             /* 调用 Storage 工具类清空全部记录 */
-            Storage.clearHistory();
+            storage.clearHistory();
 
             /* 清空内存数据 */
             this._records = [];

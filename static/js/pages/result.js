@@ -9,7 +9,7 @@
 
 // ==================== 模块依赖导入 ====================
 import { store } from '../store.js';
-import { Storage } from '../utils/storage.js';
+import { storage } from '../utils/storage.js';
 import { showToast, showModal, confirm } from '../utils/ui.js';
 import { ResultCard } from '../components/result-card.js';
 import { CategoryTag } from '../components/category-tag.js';
@@ -212,7 +212,7 @@ export class ResultPage {
             };
 
             /* 调用 Storage 工具类保存 */
-            Storage.saveHistory(record);
+            storage.saveHistory(record);
 
             this._historySaved = true;
             console.log('[ResultPage] 已保存到历史记录:', record.id);

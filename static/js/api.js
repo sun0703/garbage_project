@@ -450,3 +450,7 @@ export { ApiError };
 
 /** 导出错误码映射表，供外部扩展或参考 */
 export { ERROR_CODE_MAP };
+
+/** 单例实例：全局共享的API客户端 */
+const api = new ApiClient();
+export { api };

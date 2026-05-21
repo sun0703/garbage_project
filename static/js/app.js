@@ -16,8 +16,8 @@
 // ==================== 模块依赖导入 ====================
 
 import { Router } from './router.js';
-import { Store, DEFAULT_STATE } from './store.js';
-import { ApiClient, ApiError } from './api.js';
+import { store, Store, DEFAULT_STATE } from './store.js';
+import { api, ApiClient, ApiError } from './api.js';
 
 /*
  * 全局UI组件导入（安全加载模式）
@@ -70,8 +70,8 @@ const APP_CONFIG = Object.freeze({
 
 // ==================== 全局实例创建 ====================
 
-const store = new Store();
-const api = new ApiClient(APP_CONFIG.apiBaseURL);
+// store 和 api 从 api.js / store.js 导入单例，无需重新创建
+api.baseURL = APP_CONFIG.apiBaseURL;
 const router = new Router();
 
 /**

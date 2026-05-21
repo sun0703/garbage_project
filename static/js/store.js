@@ -324,3 +324,7 @@ export { Store };
 
 /** 导出默认状态常量，方便外部做校验或对比 */
 export { DEFAULT_STATE };
+
+/** 单例实例：全局共享的状态管理器 */
+const store = new Store();
+export { store };

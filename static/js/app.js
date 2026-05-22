@@ -168,6 +168,11 @@ function createPageHandler(pageName, modulePath) {
         /* 更新Store中的当前页面状态 */
         store.setState('currentPage', pageName);
 
+        /* 切换页面 CSS 可见性：隐藏所有页，显示目标页 */
+        document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+        const pageEl = document.getElementById(`page-${pageName}`);
+        if (pageEl) pageEl.classList.add('active');
+
         /* 动态导入并实例化目标页面 */
         const PageClass = await loadPage(pageName, modulePath);
         if (!PageClass) {

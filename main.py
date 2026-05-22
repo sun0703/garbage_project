@@ -1291,8 +1291,23 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
                 logger.info("✅ 40类映射: ID=%d → %s (类别=%d)",
                            original_class_id, class_name_cn, category_4class)
             else:
-                logger.warning("⚠️ 未知类别ID: %d", original_class_id)
+                logger.warning("⚠️ 40类模型未检测到已知物品，降级到特征分析")
                 result["is_demo_mode"] = True
+                result["class_index"] = -1  # 标记为未知，触发特征分析
+
+            # 40类模型未能识别时，用图像特征分析兜底
+            if result.get("is_demo_mode") and result.get("class_index", -1) < 0:
+                logger.info("🔬 降级：启用图像特征分析")
+                features = ImageFeatureAnalyzer.analyze(image)
+                smart_class_index, reasoning, item_type = ImageFeatureAnalyzer.classify_by_features(features)
+                demo_confidence = ImageFeatureAnalyzer.calculate_confidence(features, smart_class_index)
+                result["class_index"] = smart_class_index
+                result["confidence"] = round(demo_confidence, 4)
+                result["feature_analysis"] = features
+                result["reasoning"] = reasoning
+                result["item_type"] = item_type
+                logger.info("✅ 特征分析: 类别=%d, 类型=%s, 置信度=%.1f%%",
+                           smart_class_index, item_type, demo_confidence * 100)
 
         else:
             # 旧版COCO/ONNX模型 - 使用混合策略v3.1

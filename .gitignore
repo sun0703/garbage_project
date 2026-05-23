@@ -133,6 +133,10 @@ data/processed/*.csv
 data/processed/*.json
 !data/waste.json  # 保留配置数据
 
+# 运行时生成的数据文件（不应纳入版本控制）
+data/history.json      # 识别历史记录（动态生成）
+data/feedback.json     # 用户反馈数据（动态生成）
+
 # 日志文件
 logs/
 *.log

@@ -339,12 +339,7 @@ export class HomePage {
             showLoading('正在处理图片...');
 
             /* 第二步：图片压缩 */
-            const compressedBlob = await ImageProcessor.compress(file, {
-                maxWidth: 1024,
-                maxHeight: 1024,
-                quality: 0.85,
-                mimeType: 'image/jpeg'
-            });
+            const compressedBlob = await ImageProcessor.compress(file, 2048);
 
             /* 第三步：生成预览 URL 并显示 */
             const objectUrl = URL.createObjectURL(compressedBlob);
@@ -355,7 +350,7 @@ export class HomePage {
             }
 
             /* 第四步：转换为 Base64 并存入 store */
-            const base64 = await ImageProcessor.blobToBase64(compressedBlob);
+            const base64 = await ImageProcessor.toBase64(compressedBlob);
             store.set('selectedImage', base64);
             store.set('selectedFileName', file.name);
 

@@ -259,6 +259,14 @@ export class ResultCard {
             `💬 ${data.guidance || '暂无投放指引'}`
         ];
 
+        /* 追加处理建议步骤（如有） */
+        if (Array.isArray(data.tips) && data.tips.length > 0) {
+            lines.push('', '📝 处理建议：');
+            data.tips.forEach((step, i) => {
+                lines.push(`   ${i + 1}. ${step}`);
+            });
+        }
+
         // 如果有推理依据则追加
         if (data.reasoning) {
             lines.push(``, `🔍 ${data.reasoning}`);
@@ -426,21 +434,35 @@ export class ResultCard {
     }
 
     /**
-     * 更新处理建议（P1功能预留）
+     * 更新处理建议（v2.3 支持步骤数组）
      * @private
-     * @param {string|null} tips - 处理建议文本
+     * @param {string[]|string|null} tips - 处理建议：字符串数组(步骤列表)或纯文本
      * @returns {void}
      */
     _updateTips(tips) {
         const section = this._element.querySelector('#rcTipsSection');
         const textEl = this._element.querySelector('#rcTips');
 
-        if (tips && tips.trim()) {
-            this._setText('#rcTips', tips);
+        if (!section || !textEl) return;
+
+        /* 数组类型：渲染为有序步骤列表 */
+        if (Array.isArray(tips) && tips.length > 0) {
+            const html = tips
+                .map((step, i) => `<div class="result-card__tip-step"><span class="result-card__tip-num">${i + 1}</span><span>${this._escapeHtml(step)}</span></div>`)
+                .join('');
+            textEl.innerHTML = html;
             this._showElement('#rcTipsSection');
-        } else {
-            this._hideElement('#rcTipsSection');
+            return;
         }
+
+        /* 字符串类型：兼容旧格式 */
+        if (typeof tips === 'string' && tips.trim()) {
+            textEl.textContent = tips;
+            this._showElement('#rcTipsSection');
+            return;
+        }
+
+        this._hideElement('#rcTipsSection');
     }
 
     /**
@@ -556,6 +578,18 @@ export class ResultCard {
     _hideElement(selector) {
         const el = this._element.querySelector(selector);
         if (el) el.style.display = 'none';
+    }
+
+    /**
+     * HTML转义（防止XSS注入）
+     * @private
+     * @param {string} str - 原始字符串
+     * @returns {string} 转义后的安全字符串
+     */
+    _escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
     }
 
     /**
@@ -810,6 +844,45 @@ const RESULT_CARD_STYLES = `
         rgba(45, 155, 94, 0.04),
         rgba(78, 205, 196, 0.05)
     );
+}
+
+/* ========== 处理建议步骤列表（v2.3）========== */
+.result-card__tips {
+    border-left: 4px solid var(--accent, #FF9F43);
+    background: linear-gradient(
+        135deg,
+        rgba(255, 159, 67, 0.03),
+        rgba(255, 190, 118, 0.05)
+    );
+}
+
+.result-card__tip-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 6px 0;
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: var(--text-primary, #1A1A2E);
+}
+
+.result-card__tip-step:not(:last-child) {
+    border-bottom: 1px dashed rgba(0, 0, 0, 0.06);
+}
+
+.result-card__tip-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent, #FF9F43), #F7B731);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-top: 1px;
 }
 
 /* ========== 演示模式标签 ========== */

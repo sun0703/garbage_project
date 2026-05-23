@@ -933,7 +933,7 @@ class ImageFeatureAnalyzer:
         brightness = float(features["brightness"])
         transparency = (features["transparency"] == "True")
         aspect_ratio = float(features["aspect_ratio"])
-        is_metallic = (features.get("is_metallic", "False") == "True")
+        is_metallic = (features["is_metallic"] == "True")
         
         # 新增v4.0特征
         texture_smoothness = float(features.get("texture_smoothness", 0.5))
@@ -1345,14 +1345,14 @@ class VisionEngine:
             tmp_path = tmp.name
 
         try:
-            # ===== 优化后的推理参数 =====
+            # ===== 优化后的推理参数（基于诊断结果调整）=====
+            # 诊断发现：40类模型最高置信度仅22-50%，原conf=0.40过高导致全部被过滤
             results = self.yolo_model(
                 tmp_path,
-                conf=0.40,      # ⬆️ 提升置信度阈值（原0.25），减少误报
-                iou_thres=0.45, # ➕ 添加NMS阈值，去除重叠框
+                conf=0.15,      # ⬇️ 降低置信度阈值（原0.40），适配该模型的实际输出范围
+                iou=0.45,       # NMS IoU阈值，去除重叠框
                 verbose=False,
                 imgsz=640,      # 输入尺寸
-                # augment=False,   # 推理时不使用增强（保持速度）
             )
 
             detections = []
@@ -1360,16 +1360,15 @@ class VisionEngine:
                 boxes = r.boxes
 
                 if len(boxes) > 0:
-                    # 按置信度降序排列，优先选择高置信度结果
                     sorted_indices = boxes.conf.argsort(descending=True)
-                    
-                    for rank, idx in enumerate(sorted_indices[:5]):  # 只取前5个最高置信度的检测
+
+                    for rank, idx in enumerate(sorted_indices[:5]):
                         conf = float(boxes.conf[idx].item())
                         cls_id = int(boxes.cls[idx].item())
                         cls_name = self.yolo_model.names[cls_id]
-                        
-                        # 额外过滤：置信度过低的不采用
-                        if conf < 0.30:  # 二次过滤阈值
+
+                        # 二次过滤：置信度过低的不采用（降低到10%以适配模型）
+                        if conf < 0.10:
                             continue
                             
                         detections.append({
@@ -1843,15 +1842,37 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
                 result["class_index"] = category_4class
                 result["original_class_name"] = class_name_cn
                 result["confidence"] = round(adjusted_confidence, 4)  # 使用校准后的置信度
-                result["reasoning"] = f"YOLOv8-40类模型[优化]: {class_name_cn} → {WASTE_CATEGORIES_CN[category_4class]} (原始={raw_confidence:.1%}, 校准后={adjusted_confidence:.1%})"
+                result["reasoning"] = f"YOLOv8-40类模型[优化]: {class_name_cn} → {WASTE_CATEGORIES[category_4class]['name']} (原始={raw_confidence:.1%}, 校准后={adjusted_confidence:.1%})"
                 result["is_demo_mode"] = False
 
                 logger.info("✅ 40类映射[优化]: ID=%d → %s (类别=%d), 原始置信度=%.1f%% → 校准后=%.1f%%",
                            original_class_id, class_name_cn, category_4class,
                            raw_confidence * 100, adjusted_confidence * 100)
             else:
-                logger.warning("⚠️ 未知类别ID: %d", original_class_id)
+                # YOLO未检测到有效目标（class_index=-1 或未知类别）
+                # → 降级到图像特征分析模式，而非直接返回默认分类
+                logger.warning("⚠️ YOLO未检测到有效目标 (ID=%d, 置信度=%.1f%%), 降级到特征分析模式",
+                               original_class_id, result.get("confidence", 0) * 100)
+
+                features = ImageFeatureAnalyzer.analyze(image)
+                logger.info("📊 特征分析: 亮度=%s, 透明度=%s, 金属=%s, 长宽比=%.2f",
+                           features.get('brightness'),
+                           features.get('transparency'),
+                           features.get('is_metallic'),
+                           features.get('aspect_ratio'))
+
+                smart_class_index, reasoning, item_type = ImageFeatureAnalyzer.classify_by_features(features)
+                demo_confidence = ImageFeatureAnalyzer.calculate_confidence(features, smart_class_index)
+
+                result["class_index"] = smart_class_index
+                result["confidence"] = round(demo_confidence, 4)
+                result["feature_analysis"] = features
+                result["reasoning"] = reasoning
+                result["item_type"] = item_type
                 result["is_demo_mode"] = True
+
+                logger.info("✅ 特征分析降级完成: 类别=%d, 类型=%s, 置信度=%.1f%%, %s",
+                           smart_class_index, item_type, demo_confidence * 100, reasoning)
 
         else:
             # 旧版COCO/ONNX模型 - 使用混合策略v3.1

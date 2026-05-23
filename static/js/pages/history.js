@@ -9,7 +9,7 @@
 
 // ==================== 模块依赖导入 ====================
 import { store } from '../store.js';
-import { Storage } from '../utils/storage.js';
+import { api } from '../api.js';
 import { showToast, confirm, showModal } from '../utils/ui.js';
 
 // ==================== 页面类定义 ====================
@@ -33,7 +33,7 @@ export class HistoryPage {
      * 初始化历史记录页
      * 从本地存储读取记录并渲染列表
      */
-    init() {
+    async init() {
         this.container = document.getElementById('page-history');
         if (!this.container) {
             console.error('[HistoryPage] 容器 #page-history 不存在');
@@ -45,7 +45,7 @@ export class HistoryPage {
         /* 缓存 DOM 引用 */
         this._cacheDOM();
         /* 加载并渲染历史记录 */
-        this._loadRecords();
+        await this._loadRecords();
         /* 绑定事件 */
         this._bindEvents();
 
@@ -149,10 +149,13 @@ export class HistoryPage {
      * 使用 Storage 工具类读取持久化数据
      * @private
      */
-    _loadRecords() {
+    async _loadRecords() {
         try {
-            /* 通过 Storage 工具类获取全部历史记录 */
-            this._records = Storage.getHistory() || [];
+            /* 通过后端 API 获取历史记录（大页数一次拉取） */
+            const response = await api.getHistory(1, 200);
+            this._records = (response && response.length !== undefined)
+                ? response  // api.request 已提取 data 字段，直接是数组
+                : [];
 
             /* 更新统计信息 */
             this._updateStats();
@@ -166,7 +169,7 @@ export class HistoryPage {
 
         } catch (error) {
             console.error('[HistoryPage] 加载历史记录失败:', error);
-            this._renderErrorState('读取历史记录失败，请刷新页面重试');
+            this._renderErrorState('读取历史记录失败，请检查网络连接后重试');
         }
     }
 
@@ -231,25 +234,22 @@ export class HistoryPage {
      * @private
      */
     _buildRecordItem(record, index) {
-        const label = record.label || '未知物品';
+        const label = record.label_cn || record.label || '未知物品';
         const category = record.category || '未知类别';
-        const categoryColor = record.categoryColor || '#666';
+        const categoryColor = record.bin_color || '#666';
         const confidence = record.confidence ? Math.round(record.confidence * 100) : 0;
-        const timestamp = record.timestamp ? this._formatTimestamp(record.timestamp) : '';
+        const timestamp = record.created_at ? this._formatTimestamp(record.created_at) : '';
 
         return `
             <div class="card history-record-item"
                  data-record-id="${record.id}"
                  style="animation-delay: ${index * 0.05}s">
 
-                <!-- 左侧：缩略图区域 -->
+                <!-- 左侧：缩略图区域（API 无图片，固定显示占位图标） -->
                 <div class="record-thumbnail">
-                    ${record.imageThumb ?
-                        `<img src="${record.imageThumb}" alt="${label}" class="thumb-img">` :
-                        `<div class="thumb-placeholder" style="background: ${categoryColor}20;">
-                            <span style="color: ${categoryColor}">${label.charAt(0)}</span>
-                         </div>`
-                    }
+                    <div class="thumb-placeholder" style="background: ${categoryColor}20;">
+                        <span style="color: ${categoryColor}">${label.charAt(0)}</span>
+                    </div>
                 </div>
 
                 <!-- 中间：信息区域 -->
@@ -425,10 +425,10 @@ export class HistoryPage {
 
                 /* 将历史记录格式化为 predictResult 格式存入 store */
                 store.set('predictResult', {
-                    label_cn: record.label,
-                    category: record.category,
-                    confidence: record.confidence,
-                    bin_color: record.categoryColor || '#666',
+                    label_cn: record.label_cn || record.label || '',
+                    category: record.category || '',
+                    confidence: record.confidence || 0,
+                    bin_color: record.bin_color || '#666',
                     guidance: record.guidance || ''
                 });
 
@@ -439,9 +439,9 @@ export class HistoryPage {
             /* ---- 删除按钮 → 删除单条记录 ---- */
             const deleteBtn = itemEl.querySelector(`[data-delete-id="${recordId}"]`);
             if (deleteBtn) {
-                deleteBtn.addEventListener('click', (e) => {
+                deleteBtn.addEventListener('click', async (e) => {
                     e.stopPropagation(); /* 阻止冒泡触发行点击 */
-                    this._deleteRecord(recordId, itemEl);
+                    await this._deleteRecord(recordId, itemEl);
                 });
             }
         });
@@ -467,8 +467,8 @@ export class HistoryPage {
             /* 等待动画完成后执行实际删除 */
             await new Promise(resolve => setTimeout(resolve, 300));
 
-            /* 从存储中删除 */
-            Storage.deleteHistory(recordId);
+            /* 从后端删除 */
+            await api.deleteHistoryRecord(recordId);
 
             /* 从内存数据中移除 */
             this._records = this._records.filter(r => r.id !== recordId);
@@ -511,8 +511,8 @@ export class HistoryPage {
         if (!confirmed) return; /* 用户取消 */
 
         try {
-            /* 调用 Storage 工具类清空全部记录 */
-            Storage.clearHistory();
+            /* 调用后端 API 清空全部记录 */
+            await api.clearAllHistory();
 
             /* 清空内存数据 */
             this._records = [];

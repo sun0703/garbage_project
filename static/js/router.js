@@ -84,8 +84,7 @@ class Router {
         /** @type {Function|null} hashchange事件的绑定引用（用于销毁） */
         this._boundHandler = null;
 
-        /* 构造时立即注册所有预定义路由 */
-        this._registerBuiltInRoutes();
+        /* 路由由 app.js 统一注册，此处不再预注册 */
     }
 
     // ==================== 私有方法 ====================
@@ -359,7 +358,7 @@ class Router {
                 /* 调用路由处理器，传入路径参数和查询参数 */
                 matched.handler(matched.params, query);
             } catch (err) {
-                console.error(`[Router] 路由处理器执行错误 (path="${actualPath}"):", err);
+                console.error(`[Router] 路由处理器执行错误 (path="${actualPath}"):`, err);
             }
         } else {
             /* 未匹配任何路由：回退到404处理或默认首页 */

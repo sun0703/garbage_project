@@ -16,8 +16,8 @@
 // ==================== 模块依赖导入 ====================
 
 import { Router } from './router.js';
-import { Store, DEFAULT_STATE } from './store.js';
-import { ApiClient, ApiError } from './api.js';
+import { store, Store, DEFAULT_STATE } from './store.js';
+import { api, ApiClient, ApiError } from './api.js';
 
 /*
  * 全局UI组件导入（安全加载模式）
@@ -70,8 +70,7 @@ const APP_CONFIG = Object.freeze({
 
 // ==================== 全局实例创建 ====================
 
-const store = new Store();
-const api = new ApiClient(APP_CONFIG.apiBaseURL);
+api.baseURL = APP_CONFIG.apiBaseURL;
 const router = new Router();
 
 /**
@@ -167,6 +166,11 @@ function createPageHandler(pageName, modulePath) {
 
         /* 更新Store中的当前页面状态 */
         store.setState('currentPage', pageName);
+
+        /* 切换CSS可见性：还原所有.page → 激活目标页 */
+        document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+        const pageEl = document.getElementById(`page-${pageName}`);
+        if (pageEl) pageEl.classList.add('active');
 
         /* 动态导入并实例化目标页面 */
         const PageClass = await loadPage(pageName, modulePath);

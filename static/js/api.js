@@ -25,6 +25,7 @@ const ERROR_CODE_MAP = Object.freeze({
     E002: { message: '模型未就绪，请稍后重试或联系管理员', status: 503 },
     E004: { message: '请求的资源不存在', status: 404 },
     E005: { message: '操作过于频繁，请稍后再试', status: 429 },
+    E003: { message: 'AI推理过程出错，请稍后重试', status: 500 },
     E006: { message: '服务器繁忙，请稍后重试', status: 500 }
 });
 
@@ -196,8 +197,10 @@ class ApiClient {
                 return this._handleHttpError(response, responseData);
             }
 
-            /* 2xx成功：返回data字段（兼容 { data: ... } 和裸数据两种格式） */
-            return responseData.data !== undefined ? responseData.data : responseData;
+            /* 2xx成功：优先提取data/result字段，兼容裸数据格式 */
+            if (responseData.data !== undefined) return responseData.data;
+            if (responseData.result !== undefined) return responseData.result;
+            return responseData;
 
         } catch (err) {
             clearTimeout(timerId);
@@ -438,6 +441,35 @@ class ApiClient {
             timeout: 20_000 // 特征分析比深度学习快，但比普通请求慢
         });
     }
+
+    // ==================== 历史记录API方法 ====================
+
+    /**
+     * 获取识别历史记录（分页）
+     * @param {number} [page=1] - 页码
+     * @param {number} [pageSize=20] - 每页条数
+     * @returns {Promise<Object>} { data: [...], pagination: { total, page, page_size, total_pages } }
+     */
+    async getHistory(page = 1, pageSize = 20) {
+        return this.request('GET', `/api/history?page=${page}&page_size=${pageSize}`);
+    }
+
+    /**
+     * 删除单条历史记录
+     * @param {string} id - 记录ID
+     * @returns {Promise<Object>} { success: true, message: '已删除' }
+     */
+    async deleteHistoryRecord(id) {
+        return this.request('DELETE', `/api/history/${encodeURIComponent(id)}`);
+    }
+
+    /**
+     * 清空全部历史记录
+     * @returns {Promise<Object>} { success: true, message: '已清空全部历史记录' }
+     */
+    async clearAllHistory() {
+        return this.request('DELETE', '/api/history');
+    }
 }
 
 // ==================== 模块导出 ====================
@@ -450,3 +482,7 @@ export { ApiError };
 
 /** 导出错误码映射表，供外部扩展或参考 */
 export { ERROR_CODE_MAP };
+
+/** 导出API客户端单例实例，供各页面直接使用 */
+const api = new ApiClient();
+export { api };

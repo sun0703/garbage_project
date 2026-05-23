@@ -9,7 +9,6 @@
 
 // ==================== 模块依赖导入 ====================
 import { store } from '../store.js';
-import { Storage } from '../utils/storage.js';
 import { showToast, showModal, confirm } from '../utils/ui.js';
 import { ResultCard } from '../components/result-card.js';
 import { CategoryTag } from '../components/category-tag.js';
@@ -21,9 +20,6 @@ export class ResultPage {
 
     /** 当前识别结果数据 */
     _resultData = null;
-
-    /** 是否已保存到历史记录（防止重复保存） */
-    _historySaved = false;
 
     /** 绑定的事件处理器引用集合 */
     _boundHandlers = {};
@@ -53,8 +49,7 @@ export class ResultPage {
         this._render();
         /* 渲染组件内容 */
         this._renderComponents();
-        /* 自动保存到历史记录 (F-1.5.1) */
-        this._saveToHistory();
+        /* 历史记录已由后端 /api/predict 自动保存，前端不再重复写入 */
         /* 绑定按钮事件 */
         this._bindEvents();
 
@@ -83,7 +78,6 @@ export class ResultPage {
         /* 释放数据引用 */
         this.container = null;
         this._resultData = null;
-        this._historySaved = false;
         this._boundHandlers = {};
 
         console.log('[ResultPage] 结果页已销毁');
@@ -97,8 +91,8 @@ export class ResultPage {
      * @private
      */
     _render() {
-        /* 检测是否为演示模式 */
-        const isDemoMode = store.get('is_demo_mode') || false;
+        /* 检测是否为演示模式（从API返回数据中读取） */
+        const isDemoMode = this._resultData?.is_demo_mode || false;
 
         this.container.innerHTML = `
             <!-- 导航栏 -->
@@ -171,55 +165,17 @@ export class ResultPage {
         /* ---- 渲染主结果卡片 (ResultCard) ---- */
         const cardContainer = document.getElementById('resultCardContainer');
         if (cardContainer && this._resultData) {
-            const resultCard = new ResultCard(this._resultData);
-            cardContainer.appendChild(resultCard.render());
+            const resultCard = new ResultCard();
+            resultCard.render(cardContainer);
+            resultCard.update(this._resultData);
         }
 
         /* ---- 渲染分类标签 (CategoryTag) ---- */
         const tagContainer = document.getElementById('categoryTagContainer');
         if (tagContainer && this._resultData?.category) {
-            const categoryTag = new CategoryTag({
-                name: this._resultData.category,
-                color: this._resultData.bin_color || '#2D9B5E',
-                icon: this._resultData.bin_icon || ''
-            });
-            tagContainer.appendChild(categoryTag.render());
-        }
-    }
-
-    // ==================== 私有方法：历史记录 ====================
-
-    /**
-     * 将当前识别结果自动保存到本地存储 (F-1.5.1)
-     * 使用 Storage 工具类进行持久化
-     * @private
-     */
-    _saveToHistory() {
-        /* 防止重复保存（如页面重新进入） */
-        if (this._historySaved) return;
-
-        try {
-            /* 构建历史记录对象 */
-            const record = {
-                id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
-                timestamp: new Date().toISOString(),
-                label: this._resultData.label_cn || this._resultData.label_en || '未知物品',
-                category: this._resultData.category || '未知',
-                categoryColor: this._resultData.bin_color || '#666',
-                confidence: this._resultData.confidence || 0,
-                guidance: this._resultData.guidance || '',
-                imageThumb: store.get('selectedImage')?.substring(0, 100) + '' // 缩略图前缀用于展示
-            };
-
-            /* 调用 Storage 工具类保存 */
-            Storage.saveHistory(record);
-
-            this._historySaved = true;
-            console.log('[ResultPage] 已保存到历史记录:', record.id);
-
-        } catch (error) {
-            console.warn('[ResultPage] 保存历史记录失败:', error);
-            /* 历史保存失败不影响主流程，静默处理 */
+            const categoryTag = new CategoryTag();
+            categoryTag.render(tagContainer);
+            categoryTag.updateByName(this._resultData.category);
         }
     }
 
@@ -272,7 +228,7 @@ export class ResultPage {
     _handleContinue() {
         /* 清除 store 中的图片和结果数据 */
         store.remove('selectedImage');
-        store.remove('selectedFileName');
+        store.remove('selectedFile');
         store.remove('predictResult');
 
         /* 跳转首页 */

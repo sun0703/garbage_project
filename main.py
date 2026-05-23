@@ -1458,10 +1458,19 @@ async def debug_analyze_image(request: PredictRequest) -> JSONResponse:
         img_array = np.array(image)
         gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY) if len(img_array.shape) == 3 else img_array
         
+        # 基于特征运行分类（降级模式）
+        smart_class_index, reasoning, item_type = ImageFeatureAnalyzer.classify_by_features(features)
+        confidence = ImageFeatureAnalyzer.calculate_confidence(features, smart_class_index)
+        class_info = _get_class_info(smart_class_index, is_demo_mode=True,
+                                    item_type=item_type,
+                                    is_metallic=(features.get("is_metallic", "False") == "True"))
+
         debug_info = {
             "image_size": image.size,
             "aspect_ratio": round(image.width / image.height, 3),
             "features": features,
+            "result": {**class_info, "confidence": confidence, "reasoning": reasoning,
+                      "is_demo_mode": True},
             "debug_details": {
                 "std_dev": round(float(np.std(gray)), 2),
                 "mean_brightness": round(float(np.mean(gray)) / 255.0, 4),
@@ -1479,7 +1488,7 @@ async def debug_analyze_image(request: PredictRequest) -> JSONResponse:
                 "transparency_gradient": 30,
             }
         }
-        
+
         return JSONResponse(content={"success": True, **debug_info})
     
     except Exception as e:
@@ -1702,6 +1711,18 @@ async def delete_history(record_id: str) -> JSONResponse:
         status_code=404,
         content={"success": False, "error": {"code": "E004", "message": "记录不存在"}},
     )
+
+
+@app.delete("/api/history")
+async def clear_history() -> JSONResponse:
+    """清空全部历史记录"""
+    if not history_store:
+        return JSONResponse(
+            status_code=404,
+            content={"success": False, "error": {"code": "E004", "message": "无历史记录"}},
+        )
+    history_store.clear()
+    return JSONResponse(content={"success": True, "message": "已清空全部历史记录"})
 
 
 # ==================== feedback 用户反馈 ====================

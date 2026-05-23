@@ -295,3 +295,7 @@ export class Storage {
     return history.length;
   }
 }
+
+/** 导出Storage单例实例，供各页面直接使用 */
+const storage = new Storage();
+export { storage };

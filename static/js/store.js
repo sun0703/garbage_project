@@ -179,6 +179,11 @@ class Store {
         return value;
     }
 
+    /** @deprecated 为兼容页面调用的 short-hand 别名 */
+    get(key) { return this.getState(key); }
+    set(key, value) { return this.setState(key, value); }
+    remove(key) { return this.setState(key, null); }
+
     /**
      * 批量更新多个状态字段（原子操作）
      * 所有字段更新完毕后统一触发回调，适用于关联状态同时变更场景
@@ -324,3 +329,7 @@ export { Store };
 
 /** 导出默认状态常量，方便外部做校验或对比 */
 export { DEFAULT_STATE };
+
+/** 导出Store单例实例，供各页面直接使用 */
+const store = new Store();
+export { store };

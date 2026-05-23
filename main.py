@@ -1535,7 +1535,7 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
 
         # ===== 推理结果写入缓存 =====
         # 将完整的推理结果存入缓存，下次相同图片可直接返回
-        if inference_cache and 'cache_key' in dir():
+        if inference_cache and 'cache_key' in locals():
             try:
                 inference_cache.set(cache_key, response_data["result"])
             except Exception as e:
@@ -1868,7 +1868,7 @@ async def batch_predict_waste(request: BatchPredictRequest) -> JSONResponse:
             if inference_cache:
                 try:
                     # 使用之前生成的 cache_key（如果在缓存检查阶段已生成）
-                    if 'cache_key' in dir():
+                    if 'cache_key' in locals():
                         inference_cache.set(cache_key, item)
                 except Exception as e:
                     logger.warning("批量识别-第%d张 缓存写入异常（不影响主流程）: %s", idx + 1, e)

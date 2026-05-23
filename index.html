@@ -32,6 +32,38 @@
         /* ========== 全局重置 ========== */
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
+        /* 仅屏幕阅读器可见（可访问性） */
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border-width: 0;
+        }
+
+        /* 跳转到主内容链接 */
+        .skip-link {
+            position: absolute;
+            top: -40px;
+            left: 0;
+            background: var(--primary);
+            color: white;
+            padding: 8px 16px;
+            text-decoration: none;
+            border-radius: 0 0 var(--radius-sm) 0;
+            z-index: 100;
+            font-weight: 600;
+            font-size: 14px;
+            transition: top var(--transition);
+        }
+        .skip-link:focus {
+            top: 0;
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
                          "Helvetica Neue", Arial, "PingFang SC", sans-serif;
@@ -447,9 +479,16 @@
         .search-item:last-child { border-bottom: none; }
         .search-item:hover {
             background: rgba(45, 155, 94, 0.04);
+            transform: translateX(2px);
         }
         .search-item:active {
             background: rgba(45, 155, 94, 0.08);
+            transform: translateX(0);
+        }
+        .search-item:focus-visible {
+            outline: 2px solid var(--primary);
+            outline-offset: -2px;
+            background: rgba(45, 155, 94, 0.06);
         }
         .search-item-left {
             display: flex;
@@ -544,6 +583,29 @@
             75% { transform: translateX(6px); }
         }
 
+        /* ========== 压缩优化提示 ========== */
+        .compress-hint {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: var(--primary);
+            padding: 10px 14px;
+            background: rgba(45, 155, 94, 0.06);
+            border-radius: var(--radius-sm);
+            margin-top: 10px;
+            border: 1px solid rgba(45, 155, 94, 0.1);
+            animation: fadeInUp 0.3s ease both;
+        }
+        .compress-hint.show { display: flex; }
+        .compress-icon {
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+        .compress-text {
+            line-height: 1.4;
+        }
+
         /* ========== 底部 ========== */
         .footer {
             text-align: center;
@@ -553,15 +615,6 @@
             letter-spacing: 0.3px;
         }
 
-        /* ========== 响应式适配 ========== */
-        @media (max-width: 380px) {
-            .container { padding: 16px 12px; }
-            .card { padding: 20px 16px; }
-            .header h1 { font-size: 18px; }
-            .item-name { font-size: 22px; }
-            .btn-group { gap: 8px; }
-        }
-
         /* ========== 减弱动效偏好支持 ========== */
         @media (prefers-reduced-motion: reduce) {
             *, *::before, *::after {
@@ -569,10 +622,53 @@
                 transition-duration: 0.01ms !important;
             }
         }
+
+        /* ========== 可访问性：Focus 状态 ========== */
+        .btn:focus-visible,
+        .voice-btn:focus-visible,
+        .search-input:focus-visible,
+        .upload-area:focus-visible,
+        .search-item:focus-visible {
+            outline: 3px solid var(--primary);
+            outline-offset: 2px;
+        }
+
+        .btn-secondary:focus-visible {
+            outline-color: var(--secondary);
+        }
+
+        /* ========== 完整响应式适配 ========== */
+        @media (max-width: 480px) {
+            .container { padding: 16px 12px; }
+            .card { padding: 20px 16px; }
+            .header h1 { font-size: 18px; }
+            .item-name { font-size: 22px; }
+            .btn-group { gap: 8px; }
+            .upload-area { padding: 32px 16px; }
+        }
+
+        @media (min-width: 481px) and (max-width: 768px) {
+            .container { max-width: 540px; }
+            .header h1 { font-size: 22px; }
+        }
+
+        @media (min-width: 769px) and (max-width: 1024px) {
+            .container { max-width: 640px; }
+            .card { padding: 28px; }
+        }
+
+        @media (min-width: 1025px) {
+            .container { max-width: 720px; }
+            body::before { width: 320px; height: 320px; }
+            body::after { width: 280px; height: 280px; }
+        }
     </style>
 </head>
 <body>
-<div class="container">
+<!-- 跳转到主内容（可访问性） -->
+<a href="#main-content" class="skip-link">跳转到主内容</a>
+
+<div class="container" id="main-content" role="main">
     <!-- 头部：Logo + 标题 -->
     <div class="header">
         <div class="header-inner">
@@ -588,7 +684,12 @@
     <!-- 主操作卡片 -->
     <div class="card" style="position: relative;">
         <!-- 上传区域：SVG图标替代emoji -->
-        <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
+        <div class="upload-area" id="uploadArea"
+             onclick="document.getElementById('fileInput').click()"
+             role="button"
+             tabindex="0"
+             aria-label="点击或拖拽上传图片"
+             onkeydown="if(event.key==='Enter'||event.key===' ')document.getElementById('fileInput').click()">
             <div class="upload-icon-wrap">
                 <svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
             </div>
@@ -607,12 +708,31 @@
         <!-- 错误提示 -->
         <div class="error-msg" id="errorMsg"></div>
 
+        <!-- 压缩优化提示（图片压缩完成后显示） -->
+        <div class="compress-hint" id="compressHint" role="status" aria-live="polite">
+            <span class="compress-icon">
+                <!-- 压缩/优化 SVG 图标 -->
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+            </span>
+            <span class="compress-text" id="compressText"></span>
+        </div>
+
         <!-- 分割线 -->
         <div class="divider"><span>或</span></div>
 
         <!-- 搜索框 -->
         <div class="search-box">
-            <input type="text" class="search-input" id="searchInput" placeholder="输入垃圾名称搜索...">
+            <label for="searchInput" class="sr-only">搜索垃圾名称</label>
+            <input type="text"
+                   class="search-input"
+                   id="searchInput"
+                   placeholder="输入垃圾名称搜索..."
+                   aria-label="搜索垃圾名称"
+                   autocomplete="off">
             <button class="voice-btn" id="voiceBtn" title="语音输入" aria-label="语音输入">
                 <!-- 麦克风 SVG 图标 -->
                 <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
@@ -621,8 +741,16 @@
 
         <!-- 操作按钮 -->
         <div class="btn-group">
-            <button class="btn btn-primary" id="predictBtn" disabled onclick="doPredict()">开始识别</button>
-            <button class="btn btn-secondary" onclick="resetAll()">
+            <button class="btn btn-primary"
+                    id="predictBtn"
+                    disabled
+                    onclick="doPredict()"
+                    aria-label="开始识别图片">
+                开始识别
+            </button>
+            <button class="btn btn-secondary"
+                    onclick="resetAll()"
+                    aria-label="重置所有内容">
                 <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
                 重置
             </button>
@@ -664,7 +792,215 @@
 <script>
 // ==================== 全局状态 ====================
 let selectedImage = null;
+let originalFileSize = 0;          /* 原始文件大小（字节） */
+let compressedFileSize = 0;        /* 压缩后文件大小（字节） */
 const API_BASE = "";
+
+// ==================== 图片压缩处理器 ====================
+/**
+ * ImageProcessor - 基于 Canvas API 的图片压缩工具
+ * 负责图片格式校验、尺寸缩放、质量压缩、Base64 转换
+ * 适用场景：上传前客户端压缩，减少传输体积和服务器负载
+ */
+const ImageProcessor = {
+    /** 允许的图片格式白名单 */
+    ALLOWED_TYPES: ["image/jpeg", "image/png", "image/webp", "image/gif"],
+
+    /** 文件大小上限（5MB） */
+    MAX_FILE_SIZE: 5 * 1024 * 1024,
+
+    /** 压缩目标大小（2MB = 2048KB） */
+    TARGET_SIZE_KB: 2048,
+
+    /** 图片最大边长（超过则等比缩放） */
+    MAX_DIMENSION: 1280,
+
+    /** 初始压缩质量（0-1，JPEG 格式） */
+    INITIAL_QUALITY: 0.85,
+
+    /** 最低压缩质量阈值（低于此值停止压缩以避免过度失真） */
+    MIN_QUALITY: 0.3,
+
+    /** 质量递减步长 */
+    QUALITY_STEP: 0.08,
+
+    /**
+     * 校验图片文件格式和大小
+     * @param {File} file - 用户选择的文件对象
+     * @returns {{ valid: boolean, error: string }} 校验结果
+     */
+    validate(file) {
+        if (!this.ALLOWED_TYPES.includes(file.type)) {
+            return {
+                valid: false,
+                error: "请选择 JPG/PNG/WebP/GIF 格式的图片"
+            };
+        }
+        if (file.size > this.MAX_FILE_SIZE) {
+            return {
+                valid: false,
+                error: `图片过大（${this._formatSize(file.size)}），请选择 5MB 以内的图片`
+            };
+        }
+        return { valid: true };
+    },
+
+    /**
+     * 压缩图片至目标大小以下
+     * 使用 Canvas API 进行客户端压缩：
+     *   1. 等比缩放至最大边长限制（保持宽高比）
+     *   2. 逐步降低 JPEG 质量直至满足大小要求
+     *
+     * @param {File} file - 原始文件
+     * @param {number} [maxSizeKB] - 目标最大大小（KB），默认 2048
+     * @returns {Promise<{ base64: string, compressedSize: number, ratio: number }>}
+     *   base64: 压缩后的 Base64 DataURL
+     *   compressedSize: 压缩后字节数
+     *   ratio: 压缩比例（compressedSize / originalSize）
+     */
+    compress(file, maxSizeKB = this.TARGET_SIZE_KB) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => {
+                try {
+                    const result = this._doCompress(img, maxSizeKB);
+                    resolve(result);
+                } catch (err) {
+                    reject(err);
+                }
+            };
+            img.onerror = () => reject(new Error("图片加载失败"));
+            img.src = URL.createObjectURL(file);
+        });
+    },
+
+    /**
+     * 执行实际的 Canvas 压缩逻辑（内部方法）
+     * @private
+     */
+    _doCompress(img, maxSizeKB) {
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+
+        /* 计算缩放后的尺寸（保持宽高比，最长边不超过 MAX_DIMENSION） */
+        let { width, height } = img;
+        const maxDim = this.MAX_DIMENSION;
+
+        if (width > height && width > maxDim) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+        } else if (height > maxDim) {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        /* 绘制到 Canvas（自动处理透明通道：PNG→JPEG 时白色背景填充） */
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+
+        /* 异步压缩：使用 toBlob 获取精确大小 */
+        return new Promise((resolve) => {
+            const targetBytes = maxSizeKB * 1024;
+
+            canvas.toBlob(
+                (blob) => {
+                    if (!blob) {
+                        /* toBlob 失败时回退到同步版本 */
+                        console.warn("[ImageProcessor] canvas.toBlob 返回空，使用同步压缩");
+                        const syncResult = canvas.toDataURL("image/jpeg", this.INITIAL_QUALITY);
+                        const estimatedSize = Math.round(syncResult.length * 0.75);
+                        resolve({
+                            base64: syncResult,
+                            compressedSize: estimatedSize,
+                            ratio: estimatedSize / (originalFileSize || 1)
+                        });
+                        return;
+                    }
+
+                    /* 如果已满足大小要求，直接返回 */
+                    if (blob.size <= targetBytes) {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve({
+                            base64: reader.result,
+                            compressedSize: blob.size,
+                            ratio: blob.size / (originalFileSize || 1)
+                        });
+                        reader.readAsDataURL(blob);
+                        return;
+                    }
+
+                    /* Blob 过大：逐步降低质量重试 */
+                    let quality = this.INITIAL_QUALITY;
+                    const tryCompress = () => {
+                        quality -= this.QUALITY_STEP;
+
+                        if (quality < this.MIN_QUALITY) {
+                            /* 质量已达最低阈值，返回当前结果 */
+                            const reader = new FileReader();
+                            reader.onloadend = () => resolve({
+                                base64: reader.result,
+                                compressedSize: blob.size,
+                                ratio: blob.size / (originalFileSize || 1)
+                            });
+                            reader.readAsDataURL(blob);
+                            return;
+                        }
+
+                        canvas.toBlob(
+                            (newBlob) => {
+                                if (newBlob && newBlob.size <= targetBytes) {
+                                    const reader = new FileReader();
+                                    reader.onloadend = () => resolve({
+                                        base64: reader.result,
+                                        compressedSize: newBlob.size,
+                                        ratio: newBlob.size / (originalFileSize || 1)
+                                    });
+                                    reader.readAsDataURL(newBlob);
+                                } else {
+                                    tryCompress();
+                                }
+                            },
+                            "image/jpeg",
+                            quality
+                        );
+                    };
+
+                    tryCompress();
+                },
+                "image/jpeg",
+                this.INITIAL_QUALITY
+            );
+        });
+    },
+
+    /**
+     * 将 Blob 对象转换为 Base64 DataURL 字符串
+     * @private
+     */
+    _convertToBase64(blob) {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.readAsDataURL(blob);
+        });
+    },
+
+    /**
+     * 格式化文件大小为人类可读字符串
+     * @param {number} bytes - 字节数
+     * @returns {string} 如 "1.2 MB"、"256 KB"
+     */
+    _formatSize(bytes) {
+        if (bytes >= 1024 * 1024) {
+            return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+        }
+        return Math.round(bytes / 1024) + " KB";
+    }
+};
 
 // ==================== DOM 元素引用 ====================
 const fileInput = document.getElementById("fileInput");
@@ -679,24 +1015,62 @@ const searchResultSection = document.getElementById("searchResultSection");
 const searchInput = document.getElementById("searchInput");
 const voiceBtn = document.getElementById("voiceBtn");
 
-// ==================== 图片选择事件 ====================
+// ==================== 图片选择事件（含压缩处理）====================
 fileInput.addEventListener("change", function(e) {
     const file = e.target.files[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-        showError("图片过大，请选择5MB以内的图片");
+    /* 使用 ImageProcessor 校验文件格式和大小（替代硬编码检查） */
+    const validation = ImageProcessor.validate(file);
+    if (!validation.valid) {
+        showError(validation.error);
         return;
     }
 
+    /* 记录原始文件大小，用于后续压缩率计算 */
+    originalFileSize = file.size;
+    compressedFileSize = 0;
+
+    /* 先读取原始图片用于预览显示（保持视觉质量） */
     const reader = new FileReader();
-    reader.onload = function(event) {
-        selectedImage = event.target.result;
-        previewImg.src = selectedImage;
+    reader.onload = async function(event) {
+        /* 立即显示预览图（使用未压缩的原始数据） */
+        previewImg.src = event.target.result;
         uploadArea.classList.add("has-image");
-        predictBtn.disabled = false;
         hideError();
         hideResults();
+
+        /* 显示压缩中状态 */
+        showLoading("正在优化图片...");
+
+        try {
+            /* 执行客户端压缩：Canvas 缩放 + JPEG 质量调整 */
+            const compressResult = await ImageProcessor.compress(file);
+            selectedImage = compressResult.base64;
+            compressedFileSize = compressResult.compressedSize;
+
+            /* 压缩完成：更新状态提示 */
+            const origStr = ImageProcessor._formatSize(originalFileSize);
+            const compStr = ImageProcessor._formatSize(compressedFileSize);
+            const ratio = (compressResult.ratio * 100).toFixed(0);
+
+            console.log(`[ImageProcessor] 压缩完成: ${origStr} → ${compStr} (${ratio}%)`);
+
+            predictBtn.disabled = false;
+            hideLoading();
+
+            /* 如果压缩效果显著，短暂提示用户 */
+            if (originalFileSize > 500 * 1024 && compressResult.ratio < 0.8) {
+                showCompressHint(origStr, compStr, ratio);
+            }
+        } catch (compressErr) {
+            /* 压缩失败时回退：直接使用原始 DataURL（不阻止用户操作） */
+            console.warn("[ImageProcessor] 压缩失败，使用原图:", compressErr.message);
+            selectedImage = event.target.result;
+            compressedFileSize = originalFileSize;
+            predictBtn.disabled = false;
+            hideLoading();
+        }
     };
     reader.readAsDataURL(file);
 });
@@ -815,17 +1189,27 @@ function showSearchResults(results, query) {
     results.forEach(function(item) {
         const div = document.createElement("div");
         div.className = "search-item";
+        div.setAttribute("role", "button");
+        div.setAttribute("tabindex", "0");
+        div.setAttribute("aria-label", `${item.label} - ${item.category}`);
         div.innerHTML =
             `<div class="search-item-left">
-                <div class="search-item-icon">${item.bin_icon || "♻"}</div>
+                <div class="search-item-icon" aria-hidden="true">${item.bin_icon || "♻"}</div>
                 <div>
                     <div class="search-item-label">${item.label}</div>
                     <div class="search-item-category">${item.category} · 相似度 ${item.similarity_score}%</div>
                 </div>
             </div>
-            <span class="search-score">${item.similarity_score}%</span>`;
-        div.onclick = function() {
+            <span class="search-score" aria-label="相似度 ${item.similarity_score}%">${item.similarity_score}%</span>`;
+        const handleClick = function() {
             showPredictResult(item, 0);
+        };
+        div.onclick = handleClick;
+        div.onkeydown = function(e) {
+            if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                handleClick();
+            }
         };
         container.appendChild(div);
     });
@@ -923,8 +1307,37 @@ function hideResults() {
     searchResultSection.classList.remove("show");
 }
 
+/**
+ * 显示图片压缩优化提示
+ * 当压缩效果显著时（压缩率 < 80% 且原图 > 500KB）自动调用
+ * @param {string} origSize - 原始大小字符串（如 "2.5 MB"）
+ * @param {string} compSize - 压缩后大小字符串（如 "680 KB"）
+ * @param {string} ratio - 压缩百分比（如 "27" 表示压缩到 27%）
+ */
+function showCompressHint(origSize, compSize, ratio) {
+    const hintEl = document.getElementById("compressHint");
+    const textEl = document.getElementById("compressText");
+    if (!hintEl || !textEl) return;
+
+    textEl.textContent = `图片已优化：${origSize} → ${compSize}（节省 ${100 - ratio}% 传输量）`;
+    hintEl.classList.add("show");
+
+    /* 3秒后自动隐藏提示 */
+    setTimeout(() => {
+        hintEl.classList.remove("show");
+    }, 3500);
+}
+
+/** 隐藏压缩提示 */
+function hideCompressHint() {
+    const hintEl = document.getElementById("compressHint");
+    if (hintEl) hintEl.classList.remove("show");
+}
+
 function resetAll() {
     selectedImage = null;
+    originalFileSize = 0;
+    compressedFileSize = 0;
     fileInput.value = "";
     previewImg.src = "";
     uploadArea.classList.remove("has-image");
@@ -933,6 +1346,7 @@ function resetAll() {
     hideError();
     hideResults();
     hideLoading();
+    hideCompressHint();
 }
 
 // ==================== 初始化 ====================

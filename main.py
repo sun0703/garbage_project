@@ -10,16 +10,19 @@
 """
 
 import base64
+import hashlib
 import json
 import logging
 import random
 import time
 import uuid
+from collections import OrderedDict
 from io import BytesIO
 from pathlib import Path
 from typing import Optional, Tuple
 
 import cv2
+import imagehash
 import numpy as np
 import onnxruntime as ort
 import uvicorn
@@ -50,7 +53,7 @@ USE_YOLO_PT_MODEL = True  # 使用PyTorch格式模型（推荐）
 # USE_YOLO_PT_MODEL = False
 VOCAB_PATH = BASE_DIR / "data" / "waste.json"
 STATIC_DIR = BASE_DIR / "static"
-INDEX_HTML_PATH = BASE_DIR / "static" / "index.html"
+INDEX_HTML_PATH = BASE_DIR / "index.html"
 
 INPUT_SIZE = (224, 224)
 YOLO_INPUT_SIZE = (640, 640)
@@ -363,6 +366,143 @@ class FeedbackStore:
                 self._records = json.load(f)
         except Exception:
             pass
+
+
+class InferenceCache:
+    """
+    基于 LRU + TTL 的推理结果缓存
+
+    使用 OrderedDict 实现最近最少使用（LRU）淘汰策略，
+    配合时间戳实现自动过期（TTL）机制。
+    通过图像感知哈希（phash）识别相同内容的图片，避免重复推理。
+
+    适用场景：
+    - 相同图片短时间内多次上传（用户重复操作）
+    - 批量处理时包含重复图片
+    - 演示/测试环境减少模型调用次数
+    """
+
+    def __init__(self, max_size: int = 500, ttl_seconds: int = 86400):
+        """
+        初始化缓存实例
+
+        :param max_size: 最大缓存条数（默认500，超过时淘汰最久未使用的）
+        :param ttl_seconds: 缓存有效期（默认24小时=86400秒）
+        """
+        self.max_size = max_size
+        self.ttl_seconds = ttl_seconds
+        # 使用 OrderedDict 实现 LRU：访问时移动到末尾，淘汰时移除头部
+        self._cache: OrderedDict[str, dict] = OrderedDict()
+        logger.info("推理缓存初始化完成 (最大容量=%d, 有效期=%d秒)", max_size, ttl_seconds)
+
+    def _make_key(self, image_data: bytes) -> str:
+        """
+        使用感知哈希生成缓存键（相同内容的图片命中同一缓存）
+
+        优先使用 imagehash 库的 phash 算法（可识别相似图片），
+        若库不可用则降级为 MD5 哈希（仅能识别完全相同的图片）。
+
+        :param image_data: 原始图片字节数据（Base64解码后）
+        :return: 格式化的缓存键 "infer:{hash_value}"
+        """
+        try:
+            # 尝试使用感知哈希算法（推荐）
+            image = Image.open(BytesIO(image_data)).convert("RGB")
+            phash = imagehash.phash(image, hash_size=16)  # 使用16位哈希提高精度
+            cache_key = f"infer:{str(phash)}"
+            return cache_key
+        except Exception:
+            # 降级方案：使用 MD5 哈希（无法识别相似图，但至少能缓存完全相同的图片）
+            md5_hash = hashlib.md5(image_data).hexdigest()
+            cache_key = f"infer:md5_{md5_hash}"
+            logger.debug("imagehash 不可用，已降级为 MD5 哈希")
+            return cache_key
+
+    def get(self, key: str) -> Optional[dict]:
+        """
+        获取缓存数据（带TTL检查和LRU更新）
+
+        命中时会将条目移动到末尾（标记为最近使用），
+        过期则删除该条目并返回 None。
+
+        :param key: 缓存键（由 _make_key 生成）
+        :return: 缓存的推理结果字典，未命中或过期返回 None
+        """
+        try:
+            if key not in self._cache:
+                return None
+
+            entry = self._cache[key]
+            current_time = time.time()
+
+            # 检查是否过期
+            if current_time - entry["timestamp"] > self.ttl_seconds:
+                # 过期则删除并记录日志
+                del self._cache[key]
+                logger.info("🗑️ 缓存淘汰（过期）: %s", key[:20])
+                return None
+
+            # 命中：移动到末尾（LRU更新）
+            self._cache.move_to_end(key)
+            return entry["data"]
+
+        except Exception as e:
+            logger.warning("缓存读取异常: %s", e)
+            return None
+
+    def set(self, key: str, data: dict) -> None:
+        """
+        写入缓存数据（带容量控制）
+
+        如果键已存在则更新数据并移动到末尾，
+        如果超过最大容量则淘汰最久未使用的条目（OrderedDict 头部）。
+
+        :param key: 缓存键
+        :param data: 推理结果数据
+        """
+        try:
+            current_time = time.time()
+
+            if key in self._cache:
+                # 已存在：更新数据和时间戳，移动到末尾
+                self._cache[key] = {"data": data, "timestamp": current_time}
+                self._cache.move_to_end(key)
+            else:
+                # 新增：检查是否超出容量
+                while len(self._cache) >= self.max_size:
+                    # 淘汰最久未使用的条目（OrderedDict 的第一个元素）
+                    oldest_key, _ = self._cache.popitem(last=False)
+                    logger.info("🗑️ 缓存淘汰（容量满）: %s", oldest_key[:20])
+
+                # 写入新条目
+                self._cache[key] = {"data": data, "timestamp": current_time}
+                logger.info("💾 缓存写入: %s (当前缓存数=%d/%d)",
+                           key[:20], len(self._cache), self.max_size)
+
+        except Exception as e:
+            logger.warning("缓存写入异常: %s", e)
+
+    def clear(self) -> None:
+        """清空所有缓存"""
+        self._cache.clear()
+        logger.info("🧹 缓存已清空")
+
+    def stats(self) -> dict:
+        """获取缓存统计信息（用于监控和调试）"""
+        current_time = time.time()
+        valid_count = sum(
+            1 for entry in self._cache.values()
+            if current_time - entry["timestamp"] <= self.ttl_seconds
+        )
+        expired_count = len(self._cache) - valid_count
+
+        return {
+            "total_entries": len(self._cache),
+            "valid_entries": valid_count,
+            "expired_entries": expired_count,
+            "max_size": self.max_size,
+            "utilization": round(len(self._cache) / self.max_size * 100, 2) if self.max_size > 0 else 0,
+        }
 
 
 # ==================== 图像特征分析器 ====================
@@ -1171,17 +1311,21 @@ vision_engine: Optional[VisionEngine] = None
 search_engine: Optional[SearchEngine] = None
 history_store: Optional[HistoryStore] = None
 feedback_store: Optional[FeedbackStore] = None
+inference_cache: Optional[InferenceCache] = None
 
 
 @app.on_event("startup")
 def startup_event() -> None:
     """应用启动时初始化"""
-    global vision_engine, search_engine, history_store, feedback_store
+    global vision_engine, search_engine, history_store, feedback_store, inference_cache
     logger.info("正在初始化服务...")
     vision_engine = VisionEngine(str(MODEL_PATH))
     search_engine = SearchEngine(str(VOCAB_PATH))
     history_store = HistoryStore(backup_path=BASE_DIR / "data" / "history.json")
     feedback_store = FeedbackStore(backup_path=BASE_DIR / "data" / "feedback.json")
+
+    # 初始化推理缓存（LRU + TTL 策略）
+    inference_cache = InferenceCache(max_size=500, ttl_seconds=86400)
 
     if STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -1227,6 +1371,29 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
         image_data = base64.b64decode(encoded_data)
         image = Image.open(BytesIO(image_data)).convert("RGB")
         logger.info("图片解码成功，尺寸: %s", image.size)
+
+        # ===== 推理缓存检查 =====
+        # 计算图像指纹用于缓存键生成（相同内容的图片命中同一缓存）
+        if inference_cache:
+            try:
+                cache_key = inference_cache._make_key(image_data)
+                cached_result = inference_cache.get(cache_key)
+                if cached_result:
+                    # 缓存命中：直接返回缓存结果，跳过模型推理
+                    inference_ms = int((time.time() - start_time) * 1000)
+                    req_id = uuid.uuid4().hex[:12]
+                    logger.info("🎯 缓存命中: %s (响应时间=%dms)", cache_key[:20], inference_ms)
+                    return JSONResponse(content={
+                        "success": True,
+                        "result": cached_result,
+                        "inference_time_ms": inference_ms,
+                        "request_id": req_id,
+                        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                        "cache_hit": True,
+                    })
+            except Exception as e:
+                # 缓存操作异常不影响主流程，仅记录警告日志
+                logger.warning("缓存检查异常，将执行正常推理: %s", e)
     except ValueError as e:
         logger.error("图片格式错误: %s", e)
         return JSONResponse(
@@ -1365,6 +1532,14 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
                 "guidance": class_info.get("guidance", ""),
                 "is_demo_mode": result.get("is_demo_mode", False),
             })
+
+        # ===== 推理结果写入缓存 =====
+        # 将完整的推理结果存入缓存，下次相同图片可直接返回
+        if inference_cache and 'cache_key' in dir():
+            try:
+                inference_cache.set(cache_key, response_data["result"])
+            except Exception as e:
+                logger.warning("缓存写入异常（不影响主流程）: %s", e)
 
         return JSONResponse(content=response_data)
 
@@ -1612,6 +1787,45 @@ async def batch_predict_waste(request: BatchPredictRequest) -> JSONResponse:
             })
             continue
 
+        # ===== 批量识别中的单张图片缓存检查 =====
+        cached_item = None
+        if inference_cache:
+            try:
+                cache_key = inference_cache._make_key(image_data)
+                cached_result = inference_cache.get(cache_key)
+                if cached_result:
+                    # 缓存命中：直接使用缓存结果，跳过模型推理
+                    logger.info("🎯 批量识别-第%d张 缓存命中: %s", idx + 1, cache_key[:20])
+                    cached_item = {
+                        "index": idx,
+                        "category": cached_result.get("category", ""),
+                        "category_id": cached_result.get("category_id", -1),
+                        "bin_color": cached_result.get("bin_color", ""),
+                        "bin_icon": cached_result.get("bin_icon", ""),
+                        "label_cn": cached_result.get("label_cn", ""),
+                        "confidence": cached_result.get("confidence", 0),
+                        "guidance": cached_result.get("guidance", ""),
+                        "is_demo_mode": cached_result.get("is_demo_mode", False),
+                        "inference_time_ms": 0,  # 缓存命中，推理时间为0
+                        "cache_hit": True,
+                    }
+                    results.append(cached_item)
+
+                    # 写入历史记录（缓存命中的图片也记录）
+                    if history_store:
+                        history_store.add({
+                            "category": cached_item["category"],
+                            "category_id": cached_item["category_id"],
+                            "label_cn": cached_item["label_cn"],
+                            "bin_color": cached_item["bin_color"],
+                            "confidence": cached_item["confidence"],
+                            "guidance": cached_item["guidance"],
+                            "is_demo_mode": cached_item["is_demo_mode"],
+                        })
+                    continue  # 跳过后续的模型推理逻辑
+            except Exception as e:
+                logger.warning("批量识别-第%d张 缓存检查异常，将执行正常推理: %s", idx + 1, e)
+
         try:
             img_start = time.time()
             result = vision_engine.predict(image)
@@ -1649,6 +1863,15 @@ async def batch_predict_waste(request: BatchPredictRequest) -> JSONResponse:
                 "inference_time_ms": img_ms,
             }
             results.append(item)
+
+            # ===== 推理结果写入缓存（批量识别） =====
+            if inference_cache:
+                try:
+                    # 使用之前生成的 cache_key（如果在缓存检查阶段已生成）
+                    if 'cache_key' in dir():
+                        inference_cache.set(cache_key, item)
+                except Exception as e:
+                    logger.warning("批量识别-第%d张 缓存写入异常（不影响主流程）: %s", idx + 1, e)
 
             # 写入历史
             if history_store:

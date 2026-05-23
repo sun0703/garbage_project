@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#2D9B5E">
+    <meta name="description" content="校园垃圾分类AI助手 - 拍照识别、智能分类、环保指南">
+    <title>校园垃圾分类AI助手</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/components.css">
+</head>
+<body>
+
+    <!-- 顶部导航栏（由NavBar组件渲染） -->
+    <nav id="navBar" class="nav-bar"></nav>
+
+    <!-- 主内容区：SPA视图容器 -->
+    <main id="app" class="app-container">
+
+        <!-- ===== 页面视图：首页（上传+搜索入口） ===== -->
+        <section id="page-home" class="page">
+            <div class="page__content container">
+
+                <!-- 头部标题区域 -->
+                <div class="home-header">
+                    <div class="home-header__logo">
+                        <svg viewBox="0 0 24 24" width="28" height="28" fill="white"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+                    </div>
+                    <h1 class="home-header__title">校园垃圾分类AI助手</h1>
+                    <p class="home-header__subtitle">拍照识别 · 语音搜索 · 智能分类</p>
+                </div>
+
+                <!-- 上传区域卡片 -->
+                <div class="card">
+                    <!-- F-1.2.1 上传区域优化：大尺寸虚线边框 ≥200px高 -->
+                    <div class="upload-area" id="homeUploadArea">
+                        <div class="upload-area__icon-wrap">
+                            <svg viewBox="0 0 24 24" width="28" height="28" stroke="white" stroke-width="2" fill="none"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+                        </div>
+                        <p class="upload-area__text">点击或拖拽图片到此处</p>
+                        <p class="upload-area__sub-text">支持 JPG / PNG / WebP / GIF</p>
+                        <img id="homePreviewImg" class="upload-area__preview" alt="预览图">
+                    </div>
+                    <!-- 隐藏的文件选择器：capture属性调起移动端相机 -->
+                    <input type="file" id="homeFileInput" class="hidden-input"
+                           accept="image/*" capture="environment">
+
+                    <!-- 分割线 -->
+                    <div class="divider"><span>或</span></div>
+
+                    <!-- 搜索框区域 -->
+                    <div class="search-box">
+                        <input type="text" class="search-input" id="homeSearchInput"
+                               placeholder="输入垃圾名称搜索..." autocomplete="off">
+                        <div class="voice-btn-slot" id="homeVoiceSlot"></div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- ===== 页面视图：预览确认页 ===== -->
+        <section id="page-preview" class="page">
+            <div class="page__content container">
+                <div class="card preview-card">
+                    <!-- 图片预览区域 -->
+                    <div class="preview-card__image-wrap">
+                        <img id="previewImg" class="preview-card__image" alt="待识别图片">
+                    </div>
+                    <!-- 文件名显示 -->
+                    <p id="previewFilename" class="preview-card__filename"></p>
+
+                    <!-- F-1.2.3 操作按钮组：开始识别 + 重新选择 -->
+                    <div class="btn-group preview-card__actions">
+                        <button class="btn btn-primary" id="startRecognizeBtn">
+                            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                            开始识别
+                        </button>
+                        <button class="btn btn-secondary" id="reselectBtn">
+                            <svg viewBox="0 0 24 24" width="17" height="17" stroke="currentColor" stroke-width="2" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                            重新选择
+                        </button>
+                    </div>
+
+                    <!-- 返回按钮 -->
+                    <button class="btn btn-ghost preview-card__back" id="previewBackBtn">← 返回首页</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== 页面视图：识别结果展示页 ===== -->
+        <section id="page-result" class="page">
+            <div class="page__content container">
+                <!-- 结果卡片容器（由ResultCard组件渲染） -->
+                <div id="resultCardContainer" class="result-card-wrapper"></div>
+
+                <!-- 分类标签容器（由CategoryTag组件渲染） -->
+                <div id="categoryTagContainer" class="tag-wrapper"></div>
+
+                <!-- F-1.3.5 操作按钮组 -->
+                <div class="card result-actions">
+                    <div class="btn-group">
+                        <button class="btn btn-primary" id="continueBtn">
+                            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                            继续识别
+                        </button>
+                        <button class="btn btn-secondary" id="shareBtn">
+                            <svg viewBox="0 0 24 24" width="17" height="17" stroke="currentColor" stroke-width="2" fill="none"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                            分享结果
+                        </button>
+                        <button class="btn btn-secondary" id="homeBtn">
+                            <svg viewBox="0 0 24 24" width="17" height="17" stroke="currentColor" stroke-width="2" fill="none"><path d="m3 9 9-6 9 6v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                            返回首页
+                        </button>
+                    </div>
+                    <button class="btn btn-ghost result-actions__back" id="resultBackBtn">← 返回</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== 页面视图：搜索结果页 ===== -->
+        <section id="page-search" class="page">
+            <div class="page__content container">
+                <div class="card">
+                    <!-- 搜索头部 -->
+                    <div class="search-page__header">
+                        <button class="btn btn-ghost search-page__back" id="searchBackBtn">← 返回</button>
+                        <div class="search-box search-page__box">
+                            <input type="text" class="search-input" id="searchPageInput"
+                                   placeholder="搜索垃圾名称..." autocomplete="off" autofocus>
+                            <button class="voice-btn" id="searchVoiceBtn" title="语音输入" aria-label="语音输入">
+                                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 搜索结果列表容器 -->
+                    <div id="searchResultsArea" class="search-results"></div>
+
+                    <!-- 重试按钮（错误状态时显示） -->
+                    <button class="btn btn-primary search-page__retry hidden" id="retrySearchBtn">重新搜索</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== 页面视图：分类指南页 ===== -->
+        <section id="page-guide" class="page">
+            <div class="page__content container">
+                <div class="guide-page__header">
+                    <button class="btn btn-ghost guide-page__back" id="guideBackBtn">← 返回</button>
+                    <h2 class="guide-page__title">垃圾分类指南</h2>
+                    <p class="guide-page__subtitle">了解四类垃圾的标准分类方法</p>
+                </div>
+
+                <!-- 分类指南卡片容器（由GuidePage动态渲染） -->
+                <div id="categoryCardsContainer" class="guide-cards-grid"></div>
+            </div>
+        </section>
+
+        <!-- ===== 页面视图：历史记录页 ===== -->
+        <section id="page-history" class="page">
+            <div class="page__content container">
+                <div class="history-page__header">
+                    <button class="btn btn-ghost history-page__back" id="historyBackBtn">← 返回</button>
+                    <h2 class="history-page__title">识别历史</h2>
+                    <p id="statsCount" class="history-page__stats">共 0 条记录</p>
+                </div>
+
+                <!-- 工具栏（有记录时显示） -->
+                <div id="historyToolbar" class="history-toolbar hidden">
+                    <button class="btn btn-danger btn-sm" id="clearAllBtn">清空全部</button>
+                </div>
+
+                <!-- 历史记录列表容器 -->
+                <div id="historyListContainer" class="history-list"></div>
+
+                <!-- 空状态引导 -->
+                <div class="empty-state history-empty hidden" id="historyEmptyState">
+                    <div class="empty-state__icon">
+                        <svg viewBox="0 0 24 24" width="48" height="48" stroke="var(--text-muted)" stroke-width="1.5" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                    </div>
+                    <p class="empty-state__title">暂无识别历史</p>
+                    <p class="empty-state__desc">快去拍照试试吧</p>
+                    <button class="btn btn-primary" id="goIdentifyBtn">开始识别</button>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- 底部Tab栏（由TabBar组件渲染） -->
+    <nav id="tabBar" class="tab-bar"></nav>
+
+    <!-- 全局遮罩层 -->
+    <div id="loadingOverlay" class="loading-overlay hidden">
+        <div class="spinner"></div>
+        <p class="loading-overlay__text" id="loadingText">正在识别中...</p>
+    </div>
+
+    <div id="modalOverlay" class="modal-overlay hidden">
+        <div class="modal">
+            <h3 class="modal__title" id="modalTitle">提示</h3>
+            <div class="modal__body" id="modalBody"></div>
+            <div class="modal__footer" id="modalFooter">
+                <button class="btn btn-secondary modal__cancel" id="modalCancelBtn">取消</button>
+                <button class="btn btn-primary modal__confirm" id="modalConfirmBtn">确认</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast hidden" role="alert" aria-live="polite"></div>
+
+    <!-- ES Module 应用入口 -->
+    <script type="module" src="/static/js/app.js"></script>
+</body>
+</html>

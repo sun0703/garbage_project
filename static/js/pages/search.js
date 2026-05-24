@@ -10,6 +10,7 @@
 import { store } from '../store.js';
 import { api } from '../api.js';
 import { showToast, showLoading, hideLoading } from '../utils/ui.js';
+import { ConfusingPairCard } from '../components/confusing-pair-card.js';
 
 // ==================== 工具函数 ====================
 
@@ -352,10 +353,34 @@ export class SearchPage {
             <div class="search-results-list">
                 ${listHTML}
             </div>
+            <div id="searchConfusingHint" class="search-confusing-hint"></div>
         `;
 
-        /* 为每个结果项绑定点击事件 */
         this._bindResultItemEvents(results);
+        this._loadConfusingHint(this._currentQuery);
+    }
+
+    async _loadConfusingHint(query) {
+        const container = document.getElementById('searchConfusingHint');
+        if (!container || !query) return;
+
+        try {
+            const response = await api.getGuideItem(query);
+            const pairs = response.confusing_pairs || [];
+            if (pairs.length === 0) return;
+
+            const pairCard = new ConfusingPairCard();
+            container.innerHTML = `<h4 class="confusing-hint-title">⚠️ 易混淆提醒</h4>`;
+
+            pairs.slice(0, 3).forEach(pair => {
+                const compactEl = pairCard.renderCompact(pair);
+                container.appendChild(compactEl);
+            });
+
+            pairCard.destroy();
+        } catch (error) {
+            /* 静默失败，不影响搜索结果展示 */
+        }
     }
 
     /**
@@ -370,26 +395,15 @@ export class SearchPage {
         if (!items) return;
 
         items.forEach((itemEl, index) => {
-            /* 点击查看详情 */
             itemEl.addEventListener('click', () => {
                 const resultData = results[index];
-                /* 将搜索结果格式化为标准 predictResult 格式存入 store */
-                store.set('predictResult', {
-                    label_en: resultData.yolo_label || '',
-                    label_cn: resultData.match_label || resultData.label || '',
-                    category: resultData.category || '',
-                    category_id: resultData.category_id,
-                    confidence: (resultData.similarity_score || 0) / 100,
-                    bin_color: resultData.bin_color || '#666',
-                    bin_icon: resultData.bin_icon || '',
-                    guidance: resultData.guidance || ''
-                });
-
-                /* 跳转结果展示页（复用 ResultCard 展示） */
-                window.location.hash = '#/result';
+                const keyword = resultData.match_label || resultData.label || '';
+                if (keyword) {
+                    store.set('currentItemKeyword', keyword);
+                    window.location.hash = '#/item/' + encodeURIComponent(keyword);
+                }
             });
 
-            /* 键盘无障碍支持 */
             itemEl.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();

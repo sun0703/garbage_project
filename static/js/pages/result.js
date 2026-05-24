@@ -61,11 +61,12 @@ export class ResultPage {
      * 移除事件监听、清空容器、释放数据引用
      */
     destroy() {
-        /* 移除按钮事件 */
+        const guideBtn = document.getElementById('guideDetailBtn');
         const continueBtn = document.getElementById('continueBtn');
         const shareBtn = document.getElementById('shareBtn');
         const homeBtn = document.getElementById('homeBtn');
 
+        if (guideBtn) guideBtn.removeEventListener('click', this._boundHandlers.guide);
         if (continueBtn) continueBtn.removeEventListener('click', this._boundHandlers.continue);
         if (shareBtn) shareBtn.removeEventListener('click', this._boundHandlers.share);
         if (homeBtn) homeBtn.removeEventListener('click', this._boundHandlers.home);
@@ -125,8 +126,15 @@ export class ResultPage {
             <!-- 操作按钮组 -->
             <div class="card result-actions-card">
                 <div class="btn-group result-btn-group">
-                    <button class="btn btn-primary" id="continueBtn">
+                    <button class="btn btn-primary" id="guideDetailBtn">
                         <svg viewBox="0 0 24 24" width="18" height="18" stroke="white" stroke-width="2" fill="none">
+                            <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+                            <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+                        </svg>
+                        查看投放指引
+                    </button>
+                    <button class="btn btn-secondary" id="continueBtn">
+                        <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none">
                             <polyline points="1 4 1 10 7 10"/>
                             <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
                         </svg>
@@ -186,7 +194,12 @@ export class ResultPage {
      * @private
      */
     _bindEvents() {
-        /* 继续识别 — 清空状态回到首页 */
+        this._boundHandlers.guide = () => this._handleGuide();
+        const guideBtn = document.getElementById('guideDetailBtn');
+        if (guideBtn) {
+            guideBtn.addEventListener('click', this._boundHandlers.guide);
+        }
+
         this._boundHandlers.continue = () => this._handleContinue();
         const continueBtn = document.getElementById('continueBtn');
         if (continueBtn) {
@@ -225,6 +238,16 @@ export class ResultPage {
      * 清除当前图片和结果状态，跳转回首页
      * @private
      */
+    _handleGuide() {
+        const keyword = this._resultData?.label_cn || this._resultData?.label_en || '';
+        if (keyword) {
+            store.set('currentItemKeyword', keyword);
+            window.location.hash = '#/item/' + encodeURIComponent(keyword);
+        } else {
+            showToast('无法获取物品名称', 'warning');
+        }
+    }
+
     _handleContinue() {
         /* 清除 store 中的图片和结果数据 */
         store.remove('selectedImage');

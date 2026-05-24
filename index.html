@@ -317,6 +317,116 @@
             50% { box-shadow: 0 0 0 14px rgba(231, 76, 60, 0); }
         }
 
+        /* ========== 搜索联想下拉 (F-2.2.3) ========== */
+        .search-wrapper {
+            position: relative;
+            flex: 1;
+        }
+        .autocomplete-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            margin-top: 6px;
+            background: white;
+            border-radius: var(--radius-md);
+            box-shadow: var(--shadow-lg);
+            border: 1px solid var(--border);
+            z-index: 200;
+            max-height: 260px;
+            overflow-y: auto;
+            display: none;
+        }
+        .autocomplete-dropdown.show {
+            display: block;
+            animation: acDropIn 0.18s ease-out;
+        }
+        @keyframes acDropIn {
+            from { opacity: 0; transform: translateY(-8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .ac-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 16px;
+            cursor: pointer;
+            transition: background 0.15s;
+            border-bottom: 1px solid rgba(0,0,0,0.04);
+        }
+        .ac-item:last-child { border-bottom: none; }
+        .ac-item:hover, .ac-item.active {
+            background: rgba(45, 155, 94, 0.06);
+        }
+        .ac-item-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            flex-shrink: 0;
+            color: white;
+        }
+        .ac-item-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .ac-item-name {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .ac-item-cat {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+        .ac-empty {
+            padding: 20px;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+
+        /* ========== 热门搜索词 (F-2.2.4) ========== */
+        .hot-search-bar {
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .hot-search-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .hot-tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 12px;
+            border-radius: var(--radius-full);
+            background: rgba(45, 155, 94, 0.08);
+            color: var(--primary-dark);
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.15s;
+            border: 1px solid transparent;
+            white-space: nowrap;
+        }
+        .hot-tag:hover {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+            transform: translateY(-1px);
+        }
+
         /* ========== 操作按钮组 ========== */
         .btn-group {
             display: flex;
@@ -1260,6 +1370,7 @@
             <div class="history-drawer-header">
                 <div class="history-drawer-title">识别历史</div>
                 <div class="history-drawer-actions">
+                    <button class="history-action-btn" id="historyExport" title="导出历史记录">导出</button>
                     <button class="history-action-btn" id="historyClearAll">清空</button>
                     <button class="history-drawer-close" id="historyCloseBtn" aria-label="关闭">
                         <svg width="16" height="16" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
@@ -1293,17 +1404,25 @@
 
         <!-- 搜索框 -->
         <div class="search-box">
-            <label for="searchInput" class="sr-only">搜索垃圾名称</label>
-            <input type="text"
-                   class="search-input"
-                   id="searchInput"
-                   placeholder="输入垃圾名称搜索..."
-                   aria-label="搜索垃圾名称"
-                   autocomplete="off">
+            <div class="search-wrapper">
+                <label for="searchInput" class="sr-only">搜索垃圾名称</label>
+                <input type="text"
+                       class="search-input"
+                       id="searchInput"
+                       placeholder="输入垃圾名称搜索..."
+                       aria-label="搜索垃圾名称"
+                       autocomplete="off">
+                <div class="autocomplete-dropdown" id="acDropdown" role="listbox" aria-label="搜索建议"></div>
+            </div>
             <button class="voice-btn" id="voiceBtn" title="语音输入" aria-label="语音输入">
                 <!-- 麦克风 SVG 图标 -->
                 <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
             </button>
+        </div>
+
+        <!-- 热门搜索词 (F-2.2.4) -->
+        <div class="hot-search-bar" id="hotSearchBar">
+            <span class="hot-search-label">🔥 热搜</span>
         </div>
 
         <!-- 操作按钮 -->
@@ -1901,7 +2020,10 @@ function stopVoiceListening() {
 
 voiceBtn.onclick = function() {
     if (!recognition) {
-        if (!initSpeechRecognition()) return;
+        if (!initSpeechRecognition()) {
+            tryMediaRecorderFallback();
+            return;
+        }
     }
 
     if (voiceBtn.classList.contains("listening")) {
@@ -1911,9 +2033,250 @@ voiceBtn.onclick = function() {
             recognition.start();
         } catch (e) {
             console.warn("语音启动失败:", e);
+            tryMediaRecorderFallback();
         }
     }
 };
+
+// ==================== MediaRecorder 降级方案 (F-2.1.5) ====================
+let mediaRecorder = null;
+let mediaAudioChunks = [];
+
+function tryMediaRecorderFallback() {
+    if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) {
+        showError("您的浏览器不支持语音功能，请使用Chrome或Edge浏览器");
+        return;
+    }
+    showLoading("正在请求麦克风权限...");
+
+    navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(function(stream) {
+            hideLoading();
+            if (!MediaRecorder || !window.MediaRecorder) {
+                showError("您的浏览器不支持录音，请使用Chrome或Edge浏览器");
+                stream.getTracks().forEach(function(t) { t.stop(); });
+                return;
+            }
+
+            mediaRecorder = new MediaRecorder(stream);
+            mediaAudioChunks = [];
+
+            voiceBtn.classList.add("listening");
+            voiceBtn.querySelector("svg").outerHTML =
+                '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" fill="white"/></svg>';
+
+            mediaRecorder.ondataavailable = function(e) {
+                if (e.data && e.data.size > 0) mediaAudioChunks.push(e.data);
+            };
+            mediaRecorder.onstop = function() {
+                voiceBtn.classList.remove("listening");
+                voiceBtn.querySelector("svg").outerHTML =
+                    '<svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>';
+                stream.getTracks().forEach(function(t) { t.stop(); });
+
+                if (mediaAudioChunks.length === 0) {
+                    showError("未录制到音频，请重试");
+                    return;
+                }
+
+                var blob = new Blob(mediaAudioChunks, { type: "audio/webm" });
+                var reader = new FileReader();
+                reader.onloadend = function() {
+                    var base64Audio = reader.result.split(",")[1];
+                    fetch(API_BASE + "/api/voice/transcribe", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ audio: base64Audio, format: "webm" })
+                    })
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        if (data.success && data.text) {
+                            searchInput.value = data.text;
+                            doSearch();
+                        } else {
+                            showError(data.error?.message || "语音转写失败");
+                        }
+                    })
+                    .catch(function() {
+                        showError("语音转写服务暂不可用，请使用文字搜索");
+                    });
+                };
+                reader.readAsDataURL(blob);
+            };
+
+            mediaRecorder.start();
+
+            var autoStopTimer = setTimeout(function() {
+                if (mediaRecorder && mediaRecorder.state === "recording") {
+                    mediaRecorder.stop();
+                }
+            }, 10000);
+
+            voiceBtn.onclick = function() {
+                clearTimeout(autoStopTimer);
+                if (mediaRecorder && mediaRecorder.state === "recording") {
+                    mediaRecorder.stop();
+                }
+            };
+
+            setTimeout(function() {
+                if (mediaRecorder && mediaRecorder.state === "recording") {
+                    mediaRecorder.stop();
+                }
+            }, 8000);
+        })
+        .catch(function(err) {
+            hideLoading();
+            console.warn("麦克风权限被拒绝:", err);
+            showError("麦克风权限被拒绝，请在浏览器设置中允许后重试");
+        });
+}
+
+// ==================== 搜索联想下拉 (F-2.2.3) ====================
+var acDropdown = document.getElementById("acDropdown");
+var acDebounceTimer = null;
+var acActiveIndex = -1;
+var acCurrentItems = [];
+var AC_MIN_LENGTH = 1;
+var AC_DEBOOUNCE_MS = 250;
+
+searchInput.addEventListener("input", function() {
+    var val = this.value.trim();
+    if (val.length < AC_MIN_LENGTH) {
+        hideAutocomplete();
+        return;
+    }
+    clearTimeout(acDebounceTimer);
+    acDebounceTimer = setTimeout(function() { fetchAutocomplete(val); }, AC_DEBOOUNCE_MS);
+});
+
+searchInput.addEventListener("focus", function() {
+    if (this.value.trim().length >= AC_MIN_LENGTH) {
+        fetchAutocomplete(this.value.trim());
+    }
+});
+
+searchInput.addEventListener("blur", function() {
+    setTimeout(hideAutocomplete, 200);
+});
+
+searchInput.addEventListener("keydown", function(e) {
+    if (!acDropdown || !acDropdown.classList.contains("show")) return;
+
+    var items = acDropdown.querySelectorAll(".ac-item");
+    if (items.length === 0) return;
+
+    if (e.key === "ArrowDown") {
+        e.preventDefault();
+        acActiveIndex = Math.min(acActiveIndex + 1, items.length - 1);
+        updateAcHighlight(items);
+    } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        acActiveIndex = Math.max(acActiveIndex - 1, -1);
+        updateAcHighlight(items);
+    } else if (e.key === "Enter" && acActiveIndex >= 0) {
+        e.preventDefault();
+        items[acActiveIndex].click();
+    } else if (e.key === "Escape") {
+        hideAutocomplete();
+    }
+});
+
+function updateAcHighlight(items) {
+    for (var i = 0; i < items.length; i++) {
+        items[i].classList.toggle("active", i === acActiveIndex);
+    }
+    if (acActiveIndex >= 0) {
+        items[acActiveIndex].scrollIntoView({ block: "nearest" });
+    }
+}
+
+function hideAutocomplete() {
+    if (acDropdown) acDropdown.classList.remove("show");
+    acActiveIndex = -1;
+    acCurrentItems = [];
+}
+
+function fetchAutocomplete(query) {
+    fetch(API_BASE + "/api/search?query=" + encodeURIComponent(query))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data.success || !data.results || data.results.length === 0) {
+                acDropdown.innerHTML = '<div class="ac-empty">无匹配结果</div>';
+                acDropdown.classList.add("show");
+                return;
+            }
+            acCurrentItems = data.results;
+            acActiveIndex = -1;
+
+            var html = "";
+            data.results.forEach(function(item) {
+                var catColors = {"可回收物":"#007bff","有害垃圾":"#E74C3C","厨余垃圾":"#2D9B5E","其他垃圾":"#666"};
+                var catIcons = {"可回收物":"♻","有害垃圾":"☠","厨余垃圾":"🍃","其他垃圾":"🗑"};
+                var color = item.bin_color || catColors[item.category] || "#666";
+                var icon = item.bin_icon || catIcons[item.category] || "♻";
+
+                html += '<div class="ac-item" role="option" data-label="' + (item.label || "") + '" tabindex="-1">';
+                html += '  <span class="ac-item-icon" style="background:' + color + '">' + icon + '</span>';
+                html += '  <span class="ac-item-info">';
+                html += '    <span class="ac-item-name">' + (item.label || "") + '</span>';
+                html += '    <span class="ac-item-cat">' + (item.category || "") + ' · 相似度 ' + (item.similarity_score || 0) + '%</span>';
+                html += '  </span>';
+                html += '</div>';
+            });
+
+            acDropdown.innerHTML = html;
+            acDropdown.classList.add("show");
+
+            var acItems = acDropdown.querySelectorAll(".ac-item");
+            acItems.forEach(function(el, idx) {
+                el.addEventListener("click", function() {
+                    searchInput.value = el.dataset.label || "";
+                    hideAutocomplete();
+                    var mockItem = acCurrentItems[idx];
+                    if (mockItem) showPredictResult(mockItem, 0);
+                });
+                el.addEventListener("mouseenter", function() {
+                    acActiveIndex = idx;
+                    updateAcHighlight(acItems);
+                });
+            });
+        })
+        .catch(function() { hideAutocomplete(); });
+}
+
+// ==================== 热门搜索词 (F-2.2.4) ====================
+var HOT_SEARCH_TERMS = [
+    { label: "塑料瓶", category: "可回收物" },
+    { label: "外卖盒", category: "其他垃圾" },
+    { label: "奶茶杯", category: "其他垃圾" },
+    { label: "电池", category: "有害垃圾" },
+    { label: "快递袋", category: "其他垃圾" },
+    { label: "果皮", category: "厨余垃圾" },
+    { label: "旧衣服", category: "可回收物" },
+    { label: "灯管", category: "有害垃圾" }
+];
+
+function renderHotSearchBar() {
+    var container = document.getElementById("hotSearchBar");
+    if (!container) return;
+
+    var existingTags = container.querySelectorAll(".hot-tag");
+    existingTags.forEach(function(t) { t.remove(); });
+
+    HOT_SEARCH_TERMS.forEach(function(term) {
+        var tag = document.createElement("span");
+        tag.className = "hot-tag";
+        tag.textContent = term.label;
+        tag.title = term.category;
+        tag.addEventListener("click", function() {
+            searchInput.value = term.label;
+            doSearch();
+        });
+        container.appendChild(tag);
+    });
+}
+renderHotSearchBar();
 
 // ==================== UI 工具函数 ====================
 function showLoading(text) {
@@ -2142,6 +2505,49 @@ function clearAllHistory() {
     renderHistoryList();
 }
 
+function exportHistory() {
+    var list = loadHistoryRaw();
+    if (list.length === 0) {
+        showError("暂无历史记录可导出");
+        return;
+    }
+
+    var exportData = {
+        export_time: new Date().toISOString(),
+        app_name: "校园垃圾分类AI助手",
+        total_count: list.length,
+        records: list.map(function(item) {
+            return {
+                物品名称: item.label_cn,
+                分类: item.category,
+                置信度: Math.round((item.confidence || 0) * 100) + "%",
+                投放指引: item.guidance || "",
+                推理耗时: item.inference_time_ms ? item.inference_time_ms + "ms" : "",
+                识别时间: item.timestamp
+            };
+        })
+    };
+
+    try {
+        var jsonStr = JSON.stringify(exportData, null, 2);
+        var blob = new Blob([jsonStr], { type: "application/json;charset=utf-8" });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement("a");
+        a.href = url;
+        a.download = "垃圾分类历史记录_" + new Date().toISOString().slice(0, 10) + ".json";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        var toast = document.getElementById("shareToast");
+        if (toast) { toast.textContent = "导出成功"; toast.classList.add("show"); setTimeout(function() { toast.classList.remove("show"); toast.textContent = "已复制到剪贴板"; }, 2000); }
+    } catch(e) {
+        console.error("导出失败:", e);
+        showError("导出失败，请重试");
+    }
+}
+
 function viewHistoryItem(item) {
     closeHistoryDrawer();
 
@@ -2167,6 +2573,8 @@ if (historyToggle) historyToggle.onclick = openHistoryDrawer;
 if (historyOverlay) historyOverlay.onclick = closeHistoryDrawer;
 if (historyCloseBtn) historyCloseBtn.onclick = closeHistoryDrawer;
 if (historyClearAll) historyClearAll.onclick = clearAllHistory;
+var historyExportBtn = document.getElementById("historyExport");
+if (historyExportBtn) historyExportBtn.onclick = exportHistory;
 
 function openHistoryDrawer() {
     renderHistoryList();

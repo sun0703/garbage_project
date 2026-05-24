@@ -3075,6 +3075,94 @@ async def get_item_detail(label: str) -> JSONResponse:
     })
 
 
+@app.post("/api/voice/transcribe")
+async def transcribe_audio(request: Request) -> JSONResponse:
+    """
+    语音音频转写接口 (F-2.1.5 MediaRecorder降级方案)
+
+    接受前端通过 MediaRecorder API 录制的音频数据（Base64编码），
+    调用后端ASR引擎进行语音转文字。
+
+    当前版本：返回模拟数据，生产环境需接入真实ASR服务
+    （如 Whisper、百度ASR、讯飞ASR 等）
+    """
+    try:
+        body = await request.json()
+        audio_base64 = body.get("audio", "")
+        audio_format = body.get("format", "webm")
+
+        if not audio_base64:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "error": {"code": "E014", "message": "缺少音频数据"}}
+            )
+
+        import base64, io
+
+        raw_bytes = base64.b64decode(audio_base64)
+        audio_size_kb = len(raw_bytes) / 1024
+
+        logger.info(f"[Voice] 收到音频数据: format={audio_format}, size={audio_size_kb:.1f}KB")
+
+        import os
+
+        whisper_available = False
+
+        try:
+            import whisper
+            whisper_available = True
+        except ImportError:
+            pass
+
+        if whisper_available and audio_size_kb > 5:
+            try:
+                import whisper as _whisper
+                audio_buffer = io.BytesIO(raw_bytes)
+
+                temp_path = f"temp_voice_{os.getpid()}_{int(time.time())}.{audio_format}"
+                with open(temp_path, "wb") as f:
+                    f.write(raw_bytes)
+
+                try:
+                    model = _whisper.load_model("base")
+                    result = model.transcribe(temp_path, language="zh")
+                    text = result.get("text", "").strip()
+
+                    os.remove(temp_path)
+
+                    if text:
+                        return JSONResponse(content={
+                            "success": True,
+                            "text": text,
+                            "method": "whisper_local",
+                            "audio_size_kb": round(audio_size_kb, 1),
+                        })
+                finally:
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+            except Exception as e:
+                logger.warning(f"[Voice] Whisper推理失败: {e}")
+
+        return JSONResponse(
+            status_code=501,
+            content={
+                "success": False,
+                "error": {
+                    "code": "E015",
+                    "message": "本地ASR引擎暂不可用。建议使用Chrome/Edge浏览器的Web Speech API进行语音输入"
+                },
+                "hint": "请使用支持Web Speech API的浏览器（Chrome/Edge/Safari）",
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"[Voice] 音频处理异常: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": {"code": "E016", "message": f"音频处理失败: {str(e)}"}}
+        )
+
+
 # ==================== 程序入口 ====================
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8001, reload=True, log_level="info")

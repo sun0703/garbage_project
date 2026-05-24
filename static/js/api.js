@@ -391,8 +391,8 @@ class ApiClient {
             throw new ApiError('E001', '图片列表不能为空', 400);
         }
 
-        if (images.length > 10) {
-            throw new ApiError('E005', '单次最多上传10张图片', 429);
+        if (images.length > 5) {
+            throw new ApiError('E005', '单次最多上传5张图片', 429);
         }
 
         return this.request('POST', '/api/batch-predict', {

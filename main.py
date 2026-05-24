@@ -244,6 +244,16 @@ app = FastAPI(
     version="1.1.0",
 )
 
+# CORS 中间件配置（开发环境允许所有来源，生产环境应限制具体域名）
+from fastapi.middleware.cors import CORSMiddleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 生产环境应替换为具体前端域名
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 # ==================== 请求/响应模型 ====================
 class PredictRequest(BaseModel):
@@ -258,10 +268,20 @@ class BatchPredictRequest(BaseModel):
 
 class FeedbackRequest(BaseModel):
     """用户反馈请求体"""
-    image_base64: str           # 原始图片Base64
-    predicted_category_id: int  # 模型预测的类别 0-3
-    correct_category_id: int    # 用户认为的正确类别 0-3
-    comment: str = ""           # 用户备注（可选）
+    image_base64: str                          # 原始图片Base64
+    predicted_category_id: int                 # 模型预测的类别 0-3
+    correct_category_id: int                   # 用户认为的正确类别 0-3
+    comment: str = ""                          # 用户备注（可选，最长500字）
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "image_base64": "data:image/jpeg;base64,...",
+                "predicted_category_id": 1,
+                "correct_category_id": 0,
+                "comment": "应该是厨余垃圾"
+            }
+        }
 
 
 # ==================== 内存存储层 ====================
@@ -318,8 +338,8 @@ class HistoryStore:
             # 只存最近100条到磁盘
             with open(self._backup_path, "w", encoding="utf-8") as f:
                 json.dump(self._records[:100], f, ensure_ascii=False, indent=2)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("历史记录持久化失败: %s", e)
 
     def _load_from_disk(self) -> None:
         if not self._backup_path or not self._backup_path.exists():
@@ -327,8 +347,8 @@ class HistoryStore:
         try:
             with open(self._backup_path, "r", encoding="utf-8") as f:
                 self._records = json.load(f)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("历史记录加载失败: %s", e)
 
 
 class FeedbackStore:
@@ -355,8 +375,8 @@ class FeedbackStore:
         try:
             with open(self._backup_path, "w", encoding="utf-8") as f:
                 json.dump(self._records, f, ensure_ascii=False, indent=2)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("反馈记录持久化失败: %s", e)
 
     def _load_from_disk(self) -> None:
         if not self._backup_path or not self._backup_path.exists():
@@ -364,8 +384,8 @@ class FeedbackStore:
         try:
             with open(self._backup_path, "r", encoding="utf-8") as f:
                 self._records = json.load(f)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("反馈记录加载失败: %s", e)
 
 
 class InferenceCache:
@@ -922,7 +942,7 @@ class VisionEngine:
 
     def _load_onnx_model(self, model_path: str) -> None:
         """加载ONNX格式模型"""
-        self.session = ort.InferenceSession(str(model_file))
+        self.session = ort.InferenceSession(str(model_path))
         self.input_name = self.session.get_inputs()[0].name
         self.output_name = self.session.get_outputs()[0].name
 
@@ -1202,20 +1222,48 @@ class SearchEngine:
                 data = json.load(f)
             self.vocab = data.get("items", [])
             self.vocab_labels = [item["label"] for item in self.vocab]
-            logger.info("词库加载成功: %d 条记录", len(self.vocab))
+            # 构建别名到主标签的映射，提升搜索覆盖率
+            self._alias_to_label: dict[str, str] = {}
+            for item in self.vocab:
+                for alias in item.get("aliases", []):
+                    if alias and alias not in self._alias_to_label:
+                        self._alias_to_label[alias] = item["label"]
+            logger.info("词库加载成功: %d 条记录, %d 个别名索引", len(self.vocab), len(self._alias_to_label))
         except Exception as e:
             logger.error("词库加载失败: %s", e)
 
     def search(self, query: str, top_k: int = 3) -> list[dict]:
-        """执行模糊搜索"""
+        """执行模糊搜索（同时搜索主标签和别名）"""
         if not self.vocab_labels:
             return []
-        raw_results = fuzz_process.extract(query, self.vocab_labels, limit=top_k)
+
+        # 构建合并搜索池：主标签 + 别名
+        all_searchable = list(self.vocab_labels)
+        alias_list = list(self._alias_to_label.keys())
+        all_searchable.extend(alias_list)
+
+        raw_results = fuzz_process.extract(query, all_searchable, limit=top_k * 2)
         matched = []
-        for label, score in raw_results:
-            item = next((v for v in self.vocab if v["label"] == label), None)
+        seen_labels = set()
+
+        for match_text, score in raw_results:
+            # 如果匹配到的是别名，映射回主标签
+            if match_text in self._alias_to_label:
+                main_label = self._alias_to_label[match_text]
+            else:
+                main_label = match_text
+
+            # 去重：同一主标签只保留最高分
+            if main_label in seen_labels:
+                continue
+            seen_labels.add(main_label)
+
+            item = next((v for v in self.vocab if v["label"] == main_label), None)
             if item:
                 matched.append({**item, "similarity_score": score})
+            if len(matched) >= top_k:
+                break
+
         return matched
 
     def get_by_yolo_label(self, yolo_label: str) -> Optional[dict]:
@@ -1367,7 +1415,11 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
     start_time = time.time()
 
     try:
-        _, encoded_data = request.image.split(",", 1)
+        # 兼容 Data URL 格式和纯 Base64 格式
+        if "," in request.image:
+            _, encoded_data = request.image.split(",", 1)
+        else:
+            encoded_data = request.image
         image_data = base64.b64decode(encoded_data)
         image = Image.open(BytesIO(image_data)).convert("RGB")
         logger.info("图片解码成功，尺寸: %s", image.size)
@@ -1410,7 +1462,7 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
             status_code=400,
             content={
                 "success": False,
-                "error": {"code": "E001", "message": f"解码失败: {str(e)}"},
+                "error": {"code": "E001", "message": "图片解码失败，请检查图片数据格式"},
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
             },
         )
@@ -1549,7 +1601,7 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
             status_code=500,
             content={
                 "success": False,
-                "error": {"code": "E003", "message": f"推理出错: {str(e)}"},
+                "error": {"code": "E003", "message": "AI推理过程出错，请稍后重试"},
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
             },
         )
@@ -1561,14 +1613,14 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
             status_code=500,
             content={
                 "success": False,
-                "error": {"code": "E003", "message": f"内部错误: {str(e)}"},
+                "error": {"code": "E003", "message": "服务器内部错误，请稍后重试"},
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
             },
         )
 
 
 @app.get("/api/search")
-async def search_waste(query: str = Query(..., min_length=1)) -> JSONResponse:
+async def search_waste(query: str = Query(..., min_length=1, max_length=100)) -> JSONResponse:
     """模糊搜索接口"""
     if not search_engine or not search_engine.vocab:
         return JSONResponse(
@@ -1622,7 +1674,11 @@ async def get_categories() -> JSONResponse:
 async def debug_analyze_image(request: PredictRequest) -> JSONResponse:
     """调试接口：分析图片的详细特征"""
     try:
-        _, encoded_data = request.image.split(",", 1)
+        # 兼容 Data URL 格式和纯 Base64 格式
+        if "," in request.image:
+            _, encoded_data = request.image.split(",", 1)
+        else:
+            encoded_data = request.image
         image_data = base64.b64decode(encoded_data)
         image = Image.open(BytesIO(image_data)).convert("RGB")
         
@@ -1777,7 +1833,11 @@ async def batch_predict_waste(request: BatchPredictRequest) -> JSONResponse:
     results = []
     for idx, img_str in enumerate(images):
         try:
-            _, encoded_data = img_str.split(",", 1)
+            # 兼容 Data URL 格式和纯 Base64 格式
+            if "," in img_str:
+                _, encoded_data = img_str.split(",", 1)
+            else:
+                encoded_data = img_str
             image_data = base64.b64decode(encoded_data)
             image = Image.open(BytesIO(image_data)).convert("RGB")
         except Exception:
@@ -1788,14 +1848,15 @@ async def batch_predict_waste(request: BatchPredictRequest) -> JSONResponse:
             continue
 
         # ===== 批量识别中的单张图片缓存检查 =====
+        current_cache_key = None
         cached_item = None
         if inference_cache:
             try:
-                cache_key = inference_cache._make_key(image_data)
-                cached_result = inference_cache.get(cache_key)
+                current_cache_key = inference_cache._make_key(image_data)
+                cached_result = inference_cache.get(current_cache_key)
                 if cached_result:
                     # 缓存命中：直接使用缓存结果，跳过模型推理
-                    logger.info("🎯 批量识别-第%d张 缓存命中: %s", idx + 1, cache_key[:20])
+                    logger.info("批量识别-第%d张 缓存命中: %s", idx + 1, current_cache_key[:20])
                     cached_item = {
                         "index": idx,
                         "category": cached_result.get("category", ""),
@@ -1865,11 +1926,9 @@ async def batch_predict_waste(request: BatchPredictRequest) -> JSONResponse:
             results.append(item)
 
             # ===== 推理结果写入缓存（批量识别） =====
-            if inference_cache:
+            if inference_cache and current_cache_key:
                 try:
-                    # 使用之前生成的 cache_key（如果在缓存检查阶段已生成）
-                    if 'cache_key' in locals():
-                        inference_cache.set(cache_key, item)
+                    inference_cache.set(current_cache_key, item)
                 except Exception as e:
                     logger.warning("批量识别-第%d张 缓存写入异常（不影响主流程）: %s", idx + 1, e)
 
@@ -1953,6 +2012,14 @@ async def clear_history() -> JSONResponse:
 @app.post("/api/feedback")
 async def submit_feedback(request: FeedbackRequest) -> JSONResponse:
     """提交识别结果反馈"""
+    if request.predicted_category_id not in (0, 1, 2, 3):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "success": False,
+                "error": {"code": "E001", "message": "predicted_category_id 必须为 0-3"},
+            },
+        )
     if request.correct_category_id not in (0, 1, 2, 3):
         return JSONResponse(
             status_code=400,
@@ -1968,11 +2035,13 @@ async def submit_feedback(request: FeedbackRequest) -> JSONResponse:
             content={"success": False, "error": {"code": "E006", "message": "反馈服务未就绪"}},
         )
 
+    # 仅存储图片哈希摘要，避免大量 Base64 数据撑爆内存
+    image_hash = hashlib.sha256(request.image_base64.encode("utf-8")).hexdigest()[:16]
     feedback_id = feedback_store.add({
-        "image_base64": request.image_base64,
+        "image_hash": image_hash,
         "predicted_category_id": request.predicted_category_id,
         "correct_category_id": request.correct_category_id,
-        "comment": request.comment,
+        "comment": request.comment[:500],  # 限制评论长度
     })
 
     logger.info("📝 收到用户反馈: %s, 预测=%d, 正确=%d", feedback_id,

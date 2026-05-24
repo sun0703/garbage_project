@@ -11,6 +11,19 @@ import { store } from '../store.js';
 import { api } from '../api.js';
 import { showToast, showLoading, hideLoading } from '../utils/ui.js';
 
+// ==================== 工具函数 ====================
+
+/**
+ * HTML特殊字符转义，防止XSS注入
+ * @param {string} str - 需要转义的字符串
+ * @returns {string} 转义后的安全字符串
+ */
+function escapeHtml(str) {
+    if (typeof str !== 'string') return '';
+    const escapeMap = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+    return str.replace(/[&<>"']/g, (ch) => escapeMap[ch]);
+}
+
 // ==================== 页面类定义 ====================
 export class SearchPage {
     /** 页面根容器 DOM 引用 */
@@ -227,18 +240,20 @@ export class SearchPage {
 
         /* 返回按钮 */
         const backBtn = document.getElementById('searchBackBtn');
+        this._boundHandlers.backClick = () => {
+            window.location.hash = '#/';
+        };
         if (backBtn) {
-            backBtn.addEventListener('click', () => {
-                window.location.hash = '#/';
-            });
+            backBtn.addEventListener('click', this._boundHandlers.backClick);
         }
 
         /* 语音按钮占位（阶段二实现） */
         const voiceBtn = document.getElementById('searchVoiceBtn');
+        this._boundHandlers.voiceClick = () => {
+            showToast('语音识别功能即将上线，敬请期待');
+        };
         if (voiceBtn) {
-            voiceBtn.addEventListener('click', () => {
-                showToast('语音识别功能即将上线，敬请期待');
-            });
+            voiceBtn.addEventListener('click', this._boundHandlers.voiceClick);
         }
     }
 
@@ -308,22 +323,22 @@ export class SearchPage {
     _renderResults(results) {
         if (!this.resultsContainer) return;
 
-        /* 构建结果列表 HTML */
+        /* 构建结果列表 HTML（所有动态内容均经过转义） */
         const listHTML = results.map((item, index) => `
             <div class="card search-result-item"
                  data-index="${index}"
                  role="button"
                  tabindex="0"
-                 aria-label="查看 ${item.match_label || item.label || '未知'} 详情">
+                 aria-label="查看 ${escapeHtml(item.match_label || item.label || '未知')} 详情">
                 <div class="search-item-left">
-                    <div class="search-item-icon">${item.bin_icon || ''}</div>
+                    <div class="search-item-icon">${escapeHtml(item.bin_icon || '')}</div>
                     <div class="search-item-info">
-                        <div class="search-item-label">${item.match_label || item.label || '未知'}</div>
-                        <div class="search-item-category">${item.category || '未知类别'}</div>
+                        <div class="search-item-label">${escapeHtml(item.match_label || item.label || '未知')}</div>
+                        <div class="search-item-category">${escapeHtml(item.category || '未知类别')}</div>
                     </div>
                 </div>
                 <div class="search-score">
-                    <span class="score-value">${item.similarity_score || 0}%</span>
+                    <span class="score-value">${Number(item.similarity_score) || 0}%</span>
                     <span class="score-label">相似度</span>
                 </div>
             </div>
@@ -332,7 +347,7 @@ export class SearchPage {
         this.resultsContainer.innerHTML = `
             <div class="search-results-header">
                 <span class="results-count">找到 ${results.length} 条相关结果</span>
-                <span class="results-query">"${this._currentQuery}"</span>
+                <span class="results-query">"${escapeHtml(this._currentQuery)}"</span>
             </div>
             <div class="search-results-list">
                 ${listHTML}
@@ -405,7 +420,7 @@ export class SearchPage {
                 </svg>
             </div>
             <div class="empty-state-text">未找到相关结果</div>
-            <div class="empty-state-hint">未找到「${query}」相关结果，请尝试其他关键词</div>
+            <div class="empty-state-hint">未找到「${escapeHtml(query)}」相关结果，请尝试其他关键词</div>
             <div class="empty-state-suggestions">
                 <p>推荐尝试：</p>
                 <ul>
@@ -432,7 +447,7 @@ export class SearchPage {
 
         this.resultsContainer.innerHTML = `
             <div class="card error-state-card">
-                <div class="error-state-text">${errorMsg}</div>
+                <div class="error-state-text">${escapeHtml(errorMsg)}</div>
                 <button class="btn btn-secondary btn-retry" id="retrySearchBtn">
                     <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
                         <polyline points="1 4 1 10 7 10"/>

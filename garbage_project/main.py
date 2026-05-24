@@ -52,6 +52,40 @@ USE_YOLO_PT_MODEL = True  # 使用PyTorch格式模型（推荐）
 # 备用：旧版ONNX模型
 # MODEL_PATH = BASE_DIR / "models" / "yolov8_coco.onnx"
 # USE_YOLO_PT_MODEL = False
+
+
+def validate_model_file(model_path: Path) -> None:
+    """
+    验证模型文件是否存在，不存在则提供清晰的错误提示和解决方案
+
+    Args:
+        model_path: 模型文件路径对象
+
+    Raises:
+        SystemExit: 当模型文件不存在时退出程序
+    """
+    if not model_path.exists():
+        error_msg = f"""
+╔══════════════════════════════════════════════════════════════╗
+║  ❌ 致命错误：模型文件不存在                                ║
+╠══════════════════════════════════════════════════════════════╣
+║  期望路径: {model_path}
+║                                                              ║
+║  🔧 解决步骤：                                               ║
+║  1. 创建 models 目录: mkdir models                          ║
+║  2. 下载模型文件到该目录                                    ║
+║  3. 查看下载说明: 项目文档/模型下载说明.md                    ║
+║                                                              ║
+║  📌 提示：模型文件已加入 .gitignore，需手动下载              ║
+╚══════════════════════════════════════════════════════════════╝
+"""
+        logger.error(error_msg)
+        print(error_msg)
+        raise SystemExit(1)
+
+    logger.info("✅ 模型文件检查通过: %s", model_path)
+
+
 VOCAB_PATH = BASE_DIR / "data" / "waste.json"
 STATIC_DIR = BASE_DIR / "static"
 INDEX_HTML_PATH = BASE_DIR / "index.html"
@@ -889,7 +923,12 @@ class VisionEngine:
         """加载模型文件（自动检测格式）"""
         model_file = Path(model_path)
         if not model_file.exists():
-            logger.warning("模型文件不存在: %s，视觉推理功能不可用", model_path)
+            logger.error(
+                "❌ 模型文件不存在: %s\n"
+                "   请确保已下载模型文件并放置在正确位置\n"
+                "   下载说明请查看: 项目文档/模型下载说明.md",
+                model_path
+            )
             return
 
         try:
@@ -1433,6 +1472,11 @@ def startup_event() -> None:
     """应用启动时初始化"""
     global vision_engine, search_engine, history_store, feedback_store, inference_cache
     logger.info("正在初始化服务...")
+
+    # 启动前验证关键文件存在性
+    logger.info("🔍 检查模型文件...")
+    validate_model_file(MODEL_PATH)
+
     vision_engine = VisionEngine(str(MODEL_PATH))
     search_engine = SearchEngine(str(VOCAB_PATH))
     history_store = HistoryStore(backup_path=BASE_DIR / "data" / "history.json")

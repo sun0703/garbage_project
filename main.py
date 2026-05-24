@@ -1685,6 +1685,227 @@ class SearchEngine:
         # 如果没有匹配到，返回该类别中的随机物品
         return random.choice(items_in_category)
 
+    # ==================== 易错提示系统 ====================
+
+    _EASY_MISTAKE_TIPS: dict[str, list[dict]] = {
+        "塑料餐盒": [
+            {
+                "confuse_with": "用过的纸巾/一次性餐具",
+                "confuse_category": "其他垃圾",
+                "reason": "严重油污的餐盒无法回收利用",
+                "distinguish_method": "能冲洗干净→可回收物；油污顽固→其他垃圾",
+                "error_rate": "高",
+            },
+            {
+                "confuse_with": "剩饭剩菜",
+                "confuse_category": "厨余垃圾",
+                "reason": "带食物残渣时容易误判",
+                "distinguish_method": "倒掉食物残渣后再分类餐盒本身",
+                "error_rate": "中",
+            },
+        ],
+        "塑料杯": [
+            {
+                "confuse_with": "一次性餐具",
+                "confuse_category": "其他垃圾",
+                "reason": "受污染的纸杯/塑料杯不可回收",
+                "distinguish_method": "塑料杯清洗后可回收；纸杯（覆膜）→其他垃圾",
+                "error_rate": "高",
+            },
+        ],
+        "塑料瓶": [
+            {
+                "confuse_with": "塑料袋",
+                "confuse_category": "其他垃圾",
+                "reason": "外形相似但回收价值不同",
+                "distinguish_method": "有瓶口瓶盖→塑料瓶（可回收）；薄膜状→塑料袋（其他垃圾）",
+                "error_rate": "中",
+            },
+        ],
+        "易拉罐": [
+            {
+                "confuse_with": "塑料餐盒",
+                "confuse_category": "可回收物",
+                "reason": "金属反光可能被误识别为扁平容器",
+                "distinguish_method": "金属材质、轻捏有变形→易拉罐；硬质塑料→餐盒",
+                "error_rate": "高",
+            },
+        ],
+        "骨头": [
+            {
+                "confuse_with": "破碎陶瓷",
+                "confuse_category": "其他垃圾",
+                "reason": "大骨头实际属于其他垃圾而非厨余垃圾",
+                "distinguish_method": "大骨头（猪腿骨、羊排）→其他垃圾；小碎骨→厨余垃圾",
+                "error_rate": "极高",
+            },
+        ],
+        "用过的纸巾": [
+            {
+                "confuse_with": "废纸",
+                "confuse_category": "可回收物",
+                "reason": "纸张类最容易混淆的物品对",
+                "distinguish_method": "用过/脏污→其他垃圾；干净平整→可回收物",
+                "error_rate": "极高",
+            },
+            {
+                "confuse_with": "厕纸/卫生纸",
+                "confuse_category": "其他垃圾",
+                "reason": "所有纸巾类均属于其他垃圾",
+                "distinguish_method": "无论是否使用过，纸巾/湿巾/面巾纸→其他垃圾",
+                "error_rate": "高",
+            },
+        ],
+        "废纸": [
+            {
+                "confuse_with": "用过的纸巾",
+                "confuse_category": "其他垃圾",
+                "reason": "受污损的纸张失去回收价值",
+                "distinguish_method": "干净无污渍→可回收；沾水/油/食物残渣→其他垃圾",
+                "error_rate": "极高",
+            },
+        ],
+        "塑料袋": [
+            {
+                "confuse_with": "塑料瓶",
+                "confuse_category": "可回收物",
+                "reason": "同属塑料制品但回收处理方式不同",
+                "distinguish_method": "干净透明厚袋有时可回收；普通薄袋/脏袋→其他垃圾",
+                "error_rate": "中",
+            },
+        ],
+        "灯管灯泡": [
+            {
+                "confuse_with": "玻璃瓶",
+                "confuse_category": "可回收物",
+                "reason": "同含玻璃但有害物质不同",
+                "distinguish_method": "荧光灯/节能灯含汞→有害垃圾；普通酒瓶/调料瓶→可回收物",
+                "error_rate": "高",
+            },
+            {
+                "confuse_with": "破碎陶瓷",
+                "confuse_category": "其他垃圾",
+                "reason": "破损灯管需特殊处理",
+                "distinguish_method": "完整灯管→有害垃圾；破碎陶瓷→其他垃圾（需包裹）",
+                "error_rate": "中",
+            },
+        ],
+        "废电池": [
+            {
+                "confuse_with": "其他垃圾",
+                "confuse_category": "其他垃圾",
+                "reason": "普通干电池（无汞）现在可投其他垃圾，但纽扣电池仍为有害",
+                "distinguish_method": "纽扣电池/充电电池→有害垃圾；普通碱性干电池→其他垃圾（各地政策不同）",
+                "error_rate": "高",
+            },
+        ],
+        "过期药品": [
+            {
+                "confuse_with": "塑料瓶（药瓶）",
+                "confuse_category": "可回收物",
+                "reason": "药品包装瓶外观与普通塑料瓶相似",
+                "distinguish_method": "无论包装，只要内装过药品→整体投入有害垃圾",
+                "error_rate": "中",
+            },
+        ],
+        "旧衣物": [
+            {
+                "confuse_with": "破碎陶瓷/其他垃圾",
+                "confuse_category": "其他垃圾",
+                "reason": "脏污严重的衣物失去回收价值",
+                "distinguish_method": "干净干燥→可回收物；潮湿/发霉/严重脏污→其他垃圾",
+                "error_rate": "中",
+            },
+        ],
+        "纸板箱": [
+            {
+                "confuse_with": "其他垃圾",
+                "confuse_category": "其他垃圾",
+                "reason": "未拆除胶带/塑料膜的纸箱影响回收",
+                "distinguish_method": "拆净胶带和塑料膜→可回收；否则→其他垃圾",
+                "error_rate": "中",
+            },
+        ],
+        "茶叶渣": [
+            {
+                "confuse_with": "用过的纸巾",
+                "confuse_category": "其他垃圾",
+                "reason": "茶包外层像纸制品",
+                "distinguish_method": "茶叶/茶渣→厨余垃圾；茶包需拆开（茶叶→厨余，包材→其他）",
+                "error_rate": "中",
+            },
+        ],
+        "蛋壳": [
+            {
+                "confuse_with": "破碎陶瓷",
+                "confuse_category": "其他垃圾",
+                "reason": "硬质碎片外观相似",
+                "distinguish_method": "蛋壳→厨余垃圾；陶瓷碎片→其他垃圾（需包裹防划伤）",
+                "error_rate": "低",
+            },
+        ],
+    }
+
+    def get_easy_mistake_tips(self, label: str) -> list[dict]:
+        """
+        根据物品标签获取易错提示列表
+
+        :param label: 物品名称（支持模糊匹配）
+        :return: 易错提示列表，每项包含混淆对象、原因、区分方法等
+        """
+        if not label:
+            return []
+
+        # 精确匹配
+        if label in self._EASY_MISTAKE_TIPS:
+            return self._EASY_MISTAKE_TIPS[label]
+
+        # 模糊匹配：遍历知识库查找包含关键词的条目
+        matched_tips = []
+        for key, tips in self._EASY_MISTAKE_TIPS.items():
+            if label in key or key in label:
+                matched_tips.extend(tips)
+
+        # 去重（基于 confuse_with 字段）
+        seen = set()
+        unique_tips = []
+        for tip in matched_tips:
+            conf_key = tip.get("confuse_with", "")
+            if conf_key not in seen:
+                seen.add(conf_key)
+                unique_tips.append(tip)
+
+        return unique_tips
+
+    def search_with_tips(self, query: str, top_k: int = 3) -> dict:
+        """
+        带易错提示的增强搜索
+
+        :param query: 搜索关键词
+        :param top_k: 返回结果数量
+        :return: 包含 results 和 easy_mistake_tips 的字典
+        """
+        results = self.search(query, top_k=top_k)
+
+        # 收集所有匹配结果的易错提示
+        all_tips = []
+        seen_confuse = set()
+        for item in results:
+            item_label = item.get("label", "")
+            tips = self.get_easy_mistake_tips(item_label)
+            for tip in tips:
+                conf_key = tip.get("confuse_with", "")
+                if conf_key not in seen_confuse:
+                    tip["source_item"] = item_label  # 标记来源物品
+                    all_tips.append(tip)
+                    seen_confuse.add(conf_key)
+
+        return {
+            "results": results,
+            "easy_mistake_tips": all_tips,
+            "has_tips": len(all_tips) > 0,
+        }
+
 
 # ==================== 全局实例初始化 ====================
 vision_engine: Optional[VisionEngine] = None
@@ -1982,7 +2203,12 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
 
 @app.get("/api/search")
 async def search_waste(query: str = Query(..., min_length=1)) -> JSONResponse:
-    """模糊搜索接口"""
+    """
+    模糊搜索接口（含易错提示）
+
+    返回匹配结果及该物品相关的易混淆提示，
+    帮助用户避免常见分类错误
+    """
     if not search_engine or not search_engine.vocab:
         return JSONResponse(
             status_code=503,
@@ -1993,12 +2219,16 @@ async def search_waste(query: str = Query(..., min_length=1)) -> JSONResponse:
             },
         )
 
-    results = search_engine.search(query.strip(), top_k=3)
+    # 使用增强搜索方法（含易错提示）
+    search_result = search_engine.search_with_tips(query.strip(), top_k=3)
+
     return JSONResponse(
         content={
             "success": True,
             "query": query,
-            "results": results,
+            "results": search_result["results"],
+            "easy_mistake_tips": search_result["easy_mistake_tips"],
+            "has_tips": search_result["has_tips"],
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
     )
@@ -2538,6 +2768,98 @@ async def submit_feedback(request: FeedbackRequest) -> JSONResponse:
         "message": "反馈已提交，感谢您的帮助",
         "feedback_id": feedback_id,
     })
+
+
+# ==================== guide 易错对比专题（F-2.4） ====================
+
+"""易错对比数据文件路径"""
+CONFUSING_PAIRS_PATH = Path(__file__).parent / "static" / "data" / "confusing-pairs.json"
+
+
+@app.get("/api/guide/confusing")
+async def get_confusing_pairs() -> JSONResponse:
+    """
+    获取易错物品对比列表
+    返回所有易混淆物品对数据，支持按频率筛选
+
+    Query参数：
+    - frequency: 可选，过滤频率等级（high/medium/low）
+    - limit: 可选，限制返回数量（默认返回全部）
+    """
+    try:
+        if not CONFUSING_PAIRS_PATH.exists():
+            logger.warning("⚠️ 易错数据文件不存在: %s", CONFUSING_PAIRS_PATH)
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "error": {"code": "E007", "message": "易错数据文件未找到"}}
+            )
+
+        with open(CONFUSING_PAIRS_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        pairs = data.get("pairs", [])
+
+        frequency = None
+        limit = None
+
+        return JSONResponse(content={
+            "success": True,
+            "pairs": pairs[:limit] if limit else pairs,
+            "total": len(pairs),
+            "_meta": data.get("_meta", {})
+        })
+
+    except json.JSONDecodeError as e:
+        logger.error("❌ 易错数据JSON解析失败: %s", e)
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": {"code": "E008", "message": "数据格式错误"}}
+        )
+    except Exception as e:
+        logger.error("❌ 获取易错数据异常: %s", e)
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": {"code": "E009", "message": str(e)}}
+        )
+
+
+@app.get("/api/guide/confusing/{pair_id}")
+async def get_confusing_pair_detail(pair_id: str) -> JSONResponse:
+    """
+    获取单个易错对的详细信息
+
+    路径参数：
+    - pair_id: 易错对唯一标识（如 cp001）
+    """
+    if not CONFUSING_PAIRS_PATH.exists():
+        return JSONResponse(
+            status_code=404,
+            content={"success": False, "error": {"code": "E007", "message": "数据文件未找到"}}
+        )
+
+    try:
+        with open(CONFUSING_PAIRS_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        target_pair = next(
+            (p for p in data.get("pairs", []) if p.get("id") == pair_id),
+            None
+        )
+
+        if not target_pair:
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "error": {"code": "E010", "message": f"未找到ID为 {pair_id} 的易错对"}}
+            )
+
+        return JSONResponse(content={"success": True, "pair": target_pair})
+
+    except Exception as e:
+        logger.error("❌ 获取易错详情异常: %s", e)
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": {"code": "E009", "message": str(e)}}
+        )
 
 
 # ==================== 程序入口 ====================

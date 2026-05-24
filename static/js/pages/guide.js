@@ -3,6 +3,7 @@
  *
  * 职责：展示4类垃圾分类的标准说明卡片（厨余/可回收/其他/有害）；
  *       每个卡片包含类别名称、颜色标识、图标、描述、常见示例列表；
+ *       包含易错物品对比专题区域（F-2.4）；
  *       数据来源优先 API 接口，失败时使用本地静态数据兜底。
  * 容器：#page-guide
  */
@@ -10,6 +11,7 @@
 // ==================== 模块依赖导入 ====================
 import { api } from '../api.js';
 import { showToast, showLoading, hideLoading } from '../utils/ui.js';
+import { ConfusingPairCard } from '../components/confusing-pair-card.js';
 
 // ==================== 本地静态兜底数据（API 不可用时使用） ====================
 
@@ -93,6 +95,12 @@ export class GuidePage {
     /** 分类数据（来自 API 或本地兜底） */
     _categories = [];
 
+    /** 易错对比数据（来自 JSON 或 API） */
+    _confusingPairs = [];
+
+    /** 易错卡片组件实例集合 */
+    _confusingCardInstances = [];
+
     /** 是否正在加载数据 */
     _loading = false;
 
@@ -101,7 +109,7 @@ export class GuidePage {
 
     /**
      * 初始化分类指南页
-     * 加载分类数据并渲染4类标准说明卡片
+     * 加载分类数据并渲染4类标准说明卡片 + 易错对比专题
      */
     init() {
         this.container = document.getElementById('page-guide');
@@ -110,19 +118,25 @@ export class GuidePage {
             return;
         }
 
-        /* 渲染页面骨架 */
+        /* 渲染页面骨架（含易错专题区域） */
         this._render();
         /* 加载分类数据 */
         this._loadCategories();
+        /* 加载易错对比数据 */
+        this._loadConfusingPairs();
 
         console.log('[GuidePage] 分类指南页初始化完成');
     }
 
     /**
      * 销毁分类指南页
-     * 清空容器、释放引用
+     * 清空容器、释放引用（含易错卡片组件）
      */
     destroy() {
+        /* 销毁所有易错对比卡片实例 */
+        this._confusingCardInstances.forEach(card => card.destroy());
+        this._confusingCardInstances = [];
+
         /* 清空容器 */
         if (this.container) {
             this.container.innerHTML = '';
@@ -131,6 +145,7 @@ export class GuidePage {
         /* 释放引用 */
         this.container = null;
         this._categories = [];
+        this._confusingPairs = [];
         this._loading = false;
         this._boundHandlers = {};
 
@@ -141,7 +156,7 @@ export class GuidePage {
 
     /**
      * 渲染页面 HTML 骨架结构
-     * 包含标题区 + 卡片占位容器
+     * 包含标题区 + 分类卡片容器 + 易错对比专题区域
      * @private
      */
     _render() {
@@ -180,6 +195,27 @@ export class GuidePage {
                     <div class="skeleton-card"></div>
                 </div>
             </div>
+
+            <!-- ========== 易错物品对比专题区域（F-2.4）========== -->
+            <section class="confusing-section" id="confusingSection">
+                <!-- 区域头部 -->
+                <div class="confusing-section-header">
+                    <div class="confusing-section-title-row">
+                        <span class="confusing-section-icon">🎯</span>
+                        <h3 class="confusing-section-title">易错物品对比专题</h3>
+                    </div>
+                    <p class="confusing-section-desc">这些物品最容易分错，左右滑动查看详细区别</p>
+                </div>
+
+                <!-- 对比卡片列表容器（动态填充） -->
+                <div id="confusingPairsContainer" class="confusing-pairs-list">
+                    <!-- 加载占位 -->
+                    <div class="confusing-loading-placeholder">
+                        <div class="confusing-skeleton-card"></div>
+                        <div class="confusing-skeleton-card"></div>
+                    </div>
+                </div>
+            </section>
 
             <!-- 底部提示 -->
             <div class="guide-footer">
@@ -224,6 +260,50 @@ export class GuidePage {
         }
     }
 
+    /**
+     * 加载易错对比数据
+     * 优先从 API 获取，失败时加载本地 JSON 文件兜底
+     * @private
+     */
+    async _loadConfusingPairs() {
+        try {
+            /* 尝试从 API 获取易错数据（阶段二接口预留） */
+            const response = await api.getConfusingPairs?.();
+
+            if (response?.pairs && response.pairs.length > 0) {
+                this._confusingPairs = response.pairs;
+                console.log(`[GuidePage] 从 API 加载了 ${this._confusingPairs.length} 组易错数据`);
+            } else {
+                /* 加载本地 JSON 数据 */
+                await this._loadLocalConfusingPairs();
+            }
+        } catch (error) {
+            /* API 不可用，使用本地 JSON 兜底 */
+            console.warn('[GuidePage] 易错API不可用，加载本地数据:', error);
+            await this._loadLocalConfusingPairs();
+        }
+
+        /* 渲染易错对比卡片 */
+        this._renderConfusingPairs();
+    }
+
+    /**
+     * 加载本地 confusing-pairs.json 静态数据
+     * @private
+     */
+    async _loadLocalConfusingPairs() {
+        try {
+            const res = await fetch('./data/confusing-pairs.json');
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            this._confusingPairs = data.pairs || [];
+            console.log(`[GuidePage] 从本地JSON加载了 ${this._confusingPairs.length} 组易错数据`);
+        } catch (error) {
+            console.error('[GuidePage] 本地易错数据加载失败:', error);
+            this._confusingPairs = [];
+        }
+    }
+
     // ==================== 私有方法：卡片渲染 ====================
 
     /**
@@ -254,6 +334,70 @@ export class GuidePage {
 
         /* 绑定返回按钮事件 */
         this._bindEvents();
+    }
+
+    /**
+     * 渲染易错对比卡片列表
+     * 使用 ConfusingPairCard 组件实例化每一条易错对数据
+     * @private
+     */
+    _renderConfusingPairs() {
+        const container = document.getElementById('confusingPairsContainer');
+        if (!container) return;
+
+        /* 清理旧实例 */
+        this._confusingCardInstances.forEach(card => card.destroy());
+        this._confusingCardInstances = [];
+
+        /* 无数据时显示空状态 */
+        if (!this._confusingPairs || this._confusingPairs.length === 0) {
+            container.innerHTML = `
+                <div class="card empty-confusing">
+                    <p>暂无易错对比数据</p>
+                </div>
+            `;
+            return;
+        }
+
+        /* 按频率排序：高频优先展示 */
+        const sortedPairs = [...this._confusingPairs].sort((a, b) => {
+            const order = { high: 0, medium: 1, low: 2 };
+            return (order[a.frequency] || 1) - (order[b.frequency] || 1);
+        });
+
+        /* 清空容器并渲染卡片 */
+        container.innerHTML = '';
+
+        /* 取前8组展示（避免首屏过长，其余可滚动查看） */
+        const displayPairs = sortedPairs.slice(0, 8);
+
+        displayPairs.forEach((pairData, index) => {
+            /* 创建组件实例 */
+            const card = new ConfusingPairCard({
+                showAnimation: true,
+                expandable: true,
+                showScene: true
+            });
+
+            /* 渲染到容器 */
+            const cardEl = card.render(container);
+            if (cardEl) {
+                /* 设置动画延迟实现交错入场效果 */
+                cardEl.style.animationDelay = `${index * 0.1}s`;
+                /* 填充数据 */
+                card.update(pairData);
+                /* 保存实例引用 */
+                this._confusingCardInstances.push(card);
+            }
+        });
+
+        /* 数据量提示 */
+        if (this._confusingPairs.length > 8) {
+            const hintEl = document.createElement('div');
+            hintEl.className = 'confusing-more-hint';
+            hintEl.textContent = `共 ${this._confusingPairs.length} 组易错对比，已展示高频前8组`;
+            container.appendChild(hintEl);
+        }
     }
 
     /**

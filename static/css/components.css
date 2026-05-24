@@ -1707,3 +1707,124 @@
     max-width: 480px;
   }
 }
+
+
+/* ============================================
+   十九、易错对比专题区域样式（F-2.4）
+   - 包含区域头部 + 对比卡片列表
+   - 骨架屏加载态
+   ============================================ */
+
+/* 易错专题区域容器 */
+.confusing-section {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 2px dashed rgba(45, 155, 94, 0.12);
+}
+
+/* 区域头部 */
+.confusing-section-header {
+  margin-bottom: 16px;
+}
+
+.confusing-section-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.confusing-section-icon {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.confusing-section-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0;
+  background: linear-gradient(135deg, #E74C3C, #FF6B6B);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.confusing-section-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+  padding-left: 34px;
+}
+
+/* 对比卡片列表容器 */
+.confusing-pairs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 加载占位骨架屏 */
+.confusing-loading-placeholder {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.confusing-skeleton-card {
+  height: 220px;
+  border-radius: var(--radius-lg, 20px);
+  background: linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0.04) 25%,
+    rgba(0, 0, 0, 0.08) 50%,
+    rgba(0, 0, 0, 0.04) 75%
+  );
+  background-size: 200% 100%;
+  animation: confusingSkeletonShimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes confusingSkeletonShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* 空状态提示 */
+.empty-confusing {
+  text-align: center;
+  padding: 32px 20px;
+  color: var(--text-muted);
+}
+
+/* 更多数据提示 */
+.confusing-more-hint {
+  text-align: center;
+  padding: 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: rgba(45, 155, 94, 0.04);
+  border-radius: var(--radius-sm, 10px);
+  margin-top: 4px;
+}
+
+/* 响应式：小屏手机适配 */
+@media screen and (max-width: 375px) {
+  .confusing-section {
+    margin-top: 22px;
+    padding-top: 16px;
+  }
+
+  .confusing-section-title {
+    font-size: 16px;
+  }
+
+  .confusing-section-desc {
+    font-size: 12px;
+    padding-left: 30px;
+  }
+
+  .confusing-skeleton-card {
+    height: 190px;
+  }
+}
+

@@ -1,0 +1,60 @@
+# Issue 自动标签配置
+# 根据 Issue 标题和内容自动添加相应标签
+
+bug:
+  - "**Bug:**"
+  - "**bug**"
+  - "崩溃"
+  - "错误"
+  - "error"
+  - "不工作"
+  - "无法"
+  - "失败"
+
+enhancement:
+  - "**Feature:**"
+  - "**feature**"
+  - "新功能"
+  - "希望"
+  - "建议"
+  - "可以"
+  - "支持"
+
+documentation:
+  - "**Docs:**"
+  - "**docs**"
+  - "文档"
+  - "说明"
+  - "README"
+  - "教程"
+  - "指南"
+
+question:
+  - "?"
+  - "如何"
+  - "怎么"
+  - "为什么"
+  - "什么"
+  - "帮助"
+  - "help"
+
+good first issue:
+  - "good first issue"
+  - "新手"
+  - "简单"
+  - "入门"
+
+"priority: critical":
+  - "紧急"
+  - "严重"
+  - "critical"
+  - "urgent"
+  - "阻塞"
+
+performance:
+  - "性能"
+  - "慢"
+  - "速度"
+  - "优化"
+  - "卡顿"
+  - "内存"

@@ -33,6 +33,7 @@ from fastapi.staticfiles import StaticFiles
 from fuzzywuzzy import process as fuzz_process
 from PIL import Image
 from pydantic import BaseModel
+from pypinyin import lazy_pinyin, Style
 
 # ==================== 日志配置 ====================
 logging.basicConfig(
@@ -1564,15 +1565,18 @@ class VisionEngine:
 
 # ==================== 模糊搜索引擎 ====================
 class SearchEngine:
-    """基于FuzzyWuzzy的模糊搜索引擎"""
+    """基于FuzzyWuzzy的模糊搜索引擎 (增强版 v2.0 - 支持拼音+同义词)"""
 
     def __init__(self, vocab_path: str):
         self.vocab: list[dict] = []
         self.vocab_labels: list[str] = []
+        self._pinyin_index: dict[str, list[int]] = {}
+        self._synonym_map: dict[str, str] = {}
+        self._label_to_idx: dict[str, int] = {}
         self._load_vocab(vocab_path)
 
     def _load_vocab(self, vocab_path: str) -> None:
-        """加载词库"""
+        """加载词库并构建拼音索引和同义词映射"""
         vocab_file = Path(vocab_path)
         if not vocab_file.exists():
             logger.warning("词库文件不存在: %s", vocab_path)
@@ -1582,21 +1586,129 @@ class SearchEngine:
                 data = json.load(f)
             self.vocab = data.get("items", [])
             self.vocab_labels = [item["label"] for item in self.vocab]
-            logger.info("词库加载成功: %d 条记录", len(self.vocab))
+            self._label_to_idx = {item["label"]: idx for idx, item in enumerate(self.vocab)}
+            self._build_pinyin_index()
+            self._build_synonym_map()
+            logger.info("词库加载成功: %d 条记录 (拼音索引:%d, 同义词:%d)",
+                        len(self.vocab), len(self._pinyin_index), len(self._synonym_map))
         except Exception as e:
             logger.error("词库加载失败: %s", e)
 
+    def _build_pinyin_index(self) -> None:
+        """构建标签→拼音首字母的倒排索引"""
+        self._pinyin_index = {}
+        for idx, item in enumerate(self.vocab):
+            label = item.get("label", "")
+            if not label:
+                continue
+            py_letters = "".join(lazy_pinyin(label, style=Style.FIRST_LETTER))
+            py_full = "".join(lazy_pinyin(label))
+            for key in (py_letters.lower(), py_full.lower(), label.lower()):
+                if key not in self._pinyin_index:
+                    self._pinyin_index[key] = []
+                self._pinyin_index[key].append(idx)
+
+    def _build_synonym_map(self) -> None:
+        """从词库的aliases字段构建同义词→标准名称映射"""
+        self._synonym_map = {}
+        for item in self.vocab:
+            label = item.get("label", "")
+            aliases = item.get("aliases", [])
+            if isinstance(aliases, list):
+                for alias in aliases:
+                    alias_stripped = alias.strip()
+                    if alias_stripped and alias_stripped != label:
+                        self._synonym_map[alias_stripped.lower()] = label
+
     def search(self, query: str, top_k: int = 3) -> list[dict]:
-        """执行模糊搜索"""
+        """
+        执行模糊搜索（增强版：支持中文/拼音首字母/同义词）
+        """
         if not self.vocab_labels:
             return []
-        raw_results = fuzz_process.extract(query, self.vocab_labels, limit=top_k)
+
+        query_stripped = query.strip()
+        if not query_stripped:
+            return []
+
+        results = self._search_combined(query_stripped, top_k)
+
         matched = []
-        for label, score in raw_results:
+        seen_labels = set()
+        for label, score in results:
+            if label in seen_labels:
+                continue
+            seen_labels.add(label)
             item = next((v for v in self.vocab if v["label"] == label), None)
             if item:
                 matched.append({**item, "similarity_score": score})
         return matched
+
+    def _search_combined(self, query: str, top_k: int) -> list[tuple[str, int]]:
+        """组合搜索策略：精确匹配 → 拼音匹配 → 同义词扩展 → FuzzyWuzzy模糊匹配"""
+        query_lower = query.lower()
+
+        exact_match = self._try_exact_match(query_lower)
+        if exact_match:
+            return [(exact_match, 100)]
+
+        pinyin_results = self._search_pinyin(query_lower, top_k)
+        if pinyin_results and pinyin_results[0][1] >= 95:
+            return pinyin_results
+
+        synonym_label = self._synonym_map.get(query_lower)
+        if synonym_label:
+            syn_results = [(synonym_label, 92)]
+            existing = {r[0] for r in pinyin_results}
+            for r in pinyin_results:
+                if r[0] not in existing:
+                    syn_results.append(r)
+            return syn_results[:top_k]
+
+        combined = list(pinyin_results)
+        existing_py = {r[0] for r in combined}
+
+        raw_fuzzy = fuzz_process.extract(query, self.vocab_labels, limit=top_k * 2)
+        for label, score in raw_fuzzy:
+            if label not in existing_py and score >= 45:
+                combined.append((label, max(score - 10, score)))
+                existing_py.add(label)
+            if len(combined) >= top_k:
+                break
+
+        combined.sort(key=lambda x: x[1], reverse=True)
+        return combined[:top_k]
+
+    def _try_exact_match(self, query_lower: str) -> Optional[str]:
+        """尝试精确匹配（含大小写不敏感）"""
+        for label in self.vocab_labels:
+            if label.lower() == query_lower:
+                return label
+        return None
+
+    def _search_pinyin(self, query: str, top_k: int) -> list[tuple[str, int]]:
+        """
+        拼音搜索 (F-2.2.1)
+        支持全拼、拼音首字母、混合输入
+        """
+        query_py = "".join(lazy_pinyin(query, style=Style.FIRST_LETTER)).lower()
+        query_py_full = "".join(lazy_pinyin(query)).lower()
+
+        scored: dict[str, int] = {}
+
+        for key, indices in self._pinyin_index.items():
+            if query_py and key.startswith(query_py):
+                bonus = 100 if key == query_py else (90 if len(key) == len(query_py) else 80)
+                for idx in indices:
+                    label = self.vocab[idx]["label"]
+                    scored[label] = max(scored.get(label, 0), bonus)
+            elif query_py_full and key.startswith(query_py_full):
+                for idx in indices:
+                    label = self.vocab[idx]["label"]
+                    scored[label] = max(scored.get(label, 0), 85)
+
+        sorted_results = sorted(scored.items(), key=lambda x: x[1], reverse=True)
+        return sorted_results[:top_k]
 
     def get_by_yolo_label(self, yolo_label: str) -> Optional[dict]:
         """根据标签查找"""
@@ -2860,6 +2972,107 @@ async def get_confusing_pair_detail(pair_id: str) -> JSONResponse:
             status_code=500,
             content={"success": False, "error": {"code": "E009", "message": str(e)}}
         )
+
+
+# ==================== guide 校园分类标准 (F-2.3) ====================
+
+GUIDE_STANDARD_PATH = Path(__file__).parent / "data" / "guide_standard.json"
+
+
+@app.get("/api/guide/standard")
+async def get_guide_standard(category: Optional[str] = None) -> JSONResponse:
+    """
+    获取校园垃圾分类标准数据 (F-2.3)
+    返回四类垃圾的详细说明、常见物品、校园特有物品和投放注意事项
+
+    Query参数：
+    - category: 可选，过滤类别ID（recyclable/hazardous/kitchen_waste/other_waste）
+    """
+    try:
+        if not GUIDE_STANDARD_PATH.exists():
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "error": {"code": "E011", "message": "分类标准数据文件未找到"}}
+            )
+
+        with open(GUIDE_STANDARD_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        categories = data.get("categories", [])
+        if category:
+            categories = [c for c in categories if c.get("id") == category]
+            if not categories:
+                return JSONResponse(
+                    status_code=404,
+                    content={"success": False, "error": {"code": "E012", "message": f"未找到类别 {category}"}}
+                )
+
+        return JSONResponse(content={
+            "success": True,
+            "source": data.get("source", ""),
+            "last_updated": data.get("last_updated", ""),
+            "categories": categories,
+        })
+
+    except Exception as e:
+        logger.error("获取分类标准数据异常: %s", e)
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": {"code": "E009", "message": str(e)}}
+        )
+
+
+# ==================== item 物品详情 (F-2.5) ====================
+
+@app.get("/api/item/{label:path}")
+async def get_item_detail(label: str) -> JSONResponse:
+    """
+    获取单个物品的详细信息 (F-2.5)
+    返回处理步骤(tips)、投放指引、相关物品推荐
+
+    路径参数：
+    - label: 物品名称（中文或拼音首字母均可，支持模糊匹配）
+    """
+    if not search_engine:
+        return JSONResponse(
+            status_code=503,
+            content={"success": False, "error": {"code": "E006", "message": "搜索服务未就绪"}}
+        )
+
+    results = search_engine.search(label, top_k=1)
+    if not results:
+        return JSONResponse(
+            status_code=404,
+            content={"success": False, "error": {"code": "E013", "message": f"未找到物品 '{label}'"}}
+        )
+
+    item = results[0]
+    label_cn = item.get("label", "")
+
+    tips = _DISPOSAL_TIPS.get(label_cn, [])
+
+    category_id = item.get("category_id")
+    related_items = search_engine.get_items_by_category(category_id) if category_id is not None else []
+    related_items = [i["label"] for i in related_items if i["label"] != label_cn][:6]
+
+    mistake_tips = search_engine.get_easy_mistake_tips(label_cn)
+
+    return JSONResponse(content={
+        "success": True,
+        "item": {
+            "label": label_cn,
+            "category_name": item.get("category_name", ""),
+            "category_id": category_id,
+            "bin_color": item.get("bin_color", "#666"),
+            "description": item.get("description", ""),
+            "aliases": item.get("aliases", []),
+            "yolo_label": item.get("yolo_label", ""),
+        },
+        "disposal_tips": tips,
+        "guidance": _CATEGORY_GUIDANCE.get(item.get("category_name"), "请按当地垃圾分类标准投放"),
+        "related_items": related_items,
+        "easy_mistake_tips": mistake_tips,
+    })
 
 
 # ==================== 程序入口 ====================

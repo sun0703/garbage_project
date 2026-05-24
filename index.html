@@ -606,6 +606,543 @@
             line-height: 1.4;
         }
 
+        /* ========== 处理建议步骤 ========== */
+        .tips-steps {
+            margin-top: 12px;
+            padding: 0;
+            list-style: none;
+        }
+        .tips-steps li {
+            position: relative;
+            padding: 6px 0 6px 28px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+            border-bottom: 1px dashed rgba(45, 155, 94, 0.08);
+        }
+        .tips-steps li:last-child {
+            border-bottom: none;
+        }
+        .tips-steps li::before {
+            content: attr(data-step);
+            position: absolute;
+            left: 0;
+            top: 6px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            color: white;
+            font-size: 11px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* ========== 分享按钮 ========== */
+        .share-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 18px;
+            border: 1.5px solid var(--border);
+            border-radius: var(--radius-full);
+            background: white;
+            color: var(--text-secondary);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--transition);
+            margin-top: 12px;
+        }
+        .share-btn:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+            background: rgba(45, 155, 94, 0.04);
+        }
+        .share-btn svg {
+            width: 15px;
+            height: 15px;
+            stroke: currentColor;
+            stroke-width: 2;
+            fill: none;
+        }
+        .share-toast {
+            position: fixed;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: var(--text-primary);
+            color: white;
+            padding: 10px 22px;
+            border-radius: var(--radius-full);
+            font-size: 13px;
+            font-weight: 500;
+            opacity: 0;
+            transition: all 0.3s ease;
+            z-index: 999;
+            pointer-events: none;
+        }
+        .share-toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* ========== 历史记录侧边栏 ========== */
+        .history-toggle {
+            position: fixed;
+            right: 16px;
+            bottom: 100px;
+            width: 48px;
+            height: 48px;
+            border: none;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            color: white;
+            cursor: pointer;
+            box-shadow: 0 4px 16px rgba(45, 155, 94, 0.3);
+            z-index: 90;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all var(--transition);
+        }
+        .history-toggle:hover {
+            transform: scale(1.08);
+            box-shadow: 0 6px 22px rgba(45, 155, 94, 0.38);
+        }
+        .history-toggle svg {
+            width: 20px;
+            height: 20px;
+            fill: white;
+        }
+        .history-badge {
+            position: absolute;
+            top: -2px;
+            right: -2px;
+            min-width: 18px;
+            height: 18px;
+            border-radius: 9px;
+            background: #E74C3C;
+            color: white;
+            font-size: 10px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 5px;
+            border: 2px solid white;
+        }
+        .history-drawer-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.35);
+            z-index: 99;
+            opacity: 0;
+            transition: opacity 0.25s ease;
+        }
+        .history-drawer-overlay.show {
+            display: block;
+            opacity: 1;
+        }
+        .history-drawer {
+            position: fixed;
+            right: -320px;
+            top: 0;
+            bottom: 0;
+            width: 300px;
+            max-width: 85vw;
+            background: white;
+            box-shadow: -8px 0 32px rgba(0, 0, 0, 0.12);
+            z-index: 100;
+            transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+        }
+        .history-drawer.open {
+            right: 0;
+        }
+        .history-drawer-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 18px 20px;
+            border-bottom: 1px solid var(--border);
+        }
+        .history-drawer-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        .history-drawer-actions {
+            display: flex;
+            gap: 8px;
+        }
+        .history-action-btn {
+            padding: 5px 12px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            background: white;
+            color: var(--text-secondary);
+            font-size: 12px;
+            cursor: pointer;
+            transition: all var(--transition);
+        }
+        .history-action-btn:hover {
+            border-color: #E74C3C;
+            color: #E74C3C;
+        }
+        .history-drawer-close {
+            width: 32px;
+            height: 32px;
+            border: none;
+            border-radius: 8px;
+            background: transparent;
+            color: var(--text-muted);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all var(--transition);
+        }
+        .history-drawer-close:hover {
+            background: rgba(231, 76, 60, 0.08);
+            color: #E74C3C;
+        }
+        .history-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px 0;
+        }
+        .history-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 20px;
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+        .history-empty svg {
+            width: 48px;
+            height: 48px;
+            stroke: var(--text-muted);
+            stroke-width: 1.5;
+            fill: none;
+            margin-bottom: 12px;
+            opacity: 0.4;
+        }
+        .history-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 18px;
+            cursor: pointer;
+            transition: background 0.15s ease;
+            border-left: 3px solid transparent;
+        }
+        .history-item:hover {
+            background: rgba(45, 155, 94, 0.04);
+            border-left-color: var(--primary);
+        }
+        .history-item-thumb {
+            width: 44px;
+            height: 44px;
+            border-radius: var(--radius-sm);
+            object-fit: cover;
+            flex-shrink: 0;
+            background: rgba(0, 0, 0, 0.04);
+        }
+        .history-item-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .history-item-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .history-item-meta {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 2px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .history-item-cat {
+            display: inline-block;
+            padding: 1px 8px;
+            border-radius: 8px;
+            font-size: 10px;
+            font-weight: 600;
+            color: white;
+        }
+        .history-item-delete {
+            width: 28px;
+            height: 28px;
+            border: none;
+            border-radius: 8px;
+            background: transparent;
+            color: var(--text-muted);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: all var(--transition);
+            flex-shrink: 0;
+        }
+        .history-item:hover .history-item-delete {
+            opacity: 1;
+        }
+        .history-item-delete:hover {
+            background: rgba(231, 76, 60, 0.1);
+            color: #E74C3C;
+        }
+
+        /* ========== 页面导航 (F-2.3/F-2.4) ========== */
+        .main-nav {
+            display: flex;
+            justify-content: center;
+            gap: 6px;
+            margin-top: 16px;
+        }
+        .nav-btn {
+            padding: 8px 20px;
+            border: 1.5px solid var(--border);
+            border-radius: var(--radius-full);
+            background: white;
+            color: var(--text-secondary);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--transition);
+        }
+        .nav-btn:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+            background: rgba(45, 155, 94, 0.04);
+        }
+        .nav-btn.active {
+            border-color: var(--primary);
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            color: white;
+            box-shadow: 0 3px 12px rgba(45, 155, 94, 0.25);
+        }
+
+        .page-section {
+            display: none;
+        }
+        .page-section.active {
+            display: block;
+            animation: fadeInUp 0.35s ease both;
+        }
+
+        /* ========== 分类指南页面 (F-2.3) ========== */
+        .guide-header {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+        .guide-header h2 {
+            font-size: 20px;
+            font-weight: 800;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+        .guide-header p {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+        .category-card {
+            background: white;
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 16px;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+        }
+        .category-card-header {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 18px 20px;
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.15s ease;
+        }
+        .category-card-header:hover {
+            background: rgba(0, 0, 0, 0.02);
+        }
+        .cat-icon-badge {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            flex-shrink: 0;
+        }
+        .cat-header-info { flex: 1; min-width: 0; }
+        .cat-header-name { font-size: 17px; font-weight: 700; color: var(--text-primary); }
+        .cat-header-desc { font-size: 12px; color: var(--text-muted); margin-top: 2px; line-height: 1.4; }
+        .cat-arrow {
+            width: 22px;
+            height: 22px;
+            stroke: var(--text-muted);
+            stroke-width: 2;
+            fill: none;
+            transition: transform 0.25s ease;
+            flex-shrink: 0;
+        }
+        .category-card.open .cat-arrow { transform: rotate(180deg); }
+        .category-card-body {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .category-card.open .category-card-body { max-height: 1200px; }
+        .cat-body-inner { padding: 0 20px 18px; }
+
+        .cat-subsection {
+            margin-top: 14px;
+        }
+        .cat-subtitle {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .cat-subtitle::before {
+            content: "";
+            width: 3px;
+            height: 14px;
+            border-radius: 2px;
+            background: var(--section-accent, var(--primary));
+        }
+        .cat-tag-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .cat-tag {
+            padding: 5px 12px;
+            border-radius: var(--radius-full);
+            font-size: 12px;
+            font-weight: 500;
+            background: rgba(0, 0, 0, 0.04);
+            color: var(--text-secondary);
+            transition: all 0.15s ease;
+        }
+        .cat-tag:hover {
+            background: rgba(0, 0, 0, 0.07);
+            transform: translateY(-1px);
+        }
+        .cat-note-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .cat-note-list li {
+            position: relative;
+            padding: 6px 0 6px 20px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.55;
+            border-bottom: 1px dashed rgba(0, 0, 0, 0.06);
+        }
+        .cat-note-list li:last-child { border-bottom: none; }
+        .cat-note-list li::before {
+            content: "•";
+            position: absolute;
+            left: 4px;
+            top: 6px;
+            color: var(--section-accent, var(--primary));
+            font-weight: 700;
+            font-size: 16px;
+        }
+
+        /* ========== 易错对比页面 (F-2.4) ========== */
+        .confusing-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 14px;
+        }
+        @media (min-width: 480px) {
+            .confusing-grid { grid-template-columns: 1fr; }
+        }
+        .confusing-card {
+            background: white;
+            border-radius: var(--radius-md);
+            padding: 18px 20px;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .confusing-card:hover {
+            box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
+            transform: translateY(-2px);
+            border-color: #E74C3C;
+        }
+        .confusing-card-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .confusing-freq {
+            padding: 2px 10px;
+            border-radius: var(--radius-full);
+            font-size: 10px;
+            font-weight: 700;
+            color: white;
+            flex-shrink: 0;
+        }
+        .freq-high { background: #E74C3C; }
+        .freq-medium { background: #F39C12; }
+        .freq-low { background: #3498DB; }
+        .confusing-pair-names {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        .confusing-vs { color: var(--text-muted); font-weight: 400; margin: 0 4px; }
+        .confusing-reason {
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+            margin-bottom: 10px;
+        }
+        .confusing-method {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 14px;
+            border-radius: var(--radius-sm);
+            background: linear-gradient(135deg, rgba(45, 155, 94, 0.06), rgba(78, 205, 196, 0.06));
+            border-left: 3px solid var(--primary);
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--primary-dark);
+        }
+
+        .guide-loading, .confusing-loading {
+            text-align: center;
+            padding: 50px 20px;
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
         /* ========== 底部 ========== */
         .footer {
             text-align: center;
@@ -679,6 +1216,12 @@
             <h1>校园垃圾分类AI助手</h1>
         </div>
         <p>拍照识别 · 语音搜索 · 智能分类</p>
+        <!-- 页面导航 -->
+        <nav class="main-nav" id="mainNav">
+            <button class="nav-btn active" data-page="recognize" onclick="switchPage('recognize')">📷 识别</button>
+            <button class="nav-btn" data-page="guide" onclick="switchPage('guide')">📖 分类指南</button>
+            <button class="nav-btn" data-page="confusing" onclick="switchPage('confusing')">⚠️ 易错对比</button>
+        </nav>
     </div>
 
     <!-- 主操作卡片 -->
@@ -704,6 +1247,30 @@
             <div class="spinner"></div>
             <div class="loading-text" id="loadingText">正在识别中...</div>
         </div>
+
+        <!-- 历史记录浮动按钮 -->
+        <button class="history-toggle" id="historyToggle" title="历史记录" aria-label="历史记录">
+            <svg viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <span class="history-badge" id="historyBadge">0</span>
+        </button>
+
+        <!-- 历史记录侧边栏 -->
+        <div class="history-drawer-overlay" id="historyOverlay"></div>
+        <div class="history-drawer" id="historyDrawer">
+            <div class="history-drawer-header">
+                <div class="history-drawer-title">识别历史</div>
+                <div class="history-drawer-actions">
+                    <button class="history-action-btn" id="historyClearAll">清空</button>
+                    <button class="history-drawer-close" id="historyCloseBtn" aria-label="关闭">
+                        <svg width="16" height="16" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    </button>
+                </div>
+            </div>
+            <div class="history-list" id="historyList"></div>
+        </div>
+
+        <!-- 分享成功提示 -->
+        <div class="share-toast" id="shareToast">已复制到剪贴板</div>
 
         <!-- 错误提示 -->
         <div class="error-msg" id="errorMsg"></div>
@@ -774,6 +1341,14 @@
             <div class="guidance-label">投放指引</div>
             <div class="guidance-text" id="guidanceText"></div>
         </div>
+        <div class="tips-container" id="tipsContainer" style="display:none;">
+            <div class="guidance-label">处理建议</div>
+            <ul class="tips-steps" id="tipsSteps"></ul>
+        </div>
+        <button class="share-btn" id="shareBtn" style="display:none;">
+            <svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            分享结果
+        </button>
         <div class="inference-info" id="inferenceInfo"></div>
     </div>
 
@@ -786,6 +1361,24 @@
     <!-- 底部版权 -->
     <div class="footer">
         &copy; 2026 校园垃圾分类AI助手 &middot; 基于 YOLOv8 深度学习引擎
+    </div>
+
+    <!-- ========== 分类指南页面 (F-2.3) ========== -->
+    <div class="page-section" id="page-guide">
+        <div class="guide-header">
+            <h2>📖 校园垃圾分类指南</h2>
+            <p>基于 GB/T 19095-2019 国家标准 · 含校园特有物品说明</p>
+        </div>
+        <div id="guideContent"><div class="guide-loading">加载中...</div></div>
+    </div>
+
+    <!-- ========== 易错对比页面 (F-2.4) ========== -->
+    <div class="page-section" id="page-confusing">
+        <div class="guide-header">
+            <h2>⚠️ 易混淆物品对比</h2>
+            <p>校园高频误分类物品 · 一目了然的区分方法</p>
+        </div>
+        <div id="confusingContent"><div class="confusing-loading">加载中...</div></div>
     </div>
 </div>
 
@@ -1093,6 +1686,25 @@ uploadArea.addEventListener("drop", function(e) {
     }
 });
 
+/* 粘贴上传支持 (Ctrl+V) */
+document.addEventListener("paste", function(e) {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+        if (item.type.startsWith("image/")) {
+            e.preventDefault();
+            const file = item.getAsFile();
+            if (file) {
+                const dt = new DataTransfer();
+                dt.items.add(file);
+                fileInput.files = dt.files;
+                fileInput.dispatchEvent(new Event("change"));
+            }
+            break;
+        }
+    }
+});
+
 // ==================== 识别操作 ====================
 async function doPredict() {
     if (!selectedImage) return;
@@ -1131,6 +1743,9 @@ function showPredictResult(result, inferTime) {
     const confText = document.getElementById("confidenceText");
     const guidance = document.getElementById("guidanceText");
     const info = document.getElementById("inferenceInfo");
+    const tipsContainer = document.getElementById("tipsContainer");
+    const tipsSteps = document.getElementById("tipsSteps");
+    const shareBtn = document.getElementById("shareBtn");
 
     badge.textContent = result.category || "未知";
     badge.style.background = result.bin_color || "#666";
@@ -1148,8 +1763,26 @@ function showPredictResult(result, inferTime) {
     guidance.textContent = result.guidance || "暂无投放指引";
     info.textContent = inferTime ? `推理耗时 ${inferTime}ms` : "";
 
+    if (result.tips && Array.isArray(result.tips) && result.tips.length > 0) {
+        tipsSteps.innerHTML = "";
+        result.tips.forEach(function(tip, i) {
+            var li = document.createElement("li");
+            li.setAttribute("data-step", String(i + 1));
+            li.textContent = tip;
+            tipsSteps.appendChild(li);
+        });
+        tipsContainer.style.display = "";
+    } else {
+        tipsContainer.style.display = "none";
+    }
+
+    shareBtn.style.display = "";
+    shareBtn.onclick = function() { shareResult(result); };
+
     resultSection.classList.add("show");
     searchResultSection.classList.remove("show");
+
+    saveHistory(result, inferTime);
 }
 
 // ==================== 搜索功能 ====================
@@ -1351,6 +1984,379 @@ function resetAll() {
 
 // ==================== 初始化 ====================
 console.log("校园垃圾分类AI助手 已加载");
+
+// ==================== 分享功能 (F-1.3.5) ====================
+function shareResult(result) {
+    var conf = Math.round((result.confidence || 0) * 100);
+    var text = "【垃圾分类识别结果】\n" +
+        "物品：" + (result.label_cn || "未知") + "\n" +
+        "分类：" + (result.category || "未知") + "\n" +
+        "置信度：" + conf + "%\n" +
+        "投放指引：" + (result.guidance || "暂无");
+    if (result.tips && result.tips.length > 0) {
+        text += "\n\n处理建议：\n" + result.tips.map(function(t, i) { return (i+1) + ". " + t; }).join("\n");
+    }
+    text += "\n\n—— 校园垃圾分类AI助手";
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function() { showShareToast(); });
+    } else {
+        var ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+        showShareToast();
+    }
+}
+
+function showShareToast() {
+    var toast = document.getElementById("shareToast");
+    toast.classList.add("show");
+    setTimeout(function() { toast.classList.remove("show"); }, 2000);
+}
+
+// ==================== 历史记录 localStorage (F-1.5.1~3) ====================
+var HISTORY_KEY = "waste_history_max";
+var MAX_HISTORY = 50;
+
+function saveHistory(result, inferTime) {
+    try {
+        var list = loadHistoryRaw();
+        var entry = {
+            id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+            label_cn: result.label_cn,
+            category: result.category,
+            bin_color: result.bin_color,
+            confidence: result.confidence,
+            guidance: result.guidance,
+            tips: result.tips || [],
+            inference_time_ms: inferTime,
+            thumb: previewImg.src ? previewImg.src.substring(0, 120) : "",
+            timestamp: new Date().toISOString()
+        };
+        list.unshift(entry);
+        if (list.length > MAX_HISTORY) list = list.slice(0, MAX_HISTORY);
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(list));
+        updateHistoryBadge(list.length);
+    } catch(e) { console.warn("保存历史失败:", e); }
+}
+
+function loadHistoryRaw() {
+    try {
+        var raw = localStorage.getItem(HISTORY_KEY);
+        return raw ? JSON.parse(raw) : [];
+    } catch(e) { return []; }
+}
+
+function updateHistoryBadge(count) {
+    var badge = document.getElementById("historyBadge");
+    if (!badge) return;
+    badge.textContent = count > 99 ? "99+" : String(count);
+    badge.style.display = count > 0 ? "" : "none";
+}
+
+function renderHistoryList() {
+    var listEl = document.getElementById("historyList");
+    if (!listEl) return;
+    var list = loadHistoryRaw();
+    listEl.innerHTML = "";
+    if (list.length === 0) {
+        listEl.innerHTML = '<div class="history-empty"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><div>暂无识别记录</div></div>';
+        return;
+    }
+    list.forEach(function(item) {
+        var div = document.createElement("div");
+        div.className = "history-item";
+        div.dataset.id = item.id;
+
+        var thumb = document.createElement("img");
+        thumb.className = "history-item-thumb";
+        thumb.src = item.thumb || "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" fill="%23eee"/><rect width="44" height="44" rx="6"/>');
+        thumb.alt = "";
+
+        var info = document.createElement("div");
+        info.className = "history-item-info";
+
+        var name = document.createElement("div");
+        name.className = "history-item-name";
+        name.textContent = item.label_cn || "未知";
+
+        var meta = document.createElement("div");
+        meta.className = "history-item-meta";
+
+        var catSpan = document.createElement("span");
+        catSpan.className = "history-item-cat";
+        catSpan.textContent = item.category || "?";
+        catSpan.style.background = item.bin_color || "#666";
+
+        var timeText = formatTimeAgo(item.timestamp);
+        var timeNode = document.createTextNode(timeText);
+
+        meta.appendChild(catSpan);
+        meta.appendChild(timeNode);
+        info.appendChild(name);
+        info.appendChild(meta);
+
+        var delBtn = document.createElement("button");
+        delBtn.className = "history-item-delete";
+        delBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+        delBtn.title = "删除";
+        delBtn.onclick = function(ev) { ev.stopPropagation(); deleteHistoryItem(item.id); };
+
+        div.appendChild(thumb);
+        div.appendChild(info);
+        div.appendChild(delBtn);
+
+        div.onclick = function() { viewHistoryItem(item); };
+
+        listEl.appendChild(div);
+    });
+}
+
+function formatTimeAgo(isoStr) {
+    if (!isoStr) return "";
+    var diff = Date.now() - new Date(isoStr).getTime();
+    if (diff < 60000) return "刚刚";
+    if (diff < 3600000) return Math.floor(diff / 60000) + "分钟前";
+    if (diff < 86400000) return Math.floor(diff / 3600000) + "小时前";
+    if (diff < 604800000) return Math.floor(diff / 86400000) + "天前";
+    return new Date(isoStr).toLocaleDateString();
+}
+
+function deleteHistoryItem(id) {
+    var list = loadHistoryRaw();
+    list = list.filter(function(i) { return i.id !== id; });
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(list));
+    updateHistoryBadge(list.length);
+    renderHistoryList();
+}
+
+function clearAllHistory() {
+    if (!confirm("确定清空所有识别历史？")) return;
+    localStorage.removeItem(HISTORY_KEY);
+    updateHistoryBadge(0);
+    renderHistoryList();
+}
+
+function viewHistoryItem(item) {
+    closeHistoryDrawer();
+
+    var mockResult = {
+        label_cn: item.label_cn,
+        category: item.category,
+        bin_color: item.bin_color,
+        confidence: item.confidence,
+        guidance: item.guidance,
+        tips: item.tips || []
+    };
+    showPredictResult(mockResult, item.inference_time_ms);
+}
+
+// ==================== 历史侧边栏交互 ====================
+var historyToggle = document.getElementById("historyToggle");
+var historyOverlay = document.getElementById("historyOverlay");
+var historyDrawer = document.getElementById("historyDrawer");
+var historyCloseBtn = document.getElementById("historyCloseBtn");
+var historyClearAll = document.getElementById("historyClearAll");
+
+if (historyToggle) historyToggle.onclick = openHistoryDrawer;
+if (historyOverlay) historyOverlay.onclick = closeHistoryDrawer;
+if (historyCloseBtn) historyCloseBtn.onclick = closeHistoryDrawer;
+if (historyClearAll) historyClearAll.onclick = clearAllHistory;
+
+function openHistoryDrawer() {
+    renderHistoryList();
+    if (historyOverlay) historyOverlay.classList.add("show");
+    if (historyDrawer) historyDrawer.classList.add("open");
+}
+function closeHistoryDrawer() {
+    if (historyOverlay) historyOverlay.classList.remove("show");
+    if (historyDrawer) historyDrawer.classList.remove("open");
+}
+
+updateHistoryBadge(loadHistoryRaw().length);
+
+// ==================== 页面导航切换 (F-2.3/F-2.4) ====================
+var currentPage = "recognize";
+
+function switchPage(pageId) {
+    currentPage = pageId;
+
+    document.querySelectorAll(".nav-btn").forEach(function(btn) {
+        btn.classList.toggle("active", btn.dataset.page === pageId);
+    });
+
+    document.querySelectorAll(".page-section").forEach(function(sec) {
+        sec.classList.remove("active");
+    });
+
+    if (pageId === "recognize") {
+        var mainCard = document.querySelector(".card");
+        var resultSec = document.getElementById("resultSection");
+        var searchSec = document.getElementById("searchResultSection");
+        if (mainCard) mainCard.style.display = "";
+        if (resultSec) resultSec.classList.add("show");
+        if (searchSec) searchSec.classList.add("show");
+    } else {
+        var cards = document.querySelectorAll(".card");
+        cards.forEach(function(c) { c.style.display = "none"; });
+        var targetPage = document.getElementById("page-" + pageId);
+        if (targetPage) targetPage.classList.add("active");
+
+        if (pageId === "guide" && !document.getElementById("page-guide").dataset.loaded) {
+            loadGuideData();
+        }
+        if (pageId === "confusing" && !document.getElementById("page-confusing").dataset.loaded) {
+            loadConfusingData();
+        }
+    }
+}
+
+// ==================== 分类指南数据加载与渲染 (F-2.3) ====================
+var guideDataCache = null;
+
+function loadGuideData() {
+    var container = document.getElementById("guideContent");
+    if (!container) return;
+    container.innerHTML = '<div class="guide-loading">正在加载分类标准数据...</div>';
+
+    fetch(API_BASE + "/api/guide/standard")
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            guideDataCache = data;
+            document.getElementById("page-guide").dataset.loaded = "1";
+            renderGuide(data);
+        })
+        .catch(function(err) {
+            console.error("加载指南数据失败:", err);
+            container.innerHTML = '<div class="guide-loading" style="color:#E74C3C;">加载失败，请检查网络连接</div>';
+        });
+}
+
+function renderGuide(data) {
+    var container = document.getElementById("guideContent");
+    if (!container || !data.success || !data.categories) return;
+    var html = "";
+    data.categories.forEach(function(cat, idx) {
+        var accentColor = cat.color || "#2D9B5E";
+        html += '<div class="category-card" id="catcard-' + cat.id + '" style="--section-accent:' + accentColor + '">';
+        html += '  <div class="category-card-header" onclick="toggleCategoryCard(\'' + cat.id + '\')">';
+        html += '    <div class="cat-icon-badge" style="background:' + accentColor + '20; color:' + accentColor + '">' + (cat.icon || "📦") + '</div>';
+        html += '    <div class="cat-header-info">';
+        html += '      <div class="cat-header-name" style="color:' + accentColor + '">' + cat.name + '</div>';
+        html += '      <div class="cat-header-desc">' + (cat.description || "") + '</div>';
+        html += '    </div>';
+        html += '    <svg class="cat-arrow" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>';
+        html += '  </div>';
+        html += '  <div class="category-card-body">';
+        html += '    <div class="cat-body-inner">';
+
+        if (cat.common_items && cat.common_items.length > 0) {
+            html += '  <div class="cat-subsection">';
+            html += '    <div class="cat-subtitle">常见物品</div>';
+            html += '    <div class="cat-tag-list">';
+            cat.common_items.forEach(function(item) { html += '<span class="cat-tag">' + item + '</span>'; });
+            html += '    </div></div>';
+        }
+
+        if (cat.campus_special_items && cat.campus_special_items.length > 0) {
+            html += '  <div class="cat-subsection">';
+            html += '    <div class="cat-subtitle">校园特有物品</div>';
+            html += '    <div class="cat-tag-list">';
+            cat.campus_special_items.forEach(function(item) { html += '<span class="cat-tag" style="background:' + accentColor + '10;color:' + accentColor + ';font-weight:600">' + item + '</span>'; });
+            html += '    </div></div>';
+        }
+
+        if (cat.disposal_notes && cat.disposal_notes.length > 0) {
+            html += '  <div class="cat-subsection">';
+            html += '    <div class="cat-subtitle">投放注意事项</div>';
+            html += '    <ul class="cat-note-list">';
+            cat.disposal_notes.forEach(function(note) { html += '<li>' + note + '</li>'; });
+            html += '    </ul></div>';
+        }
+
+        html += '    </div></div></div>';
+    });
+    container.innerHTML = html;
+
+    if (data.categories.length > 0) {
+        toggleCategoryCard(data.categories[0].id);
+    }
+}
+
+function toggleCategoryCard(catId) {
+    var card = document.getElementById("catcard-" + catId);
+    if (!card) return;
+    var wasOpen = card.classList.contains("open");
+    document.querySelectorAll(".category-card").forEach(function(c) { c.classList.remove("open"); });
+    if (!wasOpen) card.classList.add("open");
+}
+
+// ==================== 易错对比数据加载与渲染 (F-2.4) ====================
+function loadConfusingData() {
+    var container = document.getElementById("confusingContent");
+    if (!container) return;
+    container.innerHTML = '<div class="confusing-loading">正在加载易错对比数据...</div>';
+
+    fetch(API_BASE + "/api/guide/confusing")
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            document.getElementById("page-confusing").dataset.loaded = "1";
+            renderConfusing(data);
+        })
+        .catch(function(err) {
+            console.error("加载易错数据失败:", err);
+            container.innerHTML = '<div class="confusing-loading" style="color:#E74C3C;">加载失败，请检查网络连接</div>';
+        });
+}
+
+function renderConfusing(data) {
+    var container = document.getElementById("confusingContent");
+    if (!container || !data.success) return;
+    var pairs = data.pairs || [];
+    if (pairs.length === 0) {
+        container.innerHTML = '<div class="confusing-loading">暂无易错对比数据</div>';
+        return;
+    }
+    var html = '<div class="confusing-grid">';
+    pairs.forEach(function(pair) {
+        var freqClass = pair.frequency === "high" ? "freq-high" : (pair.frequency === "medium" ? "freq-medium" : "freq-low");
+        var freqLabel = pair.frequency === "high" ? "高频误判" : (pair.frequency === "medium" ? "中频" : "低频");
+        html += '<div class="confusing-card" onclick="showConfusingDetail(\'' + pair.id + '\')">';
+        html += '  <div class="confusing-card-header">';
+        html += '    <span class="confusing-freq ' + freqClass + '">' + freqLabel + '</span>';
+        html += '    <div class="confusing-pair-names">' + pair.item_a_name + '<span class="confusing-vs">vs</span>' + pair.item_b_name + '</div>';
+        html += '  </div>';
+        html += '  <div class="confusing-reason">' + (pair.reason || "这两个物品容易被混淆") + '</div>';
+        html += '  <div class="confusing-method">✓ ' + (pair.distinguish_method || "查看详情了解区分方法") + '</div>';
+        html += '</div>';
+    });
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function showConfusingDetail(pairId) {
+    fetch(API_BASE + "/api/guide/confusing/" + pairId)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success && data.pair) {
+                var p = data.pair;
+                alert(
+                    "【易错对比】\n\n" +
+                    p.item_a_name + "（" + p.item_a_category + "）\nVS\n" +
+                    p.item_b_name + "（" + p.item_b_category + "）\n\n" +
+                    "混淆原因：" + (p.reason || "-") + "\n\n" +
+                    "区分方法：" + (p.distinguish_method || "-") + "\n\n" +
+                    "错误率：" + (p.error_rate || "-")
+                );
+            }
+        })
+        .catch(function(e) { console.error(e); });
+}
 </script>
 </body>
 </html>

@@ -127,6 +127,9 @@ dmypy.json
 *.ckpt
 models/
 
+# 训练图片数据集（大文件，不适合放入 Git）
+模型训练/datasets/rubbish/images/
+
 # 数据集文件（大文件）
 data/raw/
 data/processed/*.csv
@@ -136,6 +139,7 @@ data/processed/*.json
 # 运行时生成的数据文件（不应纳入版本控制）
 data/history.json      # 识别历史记录（动态生成）
 data/feedback.json     # 用户反馈数据（动态生成）
+data/app.db*           # SQLite 数据库文件（运行时生成）
 
 # 日志文件
 logs/
@@ -156,3 +160,4 @@ Thumbs.db
 tmp/
 temp/
 *.tmp
+node_modules/          # npm 依赖包

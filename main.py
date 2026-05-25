@@ -2099,8 +2099,6 @@ def startup_event() -> None:
             logger.warning("⚠️ 多模态融合分类器初始化失败: %s", e)
             multimodal_classifier = None
 
-    inference_cache = InferenceCache(max_size=500, ttl_seconds=86400)
-
     steps_file = BASE_DIR / "data" / "disposal_steps.json"
     if steps_file.exists():
         try:

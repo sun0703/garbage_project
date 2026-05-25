@@ -422,7 +422,7 @@ export class HistoryPage {
                 const record = this._records.find(r => r.id === recordId);
                 if (!record) return;
 
-                store.set('predictResult', {
+                store.setState('predictResult', {
                     label_cn: record.label_cn || record.label || '',
                     category: record.category || '',
                     confidence: record.confidence || 0,

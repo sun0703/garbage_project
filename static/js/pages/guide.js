@@ -110,7 +110,7 @@ export class GuidePage {
     _pairCard = null;
     _boundHandlers = {};
 
-    init() {
+    async init() {
         this.container = document.getElementById('page-guide');
         if (!this.container) {
             console.error('[GuidePage] 容器 #page-guide 不存在');
@@ -119,10 +119,14 @@ export class GuidePage {
 
         this._pairCard = new ConfusingPairCard();
         this._render();
-        Promise.all([
-            this._loadCategories(),
-            this._loadConfusingPairs()
-        ]);
+        try {
+            await Promise.all([
+                this._loadCategories(),
+                this._loadConfusingPairs()
+            ]);
+        } catch (err) {
+            console.error('[GuidePage] 初始化失败:', err);
+        }
 
         console.log('[GuidePage] 分类指南页初始化完成');
     }
@@ -424,7 +428,7 @@ export class GuidePage {
             const filter = btn.dataset.filter;
             this._boundHandlers[`filter-${filter}`] = (e) => {
                 this.container?.querySelectorAll('.confusing-filter-btn').forEach(b => b.classList.remove('active'));
-                e.target.classList.add('active');
+                e.currentTarget.classList.add('active');
                 const freq = filter === 'all' ? '' : filter;
                 this._loadConfusingPairs(freq);
             };

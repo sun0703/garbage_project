@@ -122,10 +122,11 @@ export class VoiceButton {
         const recordBtn = fallbackContainer.querySelector('.voice-record-btn');
         const statusEl = fallbackContainer.querySelector('.voice-record-status');
 
-        // 绑定原始按钮点击事件（显示提示）
-        this.btnEl.addEventListener('click', () => {
+        // 绑定原始按钮点击事件（显示提示），保存引用以便清理
+        this._unsupportedClickHandler = () => {
             this._showToast('您的浏览器不支持实时语音识别\n可点击"录音上传"按钮录制音频后发送');
-        });
+        };
+        this.btnEl.addEventListener('click', this._unsupportedClickHandler);
 
         // 绑定 MediaRecorder 录音按钮事件
         recordBtn?.addEventListener('click', (e) => {
@@ -631,6 +632,11 @@ export class VoiceButton {
         }
 
         this.btnEl?.removeEventListener('click', this._boundClick);
+        // 清理不支持路径下的点击监听器
+        if (this._unsupportedClickHandler) {
+            this.btnEl?.removeEventListener('click', this._unsupportedClickHandler);
+            this._unsupportedClickHandler = null;
+        }
         this._boundClick = null;
         this.onResult = null;
         this.onError = null;

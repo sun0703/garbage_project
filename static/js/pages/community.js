@@ -10,15 +10,19 @@ export class CommunityPage {
     _quizAnswered = false;
     _boundHandlers = {};
 
-    init() {
+    async init() {
         this.container = document.getElementById('page-community');
         this._render();
-        Promise.all([
-            this._loadUserData(),
-            this._loadDailyQuiz(),
-            this._loadActivities(),
-            this._loadTodayCheckin()
-        ]);
+        try {
+            await Promise.all([
+                this._loadUserData(),
+                this._loadDailyQuiz(),
+                this._loadActivities(),
+                this._loadTodayCheckin()
+            ]);
+        } catch (err) {
+            console.error('[CommunityPage] 初始化失败:', err);
+        }
     }
 
     _render() {
@@ -121,7 +125,7 @@ export class CommunityPage {
         if (!statusEl || !btn) return;
 
         /* 登录状态预检：用户未登录时直接展示降级 UI，避免发起 401 请求 */
-        if (!store.get('currentUser')) {
+        if (!store.getState('currentUser')) {
             statusEl.textContent = '请登录后打卡';
             btn.disabled = true;
             return;

@@ -332,10 +332,13 @@ export class ImageProcessor {
 
   /**
    * 绑定拖拽上传事件
+   * 将拖拽到的图片文件传递给指定的回调函数处理
+   *
    * @param {HTMLElement} dropZone - 拖放区域元素
+   * @param {Function} onFile - 文件处理回调 (file: File) => void
    */
-  bindDropUpload(dropZone) {
-    if (!dropZone) return;
+  static bindDropUpload(dropZone, onFile) {
+    if (!dropZone || typeof onFile !== 'function') return;
 
     ['dragenter', 'dragover'].forEach(event => {
       dropZone.addEventListener(event, (e) => {
@@ -356,7 +359,7 @@ export class ImageProcessor {
     dropZone.addEventListener('drop', (e) => {
       const files = e.dataTransfer?.files;
       if (files?.length > 0) {
-        this._handleFile(files[0]);
+        onFile(files[0]);
       }
     });
 
@@ -369,20 +372,17 @@ export class ImageProcessor {
    * 支持从剪贴板直接粘贴图片：
    * - 截图工具截图后 Ctrl+V 粘贴
    * - 从网页/文档复制图片后粘贴
-   * - 文件管理器中复制图片文件后粘贴
    *
-   * @param {HTMLElement} targetElement - 监听粘贴事件的元素（通常是 document 或 input）
+   * @param {Function} onFile - 文件处理回调 (file: File) => void
+   * @param {HTMLElement} [targetElement=document] - 监听粘贴事件的元素
    */
-  bindPasteUpload(targetElement = document) {
-    if (!targetElement) return;
+  static bindPasteUpload(onFile, targetElement = document) {
+    if (!targetElement || typeof onFile !== 'function') return;
 
     targetElement.addEventListener('paste', (e) => {
-      // 获取剪贴板中的图片数据
       const items = e.clipboardData?.items;
-
       if (!items) return;
 
-      // 遍历剪贴板项查找图片
       for (let i = 0; i < items.length; i++) {
         if (items[i].type.indexOf('image') !== -1) {
           e.preventDefault();
@@ -391,15 +391,14 @@ export class ImageProcessor {
           const file = items[i].getAsFile();
           if (file) {
             console.log('[ImageProcessor] 粘贴图片:', file.type, file.size);
-            this._handleFile(file);
-
-            // 触发粘贴成功回调（用于 UI 反馈）
-            this._onPasteSuccess?.(file);
+            onFile(file);
+            // 触发粘贴成功回调
+            ImageProcessor._onPasteSuccess?.(file);
           }
           break;
         }
       }
-    }, { passive: false }); // 需要阻止默认行为
+    }, { passive: false });
 
     console.log('[ImageProcessor] 粘贴上传已绑定 (Ctrl+V)');
   }
@@ -408,7 +407,7 @@ export class ImageProcessor {
    * 设置粘贴成功的回调函数
    * @param {Function} callback - 回调函数 (file: File) => void
    */
-  onPaste(callback) {
-    this._onPasteSuccess = callback;
+  static onPaste(callback) {
+    ImageProcessor._onPasteSuccess = callback;
   }
 }

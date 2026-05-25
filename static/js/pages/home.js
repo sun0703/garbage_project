@@ -127,29 +127,27 @@ export class HomePage {
         this.container.innerHTML = `
             <!-- 页面标题区 -->
             <div class="home-header">
-                <div class="home-header-inner">
-                    <div class="home-logo">
-                        <svg viewBox="0 0 24 24" width="24" height="24" fill="white">
-                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
-                        </svg>
-                    </div>
-                    <h1 class="home-title">校园垃圾分类AI助手</h1>
+                <div class="home-header__logo">
+                    <svg viewBox="0 0 24 24" width="28" height="28" fill="white">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                    </svg>
                 </div>
-                <p class="home-subtitle">拍照识别 · 语音搜索 · 智能分类</p>
+                <h1 class="home-header__title">校园垃圾分类AI助手</h1>
+                <p class="home-header__subtitle">拍照识别 · 语音搜索 · 智能分类</p>
             </div>
 
             <!-- 主操作卡片 -->
             <div class="card home-card">
                 <!-- 上传区域：大尺寸虚线边框 ≥200px高 -->
                 <div class="upload-area" id="homeUploadArea">
-                    <div class="upload-icon-wrap">
+                    <div class="upload-area__icon-wrap">
                         <svg viewBox="0 0 24 24" width="28" height="28" stroke="white" stroke-width="2" fill="none">
                             <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
                         </svg>
                     </div>
-                    <div class="upload-text">点击或拖拽图片到此处</div>
-                    <div class="upload-hint">支持 JPG / PNG / WebP / GIF 格式</div>
-                    <img id="homePreviewImg" alt="预览图" class="preview-image">
+                    <div class="upload-area__text">点击或拖拽图片到此处</div>
+                    <div class="upload-area__hint">支持 JPG / PNG / WebP / GIF 格式</div>
+                    <img id="homePreviewImg" alt="预览图" class="upload-area__preview">
                 </div>
 
                 <!-- 隐藏的文件输入框 -->
@@ -278,7 +276,7 @@ export class HomePage {
                 const query = this.searchInput?.value.trim();
                 if (query) {
                     // 存储搜索关键词到 store，跳转搜索结果页
-                    store.set('searchQuery', query);
+                    store.setState('searchQuery', query);
                     window.location.hash = '#/search?q=' + encodeURIComponent(query);
                 }
             }
@@ -291,7 +289,7 @@ export class HomePage {
         this._suggest = new SearchSuggest({
             inputEl: this.searchInput,
             onSelect: (keyword) => {
-                store.set('searchQuery', keyword);
+                store.setState('searchQuery', keyword);
                 window.location.hash = '#/search?q=' + encodeURIComponent(keyword);
             }
         });
@@ -308,7 +306,7 @@ export class HomePage {
                     if (this.searchInput) {
                         this.searchInput.value = corrected;
                         // 存储到 store 并跳转搜索页
-                        store.set('searchQuery', corrected);
+                        store.setState('searchQuery', corrected);
                         window.location.hash = '#/search?q=' + encodeURIComponent(corrected);
                     }
 
@@ -412,8 +410,8 @@ export class HomePage {
 
             /* 第四步：转换为 Base64 并存入 store */
             const base64 = await ImageProcessor.toBase64(compressedBlob);
-            store.set('selectedImage', base64);
-            store.set('selectedFileName', file.name);
+            store.setState('selectedImage', base64);
+            store.setState('selectedFileName', file.name);
 
             /* 释放 ObjectURL 避免内存泄漏（base64 已存储，不再需要 blob URL） */
             URL.revokeObjectURL(objectUrl);

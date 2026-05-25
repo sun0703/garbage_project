@@ -43,7 +43,7 @@ export class ResultPage {
         }
 
         /* 从 store 获取识别结果 */
-        const predictResult = store.get('predictResult');
+        const predictResult = store.getState('predictResult');
         if (!predictResult) {
             showToast('无识别结果，请先上传图片识别', 'warning');
             window.location.hash = '#/';
@@ -261,7 +261,7 @@ export class ResultPage {
     _handleGuide() {
         const keyword = this._resultData?.label_cn || this._resultData?.label_en || '';
         if (keyword) {
-            store.set('currentItemKeyword', keyword);
+            store.setState('currentItemKeyword', keyword);
             window.location.hash = '#/item/' + encodeURIComponent(keyword);
         } else {
             showToast('无法获取物品名称', 'warning');
@@ -270,9 +270,9 @@ export class ResultPage {
 
     _handleContinue() {
         /* 清除 store 中的图片和结果数据 */
-        store.remove('selectedImage');
-        store.remove('selectedFile');
-        store.remove('predictResult');
+        store.setState('selectedImage', null);
+        store.setState('selectedFile', null);
+        store.setState('predictResult', null);
 
         /* 跳转首页 */
         window.location.hash = '#/';
@@ -309,7 +309,11 @@ export class ResultPage {
 
             } catch (fallbackError) {
                 console.error('[ResultPage] 复制完全失败:', fallbackError);
-                showModal('分享失败', '无法复制到剪贴板，请手动截屏分享', '确定');
+                showModal({
+                    title: '分享失败',
+                    content: '无法复制到剪贴板，请手动截屏分享',
+                    confirmText: '确定'
+                });
             }
         }
     }
@@ -346,7 +350,7 @@ export class ResultPage {
 
     _saveToLocalHistory(predictResult) {
         try {
-            const imgDataUrl = store.get('selectedImage');
+            const imgDataUrl = store.getState('selectedImage');
             storage.saveHistory({
                 thumbnail: imgDataUrl || '',
                 category: predictResult.category || '未知类别',

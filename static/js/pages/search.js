@@ -143,7 +143,7 @@ export class SearchPage {
             this._currentQuery = decodeURIComponent(match[1]) || '';
         } else {
             /* 其次尝试从 store 获取（首页搜索跳转时存储） */
-            this._currentQuery = store.get('searchQuery') || '';
+            this._currentQuery = store.getState('searchQuery') || '';
         }
     }
 
@@ -441,7 +441,7 @@ export class SearchPage {
                 const resultData = results[index];
                 const keyword = resultData.match_label || resultData.label || '';
                 if (keyword) {
-                    store.set('currentItemKeyword', keyword);
+                    store.setState('currentItemKeyword', keyword);
                     window.location.hash = '#/item/' + encodeURIComponent(keyword);
                 }
             });

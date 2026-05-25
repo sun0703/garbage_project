@@ -94,55 +94,6 @@ class Router {
     // ==================== 私有方法 ====================
 
     /**
-     * 注册内置路由表 - 应用启动时自动调用
-     * 定义校园垃圾分类SPA的全部6个页面路由及对应处理逻辑
-     *
-     * @private
-     * @returns {void}
-     */
-    _registerBuiltInRoutes() {
-        /*
-         * 首页路由：#/ 或 #/home
-         * 应用的主入口，包含拍照上传、搜索框等核心交互组件
-         */
-        this.register('/', () => this._switchPage('home'));
-        this.register('/home', () => this._switchPage('home'));
-
-        /*
-         * 预览确认页：#/preview
-         * 用户选择图片后进入此页进行确认/裁剪后再提交识别
-         */
-        this.register('/preview', () => this._switchPage('preview'));
-
-        /*
-         * 结果展示页：#/result
-         * AI模型返回识别结果后的展示页面，含分类标签、置信度、投放指引
-         */
-        this.register('/result', () => this._switchPage('result'));
-
-        /*
-         * 搜索结果页：#/search?q=xxx
-         * 关键词搜索的结果列表展示，支持查询参数传递搜索词
-         */
-        this.register('/search', (params, query) => {
-            /* 将查询参数中的q值透传给页面处理器 */
-            this._switchPage('search', { query: query.q || '' });
-        });
-
-        /*
-         * 分类指南页：#/guide
-         * 展示四类垃圾分类的标准说明、常见物品列表、投放注意事项
-         */
-        this.register('/guide', () => this._switchPage('guide'));
-
-        /*
-         * 历史记录页：#/history
-         * 展示用户过往的识别历史，支持重新查看和删除操作
-         */
-        this.register('/history', () => this._switchPage('history'));
-    }
-
-    /**
      * 将路由路径字符串转换为匹配用正则表达式
      * 支持 :param 风格的动态参数捕获
      *

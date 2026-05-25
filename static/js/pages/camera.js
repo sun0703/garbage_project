@@ -64,13 +64,12 @@ export class PreviewPage {
         }
 
         /* 从 store 获取已选图片数据 */
-        const selectedImage = store.get('selectedImage');
+        const selectedImage = store.getState('selectedImage');
 
-        /* 【增强校验】图片数据必须存在且为 Blob/File 类型 */
-        if (!selectedImage || !(selectedImage instanceof Blob)) {
-            /* 清理无效状态，防止后续页面读取到脏数据 */
-            store.remove('selectedImage');
-            store.remove('selectedFile');
+        /* 校验图片数据：base64 字符串或 Blob 对象均可 */
+        if (!selectedImage || !(typeof selectedImage === 'string' || selectedImage instanceof Blob)) {
+            store.setState('selectedImage', null);
+            store.setState('selectedFileName', null);
             showToast('未选择图片，请先上传', 'warning');
             window.location.hash = '#/';
             return;
@@ -220,7 +219,7 @@ export class PreviewPage {
 
         /* 显示文件名 */
         const filenameEl = document.getElementById('previewFilename');
-        const fileName = store.get('selectedFileName') || '图片文件';
+        const fileName = store.getState('selectedFileName') || '图片文件';
         if (filenameEl) {
             filenameEl.textContent = fileName;
         }
@@ -262,8 +261,8 @@ export class PreviewPage {
 
         /* 重新选择按钮 — 返回首页重新上传 (F-1.2.3) */
         this._boundHandlers.reselect = () => {
-            store.remove('selectedImage');
-            store.remove('selectedFileName');
+            store.setState('selectedImage', null);
+            store.setState('selectedFileName', null);
             window.location.hash = '#/';
         };
         if (this.reselectBtn) {
@@ -303,7 +302,7 @@ export class PreviewPage {
         if (this.startBtn) this.startBtn.disabled = true;
 
         try {
-            const selectedImage = store.get('selectedImage');
+            const selectedImage = store.getState('selectedImage');
 
             /* 【防御性校验】参数有效性检查 - 防止无效数据导致 FileReader 异常 */
             if (!selectedImage || !(selectedImage instanceof Blob)) {
@@ -359,7 +358,7 @@ export class PreviewPage {
             hideLoading();
 
             /* 存储识别结果到全局 store */
-            store.set('predictResult', result);
+            store.setState('predictResult', result);
 
             showToast('识别完成', 'success');
 

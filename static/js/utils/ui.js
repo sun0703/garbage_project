@@ -61,12 +61,12 @@ function _processToastQueue() {
 
   // 设置消息文本和类型样式类
   toastEl.textContent = msg;
-  toastEl.className = `toast toast--${type} toast--visible`;
+  toastEl.className = `toast toast--${type}`;
 
   // 定时自动隐藏
   _toastTimer = setTimeout(() => {
-    toastEl.classList.remove('toast--visible');
-    // 等待CSS过渡动画完成后清理状态
+    toastEl.classList.add('exiting');
+    // 等待CSS退场动画完成后清理状态
     setTimeout(() => {
       _isToastShowing = false;
       // 递归处理队列中的下一条消息
@@ -132,10 +132,10 @@ export function hideToast() {
   _toastQueue = [];
   _isToastShowing = false;
 
-  // 移除Toast元素的可见样式
+  // 移除Toast元素的可见样式，触发退场动画
   const toastEl = document.getElementById('toast');
   if (toastEl) {
-    toastEl.classList.remove('toast--visible');
+    toastEl.classList.add('exiting');
   }
 }
 
@@ -167,10 +167,11 @@ export function hideToast() {
  */
 export function showLoading(text = '正在识别中...') {
   const overlay = _getOrCreateElement('loadingOverlay', 'div');
-  overlay.querySelector('.loading-text')
-    ? (overlay.querySelector('.loading-text').textContent = text)
-    : (overlay.innerHTML = `<div class="loading-spinner"></div><span class="loading-text">${text}</span>`);
-  overlay.classList.add('show');
+  overlay.className = 'loading-overlay';
+  overlay.querySelector('.loading-overlay__text')
+    ? (overlay.querySelector('.loading-overlay__text').textContent = text)
+    : (overlay.innerHTML = `<div class="spinner"></div><span class="loading-overlay__text">${text}</span>`);
+  overlay.classList.remove('hidden');
 }
 
 /**
@@ -186,7 +187,7 @@ export function showLoading(text = '正在识别中...') {
 export function hideLoading() {
   const overlay = document.getElementById('loadingOverlay');
   if (overlay) {
-    overlay.classList.remove('show');
+    overlay.classList.add('hidden');
   }
 }
 
@@ -204,7 +205,7 @@ export function hideLoading() {
 export function setLoadingText(text) {
   const overlay = document.getElementById('loadingOverlay');
   if (overlay) {
-    const textEl = overlay.querySelector('.loading-text');
+    const textEl = overlay.querySelector('.loading-overlay__text');
     if (textEl) {
       textEl.textContent = text;
     }
@@ -255,23 +256,24 @@ export async function showModal({
 }) {
   const overlay = _getOrCreateElement('modalOverlay', 'div');
 
-  // 构建弹窗HTML结构
+  // 构建弹窗HTML结构并设置样式类
+  overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal__backdrop"></div>
-    <div class="modal__container" role="dialog" aria-modal="true">
+    <div class="modal">
       <div class="modal__header">
         <h3 class="modal__title">${title}</h3>
+        <button class="modal__close" id="modalCloseBtn" aria-label="关闭">&times;</button>
       </div>
       <div class="modal__body">${content}</div>
       <div class="modal__footer">
-        <button class="btn btn--cancel modal__btn-cancel">${cancelText}</button>
-        <button class="btn btn--confirm modal__btn-confirm">${confirmText}</button>
+        <button class="btn btn-secondary modal__btn-cancel">${cancelText}</button>
+        <button class="btn btn-primary modal__btn-confirm">${confirmText}</button>
       </div>
     </div>
   `;
 
-  // 添加显示类触发入场动画
-  overlay.classList.add('show');
+  // 移除隐藏类触发入场动画
+  overlay.classList.remove('hidden');
 
   // 创建Promise用于等待用户操作
   const result = new Promise((resolve) => {
@@ -294,11 +296,12 @@ export async function showModal({
     });
 
     // 点击背景遮罩层也视为取消
-    const backdrop = overlay.querySelector('.modal__backdrop');
-    backdrop.addEventListener('click', () => {
-      if (typeof onCancel === 'function') onCancel();
-      closeModal();
-      resolve(false);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        if (typeof onCancel === 'function') onCancel();
+        closeModal();
+        resolve(false);
+      }
     });
   });
 
@@ -318,7 +321,7 @@ export async function showModal({
 export function closeModal() {
   const overlay = document.getElementById('modalOverlay');
   if (overlay) {
-    overlay.classList.remove('show');
+    overlay.classList.add('hidden');
     // 清理内容以移除事件监听器引用
     setTimeout(() => {
       overlay.innerHTML = '';

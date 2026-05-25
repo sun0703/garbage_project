@@ -34,7 +34,7 @@ export class ItemDetailPage {
             return;
         }
 
-        this._keyword = params.keyword || store.get('currentItemKeyword') || '';
+        this._keyword = params.keyword || store.getState('currentItemKeyword') || '';
         if (!this._keyword) {
             this.container.innerHTML = `<div class="card empty-categories"><p>未指定物品</p></div>`;
             return;
@@ -206,7 +206,7 @@ export class ItemDetailPage {
             if (kw) {
                 this._boundHandlers[`related-${kw}`] = () => {
                     this._keyword = kw;
-                    store.set('currentItemKeyword', kw);
+                    store.setState('currentItemKeyword', kw);
                     this._render();
                     this._loadItem(kw);
                 };

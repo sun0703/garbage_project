@@ -240,6 +240,11 @@ export class CommunityPage {
         try {
             const data = await api.getActivities('open');
             if (data.success && data.activities.length > 0) {
+                const formatTime = (ts) => {
+                    if (!ts) return '';
+                    const d = new Date(ts * 1000);
+                    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+                };
                 listEl.innerHTML = data.activities.map(a => `
                     <div class="activity-card card" data-activity-id="${a.id}">
                         <div class="activity-card-header">
@@ -253,30 +258,73 @@ export class CommunityPage {
                             <span>🏢 ${a.organizer}</span>
                         </div>
                         <button class="btn btn-primary btn-sm activity-signup-btn" data-id="${a.id}">立即报名</button>
+                        <div class="activity-detail" style="display:none">
+                            <div class="activity-detail-inner">
+                                <p class="activity-full-desc">${a.description || '暂无描述'}</p>
+                                <div class="activity-detail-meta">
+                                    <p>⏰ 时间：${formatTime(a.start_time)} ~ ${formatTime(a.end_time)}</p>
+                                    <p>📍 地点：${a.location}</p>
+                                    <p>👥 人数上限：${a.max_participants || '不限'}</p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 `).join('');
 
+                listEl.querySelectorAll('.activity-card').forEach(card => {
+                    card.addEventListener('click', (e) => {
+                        if (e.target.closest('.activity-signup-btn')) return;
+                        const detail = card.querySelector('.activity-detail');
+                        if (detail) detail.style.display = detail.style.display === 'none' ? 'block' : 'none';
+                    });
+                });
+
+                const checkSignedMap = {};
+                try {
+                    for (const a of data.activities) {
+                        const res = await api.checkActivitySignup(a.id);
+                        checkSignedMap[a.id] = res.success && res.signed_up;
+                    }
+                } catch(e) {}
+
                 listEl.querySelectorAll('.activity-signup-btn').forEach(btn => {
+                    const actId = btn.dataset.id;
+                    if (checkSignedMap[actId]) {
+                        btn.textContent = '取消报名';
+                        btn.classList.remove('btn-primary');
+                        btn.classList.add('btn-danger');
+                    }
                     btn.addEventListener('click', async (e) => {
                         e.stopPropagation();
-                        const actId = btn.dataset.id;
+                        const isCancel = btn.textContent === '取消报名';
                         btn.disabled = true;
-                        btn.textContent = '报名中...';
+                        btn.textContent = isCancel ? '取消中...' : '报名中...';
                         try {
-                            const res = await api.signupActivity(actId);
-                            if (res.success) {
-                                btn.textContent = '已报名';
-                                btn.classList.remove('btn-primary');
-                                btn.classList.add('btn-disabled');
+                            let res;
+                            if (isCancel) {
+                                res = await api.cancelActivitySignup(actId);
+                                if (res.success) {
+                                    btn.textContent = '立即报名';
+                                    btn.classList.remove('btn-danger');
+                                    btn.classList.add('btn-primary');
+                                }
                             } else {
-                                alert(res.error?.message || '报名失败');
-                                btn.disabled = false;
-                                btn.textContent = '立即报名';
+                                res = await api.signupActivity(actId);
+                                if (res.success) {
+                                    btn.textContent = '取消报名';
+                                    btn.classList.remove('btn-primary');
+                                    btn.classList.add('btn-danger');
+                                }
                             }
-                        } catch (err) {
-                            alert('报名失败，请稍后重试');
+                            if (!res.success) {
+                                alert(res.error?.message || (isCancel ? '取消失败' : '报名失败'));
+                                btn.textContent = isCancel ? '取消报名' : '立即报名';
+                            }
                             btn.disabled = false;
-                            btn.textContent = '立即报名';
+                        } catch (err) {
+                            alert(isCancel ? '取消失败，请稍后重试' : '报名失败，请稍后重试');
+                            btn.disabled = false;
+                            btn.textContent = isCancel ? '取消报名' : '立即报名';
                         }
                     });
                 });
@@ -305,6 +353,11 @@ export class CommunityPage {
                     <div class="form-group">
                         <label>密码</label>
                         <input type="password" id="loginPassword" class="form-input" placeholder="请输入密码" autocomplete="current-password">
+                    </div>
+                    <div class="form-group form-group-row">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="loginRemember"> 记住我（7天内免登录）
+                        </label>
                     </div>
                     <button class="btn btn-primary btn-block" id="submitLogin">登录</button>
                     <p class="form-error" id="loginError" style="display:none"></p>
@@ -346,10 +399,11 @@ export class CommunityPage {
         document.getElementById('submitLogin').addEventListener('click', async () => {
             const username = document.getElementById('loginUsername').value.trim();
             const password = document.getElementById('loginPassword').value;
+            const remember = document.getElementById('loginRemember')?.checked || false;
             const errEl = document.getElementById('loginError');
             if (!username || !password) { errEl.textContent = '请填写用户名和密码'; errEl.style.display = 'block'; return; }
             try {
-                const data = await api.login(username, password);
+                const data = await api.login(username, password, remember);
                 if (data.success) {
                     overlay.remove();
                     this._user = data.user;

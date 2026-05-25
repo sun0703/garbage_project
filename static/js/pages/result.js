@@ -12,6 +12,7 @@ import { store } from '../store.js';
 import { showToast, showModal, confirm } from '../utils/ui.js';
 import { ResultCard } from '../components/result-card.js';
 import { CategoryTag } from '../components/category-tag.js';
+import { storage } from '../utils/storage.js';
 
 // ==================== 页面类定义 ====================
 export class ResultPage {
@@ -49,7 +50,8 @@ export class ResultPage {
         this._render();
         /* 渲染组件内容 */
         this._renderComponents();
-        /* 历史记录已由后端 /api/predict 自动保存，前端不再重复写入 */
+        /* F-1.5.1 保存识别结果到本地历史记录 (localStorage) */
+        this._saveToLocalHistory(predictResult);
         /* 绑定按钮事件 */
         this._bindEvents();
 
@@ -322,5 +324,23 @@ export class ResultPage {
         text += `由 YOLOv8 深度学习引擎提供支持`;
 
         return text;
+    }
+
+    _saveToLocalHistory(predictResult) {
+        try {
+            const imgDataUrl = store.get('selectedImage');
+            storage.saveHistory({
+                thumbnail: imgDataUrl || '',
+                category: predictResult.category || '未知类别',
+                category_id: predictResult.category_id ?? 0,
+                confidence: predictResult.confidence || 0,
+                item_name: predictResult.label_cn || predictResult.label_en || '未知物品',
+                bin_color: predictResult.bin_color || '#666',
+                guidance: predictResult.guidance || ''
+            });
+            console.log('[ResultPage] 已保存识别记录到 localStorage (F-1.5.1)');
+        } catch (e) {
+            console.warn('[ResultPage] 保存本地历史失败:', e);
+        }
     }
 }

@@ -11,6 +11,8 @@ import { store } from '../store.js';
 import { api } from '../api.js';
 import { ImageProcessor } from '../utils/image.js';
 import { showToast, showLoading, hideLoading } from '../utils/ui.js';
+import { VoiceButton } from '../components/voice-btn.js';
+import { SearchSuggest } from '../components/search-suggest.js';
 
 // ==================== 页面类定义 ====================
 export class HomePage {
@@ -34,6 +36,9 @@ export class HomePage {
 
     /** 绑定的事件处理器引用集合，用于 destroy 时移除 */
     _boundHandlers = {};
+
+    /** 搜索联想下拉组件实例 */
+    _suggest = null;
 
     /**
      * 初始化首页视图
@@ -78,6 +83,12 @@ export class HomePage {
         // 移除搜索回车事件
         if (this.searchInput) {
             this.searchInput.removeEventListener('keydown', this._boundHandlers.keydown);
+        }
+
+        // 销毁搜索联想组件
+        if (this._suggest) {
+            this._suggest.destroy();
+            this._suggest = null;
         }
 
         // 移除粘贴事件（全局）
@@ -238,7 +249,22 @@ export class HomePage {
         }
 
         /* ---- 粘贴上传事件 (F-1.2.6) ---- */
-        this._boundHandlers.paste = (e) => this._handlePaste(e);
+        this._boundHandlers.paste = (e) => {
+            this._handlePaste(e);
+            // 显示粘贴成功提示
+            const items = e.clipboardData?.items;
+            if (items) {
+                for (const item of items) {
+                    if (item.type.startsWith('image/')) {
+                        const file = item.getAsFile();
+                        if (file) {
+                            showToast(`已粘贴图片: ${file.name || '截图'}`, 'success', 1500);
+                            break;
+                        }
+                    }
+                }
+            }
+        };
         document.addEventListener('paste', this._boundHandlers.paste);
 
         /* ---- 搜索回车跳转 ---- */
@@ -256,10 +282,38 @@ export class HomePage {
             this.searchInput.addEventListener('keydown', this._boundHandlers.keydown);
         }
 
-        /* ---- 语音按钮占位（阶段二实现）---- */
+        /* 搜索联想下拉 (F-2.2.3) */
+        this._suggest = new SearchSuggest({
+            inputEl: this.searchInput,
+            onSelect: (keyword) => {
+                store.set('searchQuery', keyword);
+                window.location.hash = '#/search?q=' + encodeURIComponent(keyword);
+            }
+        });
+
+        /* ---- 语音按钮（Web Speech API + ASR 纠错）---- */
         if (this.voiceBtn) {
-            this.voiceBtn.addEventListener('click', () => {
-                showToast('语音识别功能即将上线，敬请期待');
+            // 初始化语音识别按钮组件
+            this._voiceButton = new VoiceButton({
+                btnEl: this.voiceBtn,
+                onResult: (corrected, changed, original) => {
+                    console.log(`[HomePage] 语音识别: ${original}${changed ? ' → ' + corrected : ''}`);
+
+                    // 将纠错后的文本填入搜索框并触发搜索
+                    if (this.searchInput) {
+                        this.searchInput.value = corrected;
+                        // 存储到 store 并跳转搜索页
+                        store.set('searchQuery', corrected);
+                        window.location.hash = '#/search?q=' + encodeURIComponent(corrected);
+                    }
+
+                    if (changed) {
+                        showToast(`已自动纠正: "${original}" → "${corrected}"`, 'success', 2000);
+                    }
+                },
+                onError: (errorCode, message) => {
+                    console.warn('[HomePage] 语音识别错误:', errorCode, message);
+                },
             });
         }
     }

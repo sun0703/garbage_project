@@ -500,9 +500,9 @@ class ApiClient {
         });
     }
 
-    async login(username, password) {
+    async login(username, password, remember = false) {
         return this.request('POST', '/api/auth/login', {
-            body: { username, password }
+            body: { username, password, remember }
         });
     }
 
@@ -568,6 +568,22 @@ class ApiClient {
 
     async checkActivitySignup(activityId) {
         return this.request('GET', `/api/activities/${activityId}/signed`);
+    }
+
+    async createActivity(activityData) {
+        return this.request('POST', '/api/activities', { body: activityData });
+    }
+
+    async updateActivity(activityId, activityData) {
+        return this.request('PUT', `/api/activities/${activityId}`, { body: activityData });
+    }
+
+    async deleteActivity(activityId) {
+        return this.request('DELETE', `/api/activities/${activityId}`);
+    }
+
+    async cancelActivitySignup(activityId) {
+        return this.request('POST', `/api/activities/${activityId}/cancel`);
     }
 }
 

@@ -1,4 +1,4 @@
-"""
+﻿"""
 校园生活垃圾智能分类识别系统 - 后端主程序（增强版）
 技术栈：FastAPI + Uvicorn + ONNX Runtime + FuzzyWuzzy + Pillow + OpenCV
 功能：图像分类识别 + 语音/文字模糊搜索 + 智能演示模式
@@ -13,6 +13,7 @@ import base64
 import hashlib
 import json
 import logging
+import os
 import random
 import time
 import threading
@@ -20,18 +21,28 @@ import uuid
 from collections import OrderedDict
 from io import BytesIO
 from pathlib import Path
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple
 
 import cv2
 import imagehash
 import numpy as np
 import onnxruntime as ort
 import uvicorn
-from fastapi import FastAPI, Query, Request, Cookie, Response
+from fastapi import FastAPI, Query, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 from fastapi.staticfiles import StaticFiles
 from fuzzywuzzy import process as fuzz_process
+
+# ==================== 拼音库导入（带 fallback） ====================
+try:
+    from pypinyin import lazy_pinyin, Style
+    _PINYIN_AVAILABLE = True
+except ImportError:
+    _PINYIN_AVAILABLE = False
+    # fallback：当 pypinyin 不可用时，使用手动映射表
+    lazy_pinyin = None  # type: ignore
+    Style = None  # type: ignore
 
 from db import db
 from PIL import Image
@@ -57,7 +68,7 @@ USE_YOLO_PT_MODEL = True  # 使用PyTorch格式模型（推荐）
 # USE_YOLO_PT_MODEL = False
 VOCAB_PATH = BASE_DIR / "data" / "waste.json"
 STATIC_DIR = BASE_DIR / "static"
-INDEX_HTML_PATH = BASE_DIR / "index.html"
+INDEX_HTML_PATH = STATIC_DIR / "index.html"
 
 INPUT_SIZE = (224, 224)
 YOLO_INPUT_SIZE = (640, 640)
@@ -241,90 +252,149 @@ FOOD_WASTE_KEYWORDS = ["果皮", "菜叶", "剩饭", "剩菜", "骨头", "蛋壳
 HAZARDOUS_KEYWORDS = ["电池", "灯管", "药品", "油漆", "农药", "化学品", "温度计", "血压计", "充电宝", "荧光灯"]
 
 
-# ==================== 请求限流中间件 ====================
+# ==================== 请求限流中间件（增强版） ====================
 
 class RateLimiter:
     """
-    基于滑动窗口的IP级请求限流器
+    基于滑动窗口算法的 IP 级请求限流器（增强版）
 
-    使用固定窗口 + 计数器方案，按客户端IP地址独立统计请求频率。
-    窗口到期后自动清理过期记录，防止内存泄漏。
+    特性：
+    - 支持按 API 路径设置不同的限流策略
+    - 使用滑动时间窗口确保精确的速率控制
+    - 自动清理过期记录防止内存泄漏
+    - 支持白名单 IP 跳过限流
+    - 提供详细的限流状态信息用于响应头
 
-    设计说明：
-    - 不引入第三方依赖（如slowapi），保持项目轻量
-    - 单进程内存存储，适合MVP阶段单实例部署
-    - 生产环境建议替换为Redis分布式限流
+    生产环境建议替换为 Redis 分布式限流
     """
 
-    def __init__(self, max_requests: int = 30, window_seconds: int = 60):
+    # 不同路径的限流配置：{路径前缀: (最大请求数, 时间窗口秒数)}
+    PATH_LIMITS = {
+        "/api/predict": (20, 60),        # 预测接口：每分钟20次（计算密集型）
+        "/api/batch_predict": (10, 60),   # 批量预测：每分钟10次
+        "/api/search": (30, 60),          # 搜索接口：每分钟30次
+        "/api/auth/": (10, 60),           # 认证接口：每分钟10次（防暴力破解）
+        "default": (30, 60),              # 默认：每分钟30次
+    }
+
+    def __init__(self, default_max_requests: int = 30, default_window_seconds: int = 60):
         """
         初始化限流器
 
-        @param max_requests: 窗口内允许的最大请求数（默认30次）
-        @param window_seconds: 统计窗口时长（默认60秒，即1分钟）
+        @param default_max_requests: 默认窗口内允许的最大请求数
+        @param default_window_seconds: 默认统计窗口时长（秒）
         """
-        self.max_requests = max_requests
-        self.window_seconds = window_seconds
-        # 存储结构：{ client_ip: [timestamp1, timestamp2, ...] }
-        self._requests: dict[str, list[float]] = {}
+        self.default_max_requests = default_max_requests
+        self.default_window_seconds = default_window_seconds
+        # 存储结构：{ client_ip: { path_prefix: [timestamp1, timestamp2, ...] } }
+        self._requests: dict[str, dict[str, list[float]]] = {}
         self._lock = threading.Lock()
+        # 白名单 IP 集合（如本地开发、测试服务器）
+        self._whitelist: set[str] = {"127.0.0.1", "::1", "localhost"}
 
-    def is_allowed(self, client_ip: str) -> tuple[bool, dict]:
+    def add_whitelist(self, ip: str):
+        """添加白名单 IP"""
+        self._whitelist.add(ip)
+
+    def remove_whitelist(self, ip: str):
+        """移除白名单 IP"""
+        self._whitelist.discard(ip)
+
+    def _get_limit_for_path(self, path: str) -> tuple[int, int]:
+        """根据路径获取对应的限流配置"""
+        for prefix, limit in self.PATH_LIMITS.items():
+            if prefix != "default" and path.startswith(prefix):
+                return limit
+        return (self.default_max_requests, self.default_window_seconds)
+
+    def is_allowed(self, client_ip: str, path: str = "") -> tuple[bool, dict]:
         """
         判断当前请求是否允许通过
 
-        @param client_ip: 客户端IP地址
+        @param client_ip: 客户端 IP 地址
+        @param path: 请求路径（用于分级限流）
         @return tuple[是否允许, 限制信息字典]
-            限制信息包含：
-            - remaining: 剩余可用次数
-            - reset_time: 窗口重置时间戳
-            - retry_after: 被拒绝时的等待秒数
         """
+        # 白名单 IP 直接放行
+        if client_ip in self._whitelist:
+            return True, {
+                "remaining": 999,
+                "reset_time": 0,
+                "retry_after": 0,
+                "whitelisted": True,
+            }
+
         now = time.time()
-        window_start = now - self.window_seconds
+        max_req, window_sec = self._get_limit_for_path(path)
+        window_start = now - window_sec
 
         with self._lock:
             if client_ip not in self._requests:
-                self._requests[client_ip] = []
+                self._requests[client_ip] = {}
 
-            # 清理窗口外的过期记录 
-            self._requests[client_ip] = [
-                t for t in self._requests[client_ip] if t > window_start
-            ]
+            # 获取或创建该路径的记录列表
+            path_key = path or "default"
+            if path_key not in self._requests[client_ip]:
+                self._requests[client_ip][path_key] = []
 
-            current_count = len(self._requests[client_ip])
+            timestamps = self._requests[client_ip][path_key]
 
-            if current_count >= self.max_requests:
-                # 已达上限，计算等待时间 
-                oldest = min(self._requests[client_ip])
-                retry_after = int(oldest + self.window_seconds - now) + 1
+            # 清理窗口外的过期记录（滑动窗口核心）
+            timestamps[:] = [t for t in timestamps if t > window_start]
+
+            current_count = len(timestamps)
+
+            if current_count >= max_req:
+                # 已达上限，计算等待时间
+                oldest = min(timestamps)
+                retry_after = int(oldest + window_sec - now) + 1
                 return False, {
                     "remaining": 0,
-                    "reset_time": oldest + self.window_seconds,
+                    "reset_time": oldest + window_sec,
                     "retry_after": retry_after,
+                    "limit": max_req,
+                    "window": window_sec,
+                    "current": current_count,
                 }
 
-            # 记录本次请求 
-            self._requests[client_ip].append(now)
-            remaining = self.max_requests - len(self._requests[client_ip])
+            # 记录本次请求时间戳
+            timestamps.append(now)
+            remaining = max_req - len(timestamps)
             return True, {
                 "remaining": remaining,
-                "reset_time": now + self.window_seconds,
+                "reset_time": now + window_sec,
                 "retry_after": 0,
+                "limit": max_req,
+                "window": window_sec,
+                "current": len(timestamps),
             }
 
     def cleanup_stale_ips(self):
-        """清理长时间无活动的IP记录，释放内存"""
+        """清理长时间无活动的 IP 记录，释放内存"""
         now = time.time()
-        stale_threshold = now - self.window_seconds * 2
+        max_window = max(w for _, (_, w) in self.PATH_LIMITS.items())
+        stale_threshold = now - max_window * 2
 
         with self._lock:
             stale_ips = [
-                ip for ip, timestamps in self._requests.items()
-                if timestamps and max(timestamps) < stale_threshold
+                ip for ip, paths in self._requests.items()
+                if ip not in self._whitelist and
+                   all(
+                       not ts or max(ts) < stale_threshold
+                       for ts in paths.values()
+                   )
             ]
             for ip in stale_ips:
                 del self._requests[ip]
+
+    def get_stats(self) -> dict:
+        """获取限流器统计信息（用于监控）"""
+        with self._lock:
+            return {
+                "total_tracked_ips": len(self._requests),
+                "whitelisted_ips": list(self._whitelist),
+                "path_limits": self.PATH_LIMITS,
+            }
 
 
 # ==================== FastAPI 应用实例 ====================
@@ -345,57 +415,48 @@ app.add_middleware(
 )
 
 
-@app.middleware("http")
-async def rate_limit_middleware(request, call_next):
-    from starlette.requests import Request
-    if not isinstance(request, Request):
-        return await call_next(request)
 
-    if request.url.path.startswith("/api/"):
-        client_ip = request.client.host if request.client else "unknown"
-        allowed, remaining = _check_rate_limit(client_ip)
 
-        if not allowed:
-            return JSONResponse(
-                status_code=429,
-                content={
-                    "success": False,
-                    "error": {
-                        "code": "E429",
-                        "message": "请求过于频繁，请稍后再试",
-                    },
-                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                },
-                headers={"Retry-After": str(remaining)},
-            )
-
-        response = await call_next(request)
-        response.headers["X-RateLimit-Limit"] = str(RATE_LIMIT_MAX_REQUESTS)
-        response.headers["X-RateLimit-Remaining"] = str(remaining)
-        return response
-
-    return await call_next(request)
 
 
 # 全局限流器实例：每IP每分钟最多30次请求
-_rate_limiter = RateLimiter(max_requests=30, window_seconds=60)
+_rate_limiter = RateLimiter(default_max_requests=30, default_window_seconds=60)
 
 
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
-    """HTTP中间件：对所有API路径执行请求频率检查，超限返回429"""
+    """HTTP 中间件：对所有 API 路径执行请求频率检查（增强版）
+
+    特性：
+    - 按路径分级限流（预测接口更严格）
+    - 白名单 IP 自动跳过
+    - 响应头包含完整的限流状态信息
+    - 支持 X-Forwarded-For 代理头
+    """
     path = request.url.path
 
+    # OPTIONS 预检请求和 非 API 路径直接放行
     if not path.startswith("/api/") or request.method == "OPTIONS":
         return await call_next(request)
 
+    # 支持代理场景的 IP 提取优先级：X-Forwarded-For > X-Real-IP > 直连 IP
     forwarded = request.headers.get("x-forwarded-for", "")
     real_ip = request.headers.get("x-real-ip", "")
-    client_ip = forwarded.split(",")[0].strip() if forwarded else (real_ip or request.client.host if request.client else "unknown")
+    client_ip = (
+        forwarded.split(",")[0].strip()
+        if forwarded
+        else (real_ip or request.client.host if request.client else "unknown")
+    )
 
-    allowed, info = _rate_limiter.is_allowed(client_ip)
+    # 调用增强版限流器（传入请求路径用于分级限流）
+    allowed, info = _rate_limiter.is_allowed(client_ip, path)
 
     if not allowed:
+        logger.warning(
+            "⚠️ 限流触发: IP=%s, 路径=%s, 窗口内请求=%d/%d, 等待%ds",
+            client_ip, path, info.get("current", 0), info.get("limit", 0),
+            info.get("retry_after", 0)
+        )
         return JSONResponse(
             status_code=429,
             content={
@@ -403,24 +464,30 @@ async def rate_limit_middleware(request: Request, call_next):
                 "error": {
                     "code": "E005",
                     "message": "操作过于频繁，请稍后再试",
-                    "detail": f"每分钟最多{_rate_limiter.max_requests}次请求",
+                    "detail": f"每{info.get('window', 60)}秒最多{info.get('limit', 30)}次请求",
                 },
                 "data": None,
             },
             headers={
                 "Retry-After": str(info["retry_after"]),
-                "X-RateLimit-Limit": str(_rate_limiter.max_requests),
+                "X-RateLimit-Limit": str(info.get("limit", 30)),
                 "X-RateLimit-Remaining": "0",
                 "X-RateLimit-Reset": str(int(info["reset_time"])),
+                "X-RateLimit-Policy": f"{info.get('limit', 30)};w={info.get('window', 60)}",
             },
         )
 
+    # 执行实际请求处理
     response = await call_next(request)
-    response.headers["X-RateLimit-Limit"] = str(_rate_limiter.max_requests)
-    response.headers["X-RateLimit-Remaining"] = str(info["remaining"])
-    response.headers["X-RateLimit-Reset"] = str(int(info["reset_time"]))
 
-    if info["remaining"] == 0 or random.random() < 0.01:
+    # 在响应头中附加限流状态信息（便于前端展示和调试）
+    response.headers["X-RateLimit-Limit"] = str(info.get("limit", 30))
+    response.headers["X-RateLimit-Remaining"] = str(info.get("remaining", 0))
+    response.headers["X-RateLimit-Reset"] = str(int(info["reset_time"]))
+    response.headers["X-RateLimit-Policy"] = f"{info.get('limit', 30)};w={info.get('window', 60)}"
+
+    # 低频清理过期数据（避免每次请求都清理）
+    if info.get("remaining", 0) == 0 or random.random() < 0.01:
         _rate_limiter.cleanup_stale_ips()
 
     return response
@@ -792,7 +859,7 @@ class ImageFeatureAnalyzer:
             return "red"
     
     @staticmethod
-    def _get_brightness_v2(img_array: np.ndarray, gray: np.ndarray) -> float:
+    def _get_brightness_v2(_img_array: np.ndarray, gray: np.ndarray) -> float:
         """计算图像的平均亮度 v2.0（带区域分析，更可靠）"""
         # 全局亮度
         global_brightness = float(np.mean(gray)) / 255.0
@@ -848,7 +915,7 @@ class ImageFeatureAnalyzer:
         return score >= 2
     
     @staticmethod
-    def _detect_metallic_v4(img_array: np.ndarray, gray: np.ndarray, brightness: float) -> bool:
+    def _detect_metallic_v4(img_array: np.ndarray, gray: np.ndarray, _brightness: float) -> bool:
         """
         检测金属光泽特征 v4.0（重大改进）
         
@@ -1507,7 +1574,7 @@ class VisionEngine:
         predictions = output[0].transpose(1, 0)  # [8400, channels]
 
         # 提取边界框和类别概率（原始logits）
-        boxes = predictions[:, :4]  # [cx, cy, w, h]
+        _ = predictions[:, :4]  # [cx, cy, w, h] 暂未使用，保留用于后续目标检测扩展
         class_logits = predictions[:, 4:]  # [class_0, class_1, ..., class_N] (原始logits)
 
         # ⭐ 关键修复：对类别logits应用sigmoid激活，转换为概率
@@ -1598,7 +1665,7 @@ class VisionEngine:
             "is_demo_mode": True,
         }
     
-    def _map_to_waste_category(self, imagenet_index: int, confidence: float) -> int:
+    def _map_to_waste_category(self, imagenet_index: int, _confidence: float) -> int:
         """将ImageNet类别映射到垃圾类别（保留作为后备方案）"""
         if 700 <= imagenet_index <= 999:
             return 0
@@ -1618,15 +1685,31 @@ class VisionEngine:
 
 # ==================== 模糊搜索引擎 ====================
 class SearchEngine:
-    """基于FuzzyWuzzy的模糊搜索引擎"""
+    """
+    基于FuzzyWuzzy的模糊搜索引擎（增强版：支持拼音首字母搜索）
+    
+    功能特性：
+    - FuzzyWuzzy 模糊匹配
+    - 别名索引加速
+    - 拼音首字母搜索（需求 F-2.2.1）
+    """
 
     def __init__(self, vocab_path: str):
         self.vocab: list[dict] = []
         self.vocab_labels: list[str] = []
+        # 别名索引：别名 → 主标签
+        self._alias_to_label: dict[str, str] = {}
+        # 拼音首字母索引：拼音缩写 → [item, ...]
+        self._pinyin_index: dict[str, list[dict]] = {}
         self._load_vocab(vocab_path)
 
     def _load_vocab(self, vocab_path: str) -> None:
-        """加载词库"""
+        """
+        加载词库并构建索引（别名索引 + 拼音首字母索引）
+        
+        Args:
+            vocab_path: 词库 JSON 文件路径
+        """
         vocab_file = Path(vocab_path)
         if not vocab_file.exists():
             logger.warning("词库文件不存在: %s", vocab_path)
@@ -1642,23 +1725,185 @@ class SearchEngine:
                 for alias in item.get("aliases", []):
                     if alias and alias not in self._alias_to_label:
                         self._alias_to_label[alias] = item["label"]
-            logger.info("词库加载成功: %d 条记录, %d 个别名索引", len(self.vocab), len(self._alias_to_label))
+            # 构建拼音首字母索引（需求 F-2.2.1）
+            self._build_pinyin_index()
+            logger.info(
+                "词库加载成功: %d 条记录, %d 个别名索引, %d 个拼音索引",
+                len(self.vocab), len(self._alias_to_label), len(self._pinyin_index)
+            )
         except Exception as e:
             logger.error("词库加载失败: %s", e)
 
+    def _get_pinyin_first_letters(self, text: str) -> str:
+        """
+        获取中文文本的拼音首字母缩写
+        
+        Args:
+            text: 输入文本（中文/混合）
+            
+        Returns:
+            拼音首字母拼接字符串，如 "slp"（塑料瓶）
+        """
+        if not text:
+            return ""
+        
+        # 优先使用 pypinyin 库
+        if _PINYIN_AVAILABLE and lazy_pinyin is not None:
+            try:
+                py_list = lazy_pinyin(text, style=Style.FIRST_LETTER)
+                return "".join(py_list).lower()
+            except Exception:
+                pass
+        
+        # fallback：使用手动映射表（覆盖常见垃圾分类词汇）
+        return self._fallback_pinyin(text)
+
+    @staticmethod
+    def _fallback_pinyin(text: str) -> str:
+        """
+        pypinyin 不可用时的手动拼音映射（fallback 方案）
+        
+        覆盖垃圾分类领域高频词汇，保证核心功能可用性。
+        
+        Args:
+            text: 输入文本
+            
+        Returns:
+            拼音首字母缩写
+        """
+        # 常用字拼音首字母映射表（按使用频率排序）
+        char_pinyin_map = {
+            # 垃圾分类高频字
+            "塑": "s", "料": "l", "瓶": "p", "袋": "d", "纸": "z", "箱": "x",
+            "盒": "h", "罐": "g", "杯": "b", "碗": "w", "筷": "k", "勺": "sh",
+            "盘": "p", "碟": "d", "巾": "j", "尿": "n", "布": "b", "鞋": "x",
+            "帽": "m", "衣": "y", "裤": "k", "袜": "w", "书": "sh", "本": "b",
+            "报": "b", "杂": "z", "志": "z", "电": "d", "池": "ch", "灯": "d",
+            "管": "g", "药": "y", "片": "p", "烟": "y", "蒂": "d", "骨": "g",
+            "头": "t", "壳": "k", "核": "h", "皮": "p", "叶": "y", "根": "g",
+            "菜": "c", "饭": "f", "剩": "sh", "菜": "c", "果": "g", "渣": "zh",
+            "茶": "ch", "渣": "zh", "瓷": "c", "陶": "t", "瓦": "w", "灰": "h",
+            "土": "t", "尘": "ch", "玻": "b", "璃": "l", "金": "j", "属": "sh",
+            "铝": "l", "铁": "t", "铜": "t", "易": "y", "拉": "l", "饮": "y",
+            "矿": "k", "泉": "q", "洗": "x", "发": "f", "沐": "m", "露": "l",
+            "保": "b", "温": "w", "快": "k", "递": "d", "包": "b", "装": "zh",
+            "泡": "p", "沫": "m", "牛": "n", "奶": "n", "方": "f", "便": "b",
+            "面": "m", "桶": "t", "苹": "p", "香": "x", "蕉": "j", "橙": "ch",
+            "西": "x", "瓜": "g", "面": "m", "包": "b", "枯": "k", "枝": "zh",
+            "落": "l", "杂": "z", "草": "c", "旧": "j", "玩": "w", "具": "j",
+            "器": "q", "一": "y", "次": "c", "性": "x", "餐": "c", "具": "j",
+            "破": "p", "碎": "s", "陶": "t", "用": "y", "过": "g", "的": "d",
+            "作": "z", "业": "y", "打": "d", "印": "y", "胶": "j", "带": "d",
+            "绳": "sh", "线": "x", "纽": "n", "扣": "k", "拉": "l", "链": "l",
+            "牙": "y", "刷": "sh", "膏": "g", "口": "k", "红": "h", "蜡": "l",
+            "笔": "b", "橡皮": "xp", "擦": "c", "宠": "ch", "物": "w", "食": "sh",
+            "创": "ch", "可": "k", "贴": "t", "图": "t", "画": "h", "复": "f",
+            "印": "y", "纸": "z", "受": "sh", "污": "w", "染": "r", "的": "d",
+            "废": "f", "旧": "j", "家": "j", "具": "j", "电": "d", "视": "sh",
+            "冰": "b", "箱": "x", "空": "k", "调": "d", "洗": "x", "衣": "y",
+            "机": "j", "热": "r", "水": "sh", "器": "q", "微": "w", "波": "b",
+            "炉": "l", "手": "sh", "机": "j", "计": "j", "算": "s", "机": "j",
+        }
+        
+        result = []
+        for char in text:
+            if char in char_pinyin_map:
+                result.append(char_pinyin_map[char])
+            # 跳过非中文字符（标点、数字、英文等）
+        return "".join(result).lower()
+
+    def _build_pinyin_index(self) -> None:
+        """
+        构建拼音首字母索引（需求 F-2.2.1）
+        
+        遍历词库中所有物品的主标签和别名，
+        为每个文本生成拼音首字母缩写作为索引键，
+        支持用户通过拼音缩写快速搜索（如输入 'slp' 查找'塑料瓶'）。
+        """
+        self._pinyin_index.clear()
+        index_count = 0
+        
+        for item in self.vocab:
+            # 处理主标签的拼音索引
+            label = item.get("label", "")
+            if label:
+                py_key = self._get_pinyin_first_letters(label)
+                if py_key:
+                    if py_key not in self._pinyin_index:
+                        self._pinyin_index[py_key] = []
+                    # 避免重复添加同一 item
+                    if not any(existing["label"] == label for existing in self._pinyin_index[py_key]):
+                        self._pinyin_index[py_key].append(item)
+                        index_count += 1
+            
+            # 处理别名的拼音索引
+            for alias in item.get("aliases", []):
+                if alias:
+                    alias_py_key = self._get_pinyin_first_letters(alias)
+                    if alias_py_key and alias_py_key != py_key:
+                        if alias_py_key not in self._pinyin_index:
+                            self._pinyin_index[alias_py_key] = []
+                        if not any(existing["label"] == item["label"] for existing in self._pinyin_index[alias_py_key]):
+                            self._pinyin_index[alias_py_key].append(item)
+                            index_count += 1
+        
+        logger.info("拼音索引构建完成: %d 条索引项, 覆盖 %d 个拼音键", index_count, len(self._pinyin_index))
+
     def search(self, query: str, top_k: int = 3) -> list[dict]:
-        """执行模糊搜索（同时搜索主标签和别名）"""
+        """
+        执行智能搜索（支持中文/别名模糊匹配 + 拼音首字母搜索）
+        
+        搜索策略：
+        1. 纯字母模式检测 → 优先走拼音索引
+        2. 常规模式 → FuzzyWuzzy 模糊匹配
+        3. 结果合并去重，保证向后兼容
+        
+        Args:
+            query: 搜索关键词
+            top_k: 返回结果数量上限
+            
+        Returns:
+            匹配的物品列表，按相似度降序排列
+        """
+        import re
+        
         if not self.vocab_labels:
             return []
 
+        query_stripped = query.strip()
+        matched = []
+        seen_labels = set()
+        
+        # ========== 拼音首字母搜索（需求 F-2.2.1） ==========
+        # 检测纯小写字母输入，触发拼音搜索模式
+        is_pinyin_mode = bool(re.match(r'^[a-z]+$', query_stripped))
+        
+        if is_pinyin_mode and self._pinyin_index:
+            pinyin_results = self._search_by_pinyin(query_stripped, top_k)
+            
+            # 记录拼音匹配日志
+            if pinyin_results:
+                logger.info(
+                    "拼音搜索命中: query='%s' → %d 条结果 [%s]",
+                    query_stripped,
+                    len(pinyin_results),
+                    ", ".join([r["label"] for r in pinyin_results])
+                )
+            
+            # 将拼音结果加入最终结果集（标记为拼音匹配来源）
+            for item in pinyin_results:
+                label = item["label"]
+                if label not in seen_labels:
+                    seen_labels.add(label)
+                    matched.append({**item, "similarity_score": 95, "match_source": "pinyin"})
+        
+        # ========== FuzzyWuzzy 模糊匹配（原有逻辑保持不变） ==========
         # 构建合并搜索池：主标签 + 别名
         all_searchable = list(self.vocab_labels)
         alias_list = list(self._alias_to_label.keys())
         all_searchable.extend(alias_list)
 
         raw_results = fuzz_process.extract(query, all_searchable, limit=top_k * 2)
-        matched = []
-        seen_labels = set()
 
         for match_text, score in raw_results:
             # 如果匹配到的是别名，映射回主标签
@@ -1667,18 +1912,59 @@ class SearchEngine:
             else:
                 main_label = match_text
 
-            # 去重：同一主标签只保留最高分
+            # 去重：同一主标签只保留最高分（拼音结果优先）
             if main_label in seen_labels:
                 continue
             seen_labels.add(main_label)
 
             item = next((v for v in self.vocab if v["label"] == main_label), None)
             if item:
-                matched.append({**item, "similarity_score": score})
+                matched.append({**item, "similarity_score": score, "match_source": "fuzzy"})
             if len(matched) >= top_k:
                 break
 
         return matched
+
+    def _search_by_pinyin(self, pinyin_query: str, top_k: int) -> list[dict]:
+        """
+        通过拼音首字母索引执行精确/前缀匹配
+        
+        支持两种匹配模式：
+        - 精确匹配：查询键完全等于索引键（如 'slp' 匹配 'slp'）
+        - 前缀匹配：查询键是索引键的前缀（如 'sl' 匹配 'slp'、'sld'）
+        
+        Args:
+            pinyin_query: 拼音首字母查询字符串（如 'slp'）
+            top_k: 返回结果数量上限
+            
+        Returns:
+            匹配的物品列表
+        """
+        results = []
+        seen_labels = set()
+        pinyin_query_lower = pinyin_query.lower()
+        
+        # 第一轮：精确匹配
+        if pinyin_query_lower in self._pinyin_index:
+            for item in self._pinyin_index[pinyin_query_lower]:
+                if item["label"] not in seen_labels:
+                    results.append(item)
+                    seen_labels.add(item["label"])
+        
+        # 第二轮：前缀匹配（精确匹配无结果或结果不足时）
+        if len(results) < top_k:
+            for index_key, items in self._pinyin_index.items():
+                if index_key.startswith(pinyin_query_lower) and index_key != pinyin_query_lower:
+                    for item in items:
+                        if item["label"] not in seen_labels:
+                            results.append(item)
+                            seen_labels.add(item["label"])
+                        if len(results) >= top_k * 2:
+                            break
+                if len(results) >= top_k * 2:
+                    break
+        
+        return results[:top_k]
 
     def get_by_yolo_label(self, yolo_label: str) -> Optional[dict]:
         """根据标签查找"""
@@ -1953,8 +2239,48 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
                            original_class_id, class_name_cn, category_4class,
                            raw_confidence * 100, adjusted_confidence * 100)
             else:
+                # ============================================================
                 # YOLO未检测到有效目标（class_index=-1 或未知类别）
-                # → 降级到图像特征分析模式，而非直接返回默认分类
+                # → 进入降级模式处理流程
+                #
+                # 【当前降级策略 - 阶段五】
+                # 使用 ImageFeatureAnalyzer 进行图像特征分析，基于颜色、透明度、
+                # 金属光泽、长宽比等视觉特征进行启发式分类。
+                # 此模式标记为 is_demo_mode=True，向前端明确标识为非模型推理结果。
+                #
+                # 【未来技术方向 - 阶段六预留】ONNX Runtime Web (WASM) 前端本地推理
+                # ┌─────────────────────────────────────────────────────────────┐
+                # │ 技术方案概述:                                                │
+                # │   将 ONNX 格式的轻量级垃圾分类模型部署到浏览器端运行          │
+                # │   使用 onnxruntime-web 库（基于 WebAssembly / WebGL 加速）    │
+                # │                                                             │
+                # │ 核心优势:                                                    │
+                # │   1. 完全离线运行 - 无需后端 GPU/服务器资源                   │
+                # │   2. 低延迟推理 - 消除网络传输开销（<100ms 本地推理）           │
+                # │   3. 隐私保护 - 图像数据不上传服务器                          │
+                # │   4. 可扩展性 - 支持多模型并行加载（分类+检测）                 │
+                # │                                                             │
+                # │ 实现架构:                                                    │
+                # │   前端 (static/js/)                                          │
+                # │     ├── models/waste-classifier.onnx   # 轻量分类模型 (~5MB) │
+                # │     ├── utils/onnx-engine.js         # ONNX 推理引擎封装      │
+                # │     └── components/wasm-predictor.js  # WASM 推理组件         │
+                # │                                                             │
+                # │   后端 (main.py)                                             │
+                # │     ├── GET  /api/models/latest       # 模型版本检查接口      │
+                # │     └── POST /api/models/upload       # 模型热更新接口        │
+                # │                                                             │
+                # │ 降级链路设计:                                                │
+                # │   YOLOv8 服务端推理 → 特征分析(当前) → WASM 本地推理(未来)    │
+                # │   每层降级都记录 reasoning 字段，便于前端展示和日志追踪        │
+                # └─────────────────────────────────────────────────────────────┘
+                #
+                # 【框架预留说明】
+                # 以下代码块已预留 WASM 推理入口点注释，后续实现时只需：
+                # 1. 在此分支前增加 WASM 可用性检测（navigator.onnxruntime）
+                # 2. 调用 WasmPredictor.predict(imageBlob) 获取结果
+                # 3. 将 WASM 结果合并到 result 字典中，设置 is_demo_mode=False, source='wasm'
+                # ============================================================
                 logger.warning("⚠️ YOLO未检测到有效目标 (ID=%d, 置信度=%.1f%%), 降级到特征分析模式",
                                original_class_id, result.get("confidence", 0) * 100)
 
@@ -2006,7 +2332,7 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
                 smart_class_index, reasoning, item_type = ImageFeatureAnalyzer.classify_by_features(features)
                 demo_confidence = ImageFeatureAnalyzer.calculate_confidence(features, smart_class_index)
 
-                old_index = result["class_index"]
+                _old_index = result["class_index"]
                 result["class_index"] = smart_class_index
                 result["confidence"] = round(demo_confidence, 4)
                 result["feature_analysis"] = features
@@ -2037,7 +2363,18 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
         }
 
         if result.get("is_demo_mode"):
-            response_data["demo_notice"] = "🔬 智能演示模式：基于图像特征分析（颜色、透明度、形状等），非专门训练的垃圾分类模型"
+            # 降级模式提示：明确告知用户当前使用的是特征分析模式，并说明未来优化方向
+            # 包含：当前模式说明、准确度预期、改进建议、WASM 本地推理预告
+            response_data["demo_notice"] = (
+                "🔬 智能演示模式（基于图像特征分析）\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "• 当前采用颜色/透明度/形状等视觉特征进行启发式分类\n"
+                "• 识别准确度低于专用 AI 模型，仅供参考\n"
+                "• 复杂物品（如多层包装）可能存在误判\n"
+                "• 建议：拍摄清晰正面照片可提高识别准确性\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "🚀 即将支持：浏览器本地 AI 推理（ONNX WASM），无需网络即可获得专业级识别精度"
+            )
 
         if history_store:
             history_store.add({
@@ -2089,7 +2426,7 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
 
 @app.get("/api/search")
 async def search_waste(query: str = Query(..., min_length=1, max_length=100)) -> JSONResponse:
-    """模糊搜索接口"""
+    """模糊搜索接口（支持拼音首字母搜索）"""
     if not search_engine or not search_engine.vocab:
         return JSONResponse(
             status_code=503,
@@ -2106,6 +2443,77 @@ async def search_waste(query: str = Query(..., min_length=1, max_length=100)) ->
             "success": True,
             "query": query,
             "results": results,
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+    )
+
+
+@app.get("/api/search/enhanced")
+async def search_enhanced(
+    query: str = Query(..., min_length=1, max_length=100),
+    include_pinyin: bool = Query(True, description="是否启用拼音搜索"),
+    top_k: int = Query(5, ge=1, le=20, description="返回结果数量")
+) -> JSONResponse:
+    """
+    增强搜索接口（需求 F-2.2.1 扩展）
+    
+    相比标准 /api/search 接口，增强版提供：
+    - 可控的拼音搜索开关
+    - 搜索建议（基于拼音前缀的候选词）
+    - 更丰富的结果元数据
+    
+    Args:
+        query: 搜索关键词
+        include_pinyin: 是否启用拼音首字母搜索（默认 True）
+        top_k: 返回结果数量上限（默认 5）
+        
+    Returns:
+        JSON 格式的搜索结果和建议列表
+    """
+    import re
+    
+    if not search_engine or not search_engine.vocab:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "success": False,
+                "error": {"code": "E004", "message": "词库未就绪"},
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            },
+        )
+    
+    query_stripped = query.strip()
+    suggestions = []
+    
+    # 生成拼音搜索建议（当输入为纯字母时）
+    if include_pinyin and re.match(r'^[a-z]+$', query_stripped.lower()):
+        # 收集所有以查询为前缀的拼音键对应的标签作为建议
+        for py_key in search_engine._pinyin_index:
+            if py_key.startswith(query_stripped.lower()) and py_key != query_stripped.lower():
+                for item in search_engine._pinyin_index[py_key][:2]:  # 每个键最多取 2 个建议
+                    suggestion = {
+                        "label": item["label"],
+                        "pinyin_key": py_key,
+                        "category_name": item.get("category_name", ""),
+                    }
+                    # 建议去重
+                    if not any(s["label"] == suggestion["label"] for s in suggestions):
+                        suggestions.append(suggestion)
+                    if len(suggestions) >= 8:  # 最多 8 条建议
+                        break
+                if len(suggestions) >= 8:
+                    break
+    
+    # 执行搜索
+    results = search_engine.search(query_stripped, top_k=top_k)
+    
+    return JSONResponse(
+        content={
+            "success": True,
+            "query": query,
+            "results": results,
+            "suggestions": suggestions[:8],
+            "pinyin_enabled": include_pinyin and _PINYIN_AVAILABLE,
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
     )
@@ -2600,24 +3008,9 @@ def _get_class_info(class_index: int, is_demo_mode: bool = False,
                         "yolo_label": matched.get("yolo_label", ""),
                     })
 
-<<<<<<< HEAD
-    label = info.get("label_cn", "")
-    if disposal_steps_data and label:
-        label_steps = disposal_steps_data.get(label)
-        if not label_steps:
-            for key in disposal_steps_data:
-                if key in label or label in key:
-                    label_steps = disposal_steps_data[key]
-                    break
-        if label_steps:
-            tips_list = label_steps.get("tips", [])
-            if tips_list:
-                info["tips"] = "；".join(tips_list)
-=======
-    # v2.3 新增：根据最终 label_cn 生成差异化投放建议 
+    # v2.3 新增：根据最终 label_cn 生成差异化投放建议
     final_label = info.get("label_cn", "")
     info["tips"] = _get_disposal_tips(final_label, class_index)
->>>>>>> origin/main
 
     return info
 
@@ -2832,6 +3225,194 @@ async def clear_history() -> JSONResponse:
     return JSONResponse(content={"success": True, "message": "已清空全部历史记录"})
 
 
+# ==================== 语音识别 ASR 纠错模块 ====================
+
+# 常见 ASR（自动语音识别）错误纠正映射表
+# 针对 Web Speech API 中文语音识别的常见误识别进行纠正
+ASR_CORRECTION_MAP = {
+    # ===== 同音字/近音字纠正 =====
+    "拉及": "垃圾",
+    "拉极": "垃圾",
+    "垃极": "垃圾",
+    "拉圾": "垃圾",
+    "塑料并": "塑料瓶",
+    "朔料瓶": "塑料瓶",
+    "易拉罐": "易拉罐",
+    "易拉灌": "易拉罐",
+    # ===== 常见物品名称变体 =====
+    "奶茶杯": "奶茶杯",
+    "茶奶杯": "奶茶杯",
+    "可乐瓶": "可乐瓶",
+    "可了瓶": "可乐瓶",
+    "矿泉水瓶": "矿泉水瓶",
+    "矿泉水并": "矿泉水瓶",
+    "快递盒": "快递盒",
+    "快递纸箱": "快递纸箱",
+    "外卖盒": "外卖餐盒",
+    "外卖盒子": "外卖餐盒",
+    "电池": "废电池",
+    "干电池": "干电池",
+    "充电电池": "充电电池",
+    "纽扣电池": "纽扣电池",
+    "灯管": "荧光灯管",
+    "日光灯": "荧光灯管",
+    "药品": "过期药品",
+    "过期药": "过期药品",
+    "温度计": "水银温度计",
+    "体温计": "水银温度计",
+    # ===== 校园特有物品 =====
+    "剩饭": "剩菜剩饭",
+    "剩菜": "剩菜剩饭",
+    "果皮": "果皮果核",
+    "果核": "果皮果核",
+    "茶叶": "茶叶渣",
+    "茶叶渣": "茶叶渣",
+    "蛋壳": "蛋壳",
+    "骨头": "大骨头",
+    "大骨头": "大骨头",
+    "卫生纸": "用过的卫生纸",
+    "纸巾": "用过的卫生纸",
+    "湿纸巾": "湿纸巾",
+    "烟头": "烟蒂",
+    "烟蒂": "烟蒂",
+    "牙签": "牙签",
+    "一次性筷子": "竹筷",
+    "筷子": "竹筷",
+}
+
+# 垃圾分类关键词同义词扩展（用于模糊匹配）
+WASTE_SYNONYMS = {
+    "塑料瓶": ["饮料瓶", "矿泉水瓶", "可乐瓶", "雪碧瓶", "水瓶", "PET瓶"],
+    "玻璃瓶": ["酒瓶", "调料瓶", "玻璃杯", "镜子"],
+    "金属": ["易拉罐", "铝罐", "铁罐", "铜线", "金属盖", "钥匙"],
+    "纸张": ["书本", "报纸", "纸板", "纸箱", "作业本", "笔记本", "宣传单"],
+    "厨余": ["剩饭", "剩菜", "果皮", "菜叶", "茶叶", "蛋壳", "骨头", "鱼骨"],
+    "有害": ["电池", "药品", "灯管", "油漆", "农药", "温度计", "指甲油"],
+}
+
+
+def correct_asr_text(text: str) -> str:
+    """
+    对 ASR 语音识别结果进行后处理纠错
+
+    处理流程：
+    1. 文本标准化（去除多余空格、统一标点）
+    2. 查表纠正已知 ASR 错误模式
+    3. 模糊匹配词库中的相近词条
+
+    @param text: ASR 原始识别文本
+    @return: 纠错后的文本
+    """
+    if not text or not text.strip():
+        return text
+
+    original = text.strip()
+    corrected = original
+
+    # 第一步：直接查表纠正（精确匹配）
+    if corrected in ASR_CORRECTION_MAP:
+        corrected = ASR_CORRECTION_MAP[corrected]
+        logger.info("🎤 ASR纠错(精确): '%s' → '%s'", original, corrected)
+        return corrected
+
+    # 第二步：去除常见语气词和冗余字符
+    for prefix in ["这是", "这个是", "请问", "我想知道", "它是一个", "它是"]:
+        if corrected.startswith(prefix):
+            corrected = corrected[len(prefix):].strip()
+
+    for suffix in ["吗", "呢", "啊", "吧", "的", "是什么", "属于什么", "怎么分类"]:
+        if corrected.endswith(suffix):
+            corrected = corrected[:-len(suffix)].strip()
+
+    # 第三步：再次查表（去除语气词后）
+    if corrected in ASR_CORRECTION_MAP:
+        logger.info("🎤 ASR纠错(去语气): '%s' → '%s'", original, corrected)
+        return corrected
+
+    # 第四步：使用 FuzzyWuzzy 模糊匹配词库
+    if search_engine and search_engine.vocab:
+        result = fuzz_process.extractOne(
+            corrected,
+            search_engine.vocab_labels,
+            score_cutoff=75
+        )
+        if result:
+            best_match, score = result
+            if best_match and score >= 80:
+                logger.info("🎤 ASR纠错(模糊): '%s' → '%s' (相似度=%d%%)", original, best_match, score)
+                return best_match
+
+    # 无法纠错时返回原始文本
+    if corrected != original:
+        logger.info("🎤 ASR纠错(部分): '%s' → '%s'", original, corrected)
+
+    return corrected or original
+
+
+@app.post("/api/voice/correct")
+async def voice_correct(request: dict) -> JSONResponse:
+    """
+    语音识别结果纠错 API
+
+    接收前端 Web Speech API 的识别结果，
+    返回经过纠错和标准化的文本。
+
+    请求体：
+    {
+        "text": "ASR原始识别文本",
+        "confidence": 0.95  // 可选，识别置信度
+    }
+
+    响应：
+    {
+        "success": true,
+        "original": "原始文本",
+        "corrected": "纠错后文本",
+        "changed": false,
+        "search_results": [...]  // 可选，如果纠错成功则返回搜索建议
+    }
+    """
+    raw_text = request.get("text", "").strip()
+    confidence = request.get("confidence", 0)
+
+    if not raw_text:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "success": False,
+                "error": {"code": "E001", "message": "识别文本不能为空"},
+            },
+        )
+
+    # 执行纠错
+    corrected = correct_asr_text(raw_text)
+    is_changed = corrected != raw_text
+
+    result = {
+        "success": True,
+        "original": raw_text,
+        "corrected": corrected,
+        "changed": is_changed,
+        "confidence": confidence,
+    }
+
+    # 如果纠错成功且词库已加载，顺便返回搜索建议
+    if is_changed and search_engine:
+        try:
+            search_results = search_engine.search(corrected, limit=5)
+            if search_results:
+                result["search_results"] = [
+                    {"label": r.get("label"), "category": r.get("category_name"),
+                     "guidance": r.get("guidance")}
+                    for r in search_results[:3]
+                ]
+        except Exception as e:
+            logger.warning("语音纠错后搜索失败: %s", e)
+
+    logger.info("🎤 语音纠错请求: 原始='%s', 纠错='%s', 变更=%s", raw_text, corrected, is_changed)
+    return JSONResponse(content=result)
+
+
 # ==================== feedback 用户反馈 ====================
 
 @app.post("/api/feedback")
@@ -2894,6 +3475,7 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     username: str
     password: str
+    remember: bool = False
 
 
 class CheckinRequest(BaseModel):
@@ -2910,6 +3492,17 @@ class QuizAnswerRequest(BaseModel):
 
 class ActivitySignupRequest(BaseModel):
     activity_id: str
+
+
+class ActivityCreateRequest(BaseModel):
+    title: str = Field(..., min_length=2, max_length=100)
+    description: str = Field("", max_length=2000)
+    cover_image: str = ""
+    location: str = Field(..., min_length=1, max_length=200)
+    start_time: float
+    end_time: float
+    max_participants: int = 0
+    status: str = "draft"
 
 
 def _hash_password(password: str) -> str:
@@ -2991,7 +3584,8 @@ async def login(req: LoginRequest, response: Response):
             "success": True,
             "user": {"id": user["id"], "username": user["username"], "nickname": user["nickname"], "points": user["points"]}
         })
-        resp.set_cookie(SESSION_COOKIE_NAME, session_id, max_age=SESSION_EXPIRE_SECONDS, httponly=True, samesite="lax")
+        cookie_max_age = 86400 * 30 if req.remember else SESSION_EXPIRE_SECONDS
+        resp.set_cookie(SESSION_COOKIE_NAME, session_id, max_age=cookie_max_age, httponly=True, samesite="lax")
         return resp
     except Exception as e:
         logger.error("登录失败: %s", e)
@@ -3010,6 +3604,337 @@ async def logout(request: Request, response: Response):
     resp = JSONResponse(content={"success": True, "message": "已退出登录"})
     resp.delete_cookie(SESSION_COOKIE_NAME)
     return resp
+
+
+# ==================== OAuth 第三方登录接口（预留） ====================
+
+# OAuth 配置（生产环境应从环境变量读取）
+OAUTH_CONFIG = {
+    "wechat": {
+        "enabled": False,  # 需要在 .env 中配置后启用
+        "app_id": os.getenv("WECHAT_APP_ID", ""),
+        "app_secret": os.getenv("WECHAT_APP_SECRET", ""),
+        "redirect_uri": os.getenv("WECHAT_REDIRECT_URI", ""),
+        "scope": "snsapi_login",
+        # 微信开放平台：https://open.weixin.qq.com
+        "auth_url": "https://open.weixin.qq.com/connect/qrconnect",
+        "token_url": "https://api.weixin.qq.com/sns/oauth2/access_token",
+        "user_url": "https://api.weixin.qq.com/sns/userinfo",
+    },
+    "github": {
+        "enabled": False,
+        "client_id": os.getenv("GITHUB_CLIENT_ID", ""),
+        "client_secret": os.getenv("GITHUB_CLIENT_SECRET", ""),
+        "redirect_uri": os.getenv("GITHUB_REDIRECT_URI", ""),
+        "scope": "user:email",
+        # GitHub OAuth: https://github.com/settings/developers
+        "auth_url": "https://github.com/login/oauth/authorize",
+        "token_url": "https://github.com/login/oauth/access_token",
+        "user_url": "https://api.github.com/user",
+    },
+}
+
+
+@app.get("/api/auth/oauth/providers")
+async def list_oauth_providers():
+    """
+    列出可用的 OAuth 登录方式
+
+    前端可据此决定是否显示对应的登录按钮。
+
+    响应：
+    {
+        success: true,
+        providers: [
+            { name: "wechat", display_name: "微信登录", enabled: false, icon: "...", hint: "即将上线" }
+        ]
+    }
+    """
+    providers = []
+    display_config = {
+        "wechat": {"display_name": "微信登录", "icon": "wechat", "color": "#07C160", "hint": "微信扫码登录"},
+        "github": {"display_name": "GitHub 登录", "icon": "github", "color": "#333", "hint": "开发者首选"},
+    }
+
+    for key, config in OAUTH_CONFIG.items():
+        info = display_config.get(key, {})
+        providers.append({
+            "name": key,
+            **info,
+            "enabled": config.get("enabled", False),
+            "has_credentials": bool(config.get("client_id")),
+        })
+
+    return JSONResponse(content={
+        "success": True,
+        "providers": providers,
+    })
+
+
+@app.get("/api/auth/oauth/{provider}")
+async def oauth_authorize(provider: str):
+    """
+    获取第三方 OAuth 授权 URL
+
+    前端调用此接口获取授权链接，然后跳转到第三方登录页面。
+    授权完成后会回调到配置的 redirect_uri。
+
+    参数：
+        provider: 登录提供商 (wechat / github)
+
+    响应：
+    {
+        success: true,
+        auth_url: "https://...",
+        provider: "wechat"
+    }
+    """
+    if provider not in OAUTH_CONFIG:
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "error": {"code": "E001", "message": f"不支持的登录方式: {provider}"}}
+        )
+
+    config = OAUTH_CONFIG[provider]
+
+    if not config.get("enabled"):
+        return JSONResponse(
+            status_code=503,
+            content={
+                "success": False,
+                "error": {"code": "E003", "message": f"{provider} 登录暂未开放，请使用账号密码登录"},
+                "hint": f"请联系管理员配置 {provider} OAuth 参数",
+            }
+        )
+
+    try:
+        import urllib.parse
+
+        params = {
+            "client_id": config["client_id"],
+            "redirect_uri": config["redirect_uri"],
+            "response_type": "code",
+            "scope": config.get("scope", ""),
+            "state": _generate_oauth_state(provider),  # CSRF 保护
+        }
+
+        if provider == "wechat":
+            params["appid"] = config["client_id"]
+
+        auth_url = f"{config['auth_url']}?{urllib.parse.urlencode(params)}"
+
+        return JSONResponse(content={
+            "success": True,
+            "auth_url": auth_url,
+            "provider": provider,
+            "hint": f"正在跳转 {provider} 登录页面...",
+        })
+
+    except Exception as e:
+        logger.error("OAuth 授权 URL 生成失败 [%s]: %s", provider, e)
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": {"code": "E500", "message": "OAuth 服务异常"}}
+        )
+
+
+@app.post("/api/auth/oauth/{provider}/callback")
+async def oauth_callback(provider: str, request: dict):
+    """
+    处理 OAuth 回调，完成用户认证
+
+    第三方登录成功后会携带 code 回调到此接口，
+    后端用 code 换取 access_token，再获取用户信息。
+
+    请求体：
+    {
+        "code": "authorization_code",
+        "state": "csrf_state_string"  // 可选，用于验证
+    }
+
+    响应：
+    {
+        success: true,
+        user: { id, username, nickname, points },
+        is_new_user: false  // 是否为新注册用户
+    }
+    """
+    code = request.get("code")
+
+    if not code:
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "error": {"code": "E001", "message": "缺少授权码"}}
+        )
+
+    if provider not in OAUTH_CONFIG:
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "error": {"code": "E001", "message": f"不支持的登录方式: {provider}"}}
+        )
+
+    config = OAUTH_CONFIG[provider]
+
+    try:
+        import httpx
+
+        # 用 authorization_code 换取 access_token
+        token_params = {
+            "client_id": config["client_id"],
+            "client_secret": config["client_secret"],
+            "code": code,
+            "grant_type": "authorization_code",
+            "redirect_uri": config["redirect_uri"],
+        }
+
+        async with httpx.AsyncClient() as client:
+            # 获取 access_token
+            token_resp = await client.post(config["token_url"], data=token_params, timeout=10.0)
+            token_data = token_resp.json()
+
+            if "access_token" not in token_data and "access_token" not in (token_data.get("data") or {}):
+                logger.error("OAuth token 获取失败 [%s]: %s", provider, token_data)
+                return JSONResponse(
+                    status_code=401,
+                    content={"success": False, "error": {"code": "E401", "message": "第三方登录失败"}}
+                )
+
+            access_token = (
+                token_data.get("access_token") or
+                token_data.get("data", {}).get("access_token", "")
+            )
+
+            # 获取用户信息
+            headers = {"Authorization": f"Bearer {access_token}"}
+            user_resp = await client.get(
+                config["user_url"],
+                headers=headers,
+                timeout=10.0
+            )
+            user_data = user_resp.json()
+
+        # 提取第三方用户信息
+        oauth_user_info = _extract_oauth_user_info(provider, user_data)
+
+        if not oauth_user_info:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "error": {"code": "E002", "message": "无法获取用户信息"}}
+            )
+
+        # 查找或创建本地用户
+        c = db.conn.cursor()
+        c.execute(
+            "SELECT * FROM users WHERE oauth_provider = ? AND oauth_id = ?",
+            (provider, oauth_user_info["oauth_id"])
+        )
+        existing_user = c.fetchone()
+
+        if existing_user:
+            # 已有账户，更新最后登录时间
+            db.conn.execute(
+                "UPDATE users SET last_login = ?, avatar = ? WHERE id = ?",
+                (time.time(), oauth_user_info.get("avatar"), existing_user["id"])
+            )
+            db.conn.commit()
+            user_id = existing_user["id"]
+            is_new_user = False
+        else:
+            # 新用户注册
+            user_id = uuid.uuid4().hex[:12]
+            username = _generate_oauth_username(provider, oauth_user_info)
+            db.conn.execute("""
+                INSERT INTO users (id, username, password_hash, nickname, role, points, avatar, oauth_provider, oauth_id, created_at)
+                VALUES (?, '', '', ?, 'visitor', 0, ?, ?, ?, ?)
+            """, (
+                user_id,
+                oauth_user_info.get("nickname") or username,
+                oauth_user_info.get("avatar"),
+                provider,
+                oauth_user_info["oauth_id"],
+                time.time(),
+            ))
+            db.conn.commit()
+            is_new_user = True
+
+        # 创建会话
+        session_id = _create_session(user_id)
+
+        # 返回用户信息
+        c.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        user = dict(c.fetchone())
+
+        resp = JSONResponse(content={
+            "success": True,
+            "user": {k: v for k, v in user.items() if k != "password_hash"},
+            "is_new_user": is_new_user,
+            "provider": provider,
+            "message": f"{'欢迎加入' if is_new_user else '欢迎回来'}！{oauth_user_info.get('nickname', '')}",
+        })
+        resp.set_cookie(SESSION_COOKIE_NAME, session_id, max_age=SESSION_EXPIRE_SECONDS, httponly=True, samesite="lax")
+
+        logger.info("✅ OAuth 登录成功: provider=%s, user=%s, new=%s", provider, user_id, is_new_user)
+        return resp
+
+    except Exception as e:
+        logger.error("OAuth 回调处理失败 [%s]: %s", provider, e)
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": {"code": "E500", "message": "第三方登录处理失败"}}
+        )
+
+
+def _generate_oauth_state(provider: str) -> str:
+    """生成 OAuth state 参数（CSRF 防护）"""
+    raw = f"{provider}:{time.time()}:{os.urandom(8).hex()}"
+    import hashlib
+    return hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+
+def _extract_oauth_user_info(provider: str, data: dict) -> dict | None:
+    """
+    从不同 OAuth 提供商的用户数据中提取统一格式的用户信息
+
+    @param provider: 提供商名称 (wechat/github)
+    @param data: 原始 API 返回数据
+    @return 统一格式字典或 None
+    """
+    if provider == "wechat":
+        # 微信返回格式
+        openid = data.get("openid") or data.get("unionid")
+        if not openid:
+            return None
+        return {
+            "oauth_id": openid,
+            "nickname": data.get("nickname"),
+            "avatar": data.get("headimgurl"),
+            "email": None,
+        }
+
+    elif provider == "github":
+        # GitHub 返回格式
+        github_id = str(data.get("id"))
+        if not github_id:
+            return None
+        return {
+            "oauth_id": github_id,
+            "nickname": data.get("name") or data.get("login"),
+            "avatar": data.get("avatar_url"),
+            "email": data.get("email"),
+        }
+
+    return None
+
+
+def _generate_oauth_username(provider: str, user_info: dict) -> str:
+    """生成基于 OAuth 的唯一用户名"""
+    prefix_map = {"wechat": "wx_", "github": "gh_"}
+    base_name = user_info.get("nickname") or "user"
+    # 清理特殊字符，保留中文、字母、数字
+    import re
+    clean_name = re.sub(r'[^\w\u4e00-\u9fff]', '_', base_name)[:15]
+    suffix = user_info.get("oauth_id", "")[:6]
+    return f"{prefix_map.get(provider, 'oa_')}{clean_name}_{suffix}"
 
 
 @app.get("/api/auth/me")
@@ -3130,6 +4055,133 @@ async def get_checkin_history(request: Request, page: int = 1, page_size: int = 
     except Exception as e:
         logger.error("获取打卡历史失败: %s", e)
         return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "获取打卡历史失败"}})
+
+
+# ==================== 打卡海报生成 ====================
+
+@app.get("/api/checkin/poster")
+async def generate_checkin_poster(request: Request, checkin_id: str = Query(...)):
+    """
+    生成打卡分享海报数据
+
+    返回海报所需的全部数据（用户信息、打卡详情、统计数据），
+    前端使用 Canvas 绘制精美海报。
+
+    参数：
+        checkin_id: 打卡记录 ID
+
+    响应：
+    {
+        success: true,
+        poster_data: {
+            user: { nickname, avatar, points, level },
+            checkin: { created_at, category, consecutive_days },
+            stats: { total_checkins, total_points, rank },
+            slogan: "今日份环保打卡 ✓",
+            date_text: "2026年05月25日"
+        }
+    }
+    """
+    user = _get_current_user(request)
+    if not user:
+        return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
+
+    try:
+        c = db.conn.cursor()
+
+        # 查询打卡记录
+        c.execute("SELECT * FROM checkins WHERE id = ? AND user_id = ?", (checkin_id, user["id"]))
+        row = c.fetchone()
+        if not row:
+            return JSONResponse(status_code=404, content={"success": False, "error": {"code": "E404", "message": "打卡记录不存在"}})
+
+        checkin = dict(row)
+
+        # 计算连续打卡天数
+        c.execute("""
+            SELECT COUNT(DISTINCT DATE(created_at, 'unixepoch', 'localtime')) as days
+            FROM checkins
+            WHERE user_id = ? AND created_at > ?
+            ORDER BY created_at DESC
+        """, (user["id"], time.time() - 86400 * 30))
+        streak_row = c.fetchone()
+        consecutive_days = streak_row["days"] if streak_row else 1
+
+        # 获取总统计
+        c.execute("SELECT COUNT(*), SUM(points_earned) FROM checkins WHERE user_id = ?", (user["id"],))
+        stats_row = c.fetchone()
+        total_checkins = stats_row[0] or 0
+        total_points_earned = stats_row[1] or 0
+
+        # 计算排名（简化版：按积分排名）
+        c.execute("SELECT COUNT(*) + 1 FROM users WHERE points > ?", (user["points"],))
+        rank = c.fetchone()[0] or 1
+
+        # 生成日期文本
+        from datetime import datetime
+        date_text = datetime.now().strftime("%Y年%m月%d日")
+
+        # 根据连续天数选择不同的鼓励语
+        slogans = {
+            1: "🌱 环保第一步，从今天开始！",
+            3: "🔥 连续3天，保持住！",
+            7: "⭐ 坚持一周，你是环保达人！",
+            14: "💪 半个月，习惯已成自然！",
+            21: "🏆 21天养成一个环保好习惯！",
+            30: "🎖️ 整月坚持，校园环保大使就是你！",
+            100: "💯 百天打卡传奇！致敬你的坚持！",
+        }
+        closest_day = min(slogans.keys(), key=lambda d: abs(d - consecutive_days))
+        slogan = slogans[closest_day]
+
+        # 等级计算
+        level_thresholds = [0, 50, 200, 500, 1000]
+        level_names = ["环保新人", "分类达人", "绿色先锋", "环保卫士", "校园大使"]
+        level_icons = ["🌱", "🌿", "🌳", "🏆", "👑"]
+        user_level = 0
+        for i, threshold in enumerate(level_thresholds):
+            if user["points"] >= threshold:
+                user_level = i
+
+        poster_data = {
+            "user": {
+                "nickname": user.get("nickname") or "环保达人",
+                "avatar": user.get("avatar") or "/static/images/default-avatar.png",
+                "points": user.get("points", 0),
+                "level": user_level,
+                "level_name": level_names[user_level],
+                "level_icon": level_icons[user_level],
+            },
+            "checkin": {
+                "id": checkin["id"],
+                "created_at": checkin["created_at"],
+                "category": checkin.get("category", ""),
+                "consecutive_days": consecutive_days,
+                "points_earned": checkin.get("points_earned", 5),
+            },
+            "stats": {
+                "total_checkins": total_checkins,
+                "total_points_earned": total_points_earned,
+                "rank": min(rank, 999),
+                "user_points": user.get("points", 0),
+            },
+            "poster_config": {
+                "slogan": slogan,
+                "date_text": date_text,
+                "app_name": "校园垃圾分类AI助手",
+                "background_gradient": ["#2D9B5E", "#1a7343"],
+                "accent_color": "#FFD700",
+            },
+        }
+
+        return JSONResponse(content={
+            "success": True,
+            "poster_data": poster_data,
+        })
+
+    except Exception as e:
+        logger.error("生成海报数据失败: %s", e)
+        return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "海报生成失败"}})
 
 
 # ---------- F-3.4 知识问答 ----------
@@ -3304,6 +4356,232 @@ async def check_activity_signup(request: Request, activity_id: str):
         return JSONResponse(content={"success": True, "signed_up": c.fetchone() is not None})
     except Exception:
         return JSONResponse(content={"success": True, "signed_up": False})
+
+
+@app.post("/api/activities/{activity_id}/checkin/{user_id}")
+async def admin_checkin_user(activity_id: str, user_id: str, request: Request):
+    """
+    管理员签到核销接口 - 管理员确认用户已到场参加活动
+
+    功能说明：
+    1. 验证当前操作用户具有管理员权限（role = 'admin'）
+    2. 验证目标活动存在且有效
+    3. 验证目标用户确实已报名该活动
+    4. 将报名记录状态更新为 'checked_in'，并记录签到时间戳
+    5. 返回签到成功结果及签到时间
+
+    请求参数：
+    - activity_id (路径参数): 活动 ID
+    - user_id (路径参数): 需要签到的用户 ID
+
+    请求头：
+    - Authorization: Bearer <admin_session_token>
+
+    响应格式（成功）：
+    {
+        "success": true,
+        "checkin_time": "2026-05-25T14:30:00Z",
+        "message": "签到成功"
+    }
+
+    响应格式（失败）：
+    {
+        "success": false,
+        "error": {
+            "code": "E403",
+            "message": "仅管理员可执行此操作"
+        }
+    }
+
+    错误码说明：
+    - E401: 未登录或会话过期
+    - E403: 无管理员权限
+    - E404: 活动不存在或用户未报名该活动
+    - E409: 用户已签到（重复操作）
+    - E500: 服务器内部错误
+    """
+    # 获取当前登录用户信息
+    current_user = _get_current_user(request)
+    if not current_user:
+        return JSONResponse(
+            status_code=401,
+            content={"success": False, "error": {"code": "E401", "message": "请先登录"}}
+        )
+
+    try:
+        # 权限验证：仅允许 admin 角色执行签到核销操作
+        if current_user.get("role") != "admin":
+            logger.warning("⚠️ 非管理员尝试执行签到核销: user_id=%s, target_user=%s, activity=%s",
+                           current_user["id"], user_id, activity_id)
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "error": {"code": "E403", "message": "仅管理员可执行签到核销操作"}}
+            )
+
+        c = db.conn.cursor()
+
+        # 验证目标活动是否存在
+        c.execute("SELECT id, title, status FROM activities WHERE id = ?", (activity_id,))
+        activity = c.fetchone()
+        if not activity:
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "error": {"code": "E404", "message": "活动不存在"}}
+            )
+
+        # 验证目标用户是否已报名该活动
+        c.execute(
+            """SELECT id, status FROM activity_signups
+               WHERE activity_id = ? AND user_id = ?""",
+            (activity_id, user_id)
+        )
+        signup = c.fetchone()
+        if not signup:
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "error": {"code": "E404", "message": "该用户未报名此活动"}}
+            )
+
+        # 检查是否已经签到（防止重复操作）
+        if signup["status"] == "checked_in":
+            # 查询已有的签到时间并返回
+            c.execute(
+                "SELECT checked_at FROM activity_signups WHERE id = ?",
+                (signup["id"],)
+            )
+            existing_checkin = c.fetchone()
+            checkin_time = existing_checkin["checked_at"] if existing_checkin else None
+            
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "success": False,
+                    "error": {"code": "E409", "message": "该用户已完成签到"},
+                    "checkin_time": checkin_time
+                }
+            )
+
+        # 执行签到核销：更新报名状态为 'checked_in'，记录签到时间戳
+        checkin_time = time.strftime("%Y-%m-%dT%H:%M:%SZ")
+        
+        db.conn.execute(
+            """UPDATE activity_signups
+               SET status = 'checked_in', checked_at = ?
+               WHERE id = ?""",
+            (checkin_time, signup["id"])
+        )
+        db.conn.commit()
+
+        logger.info(
+            "✅ 管理员签到核销成功: admin=%s, activity=%s(%s), user=%s, time=%s",
+            current_user["id"],
+            activity_id,
+            activity["title"],
+            user_id,
+            checkin_time
+        )
+
+        return JSONResponse(content={
+            "success": True,
+            "checkin_time": checkin_time,
+            "message": "签到成功"
+        })
+
+    except Exception as e:
+        logger.error("❌ 管理员签到核销失败: activity=%s, user=%s, error=%s",
+                     activity_id, user_id, e)
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": {"code": "E500", "message": "签到核销失败，请重试"}}
+        )
+
+
+@app.post("/api/activities")
+async def create_activity(request: Request, req: ActivityCreateRequest):
+    user = _get_current_user(request)
+    if not user:
+        return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
+    try:
+        if user.get("role") != "admin":
+            return JSONResponse(status_code=403, content={"success": False, "error": {"code": "E403", "message": "仅管理员可发布活动"}})
+        activity_id = uuid.uuid4().hex[:12]
+        now = time.time()
+        db.conn.execute(
+            """INSERT INTO activities (id, title, description, cover_image, location, start_time, end_time,
+               max_participants, current_participants, status, creator_id, created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (activity_id, req.title, req.description, req.cover_image, req.location,
+             req.start_time, req.end_time, req.max_participants, 0, req.status, user["id"], now)
+        )
+        db.conn.commit()
+        return JSONResponse(status_code=201, content={"success": True, "activity_id": activity_id, "message": "活动创建成功"})
+    except Exception as e:
+        logger.error("创建活动失败: %s", e)
+        return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "创建活动失败"}})
+
+@app.put("/api/activities/{activity_id}")
+async def update_activity(activity_id: str, request: Request, req: ActivityCreateRequest):
+    user = _get_current_user(request)
+    if not user:
+        return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
+    try:
+        c = db.conn.cursor()
+        c.execute("SELECT creator_id FROM activities WHERE id = ?", (activity_id,))
+        row = c.fetchone()
+        if not row:
+            return JSONResponse(status_code=404, content={"success": False, "error": {"code": "E404", "message": "活动不存在"}})
+        if row["creator_id"] != user["id"] and user.get("role") != "admin":
+            return JSONResponse(status_code=403, content={"success": False, "error": {"code": "E403", "message": "无权修改此活动"}})
+        db.conn.execute(
+            """UPDATE activities SET title=?, description=?, cover_image=?, location=?,
+               start_time=?, end_time=?, max_participants=?, status=? WHERE id=?""",
+            (req.title, req.description, req.cover_image, req.location,
+             req.start_time, req.end_time, req.max_participants, req.status, activity_id)
+        )
+        db.conn.commit()
+        return JSONResponse(content={"success": True, "message": "活动更新成功"})
+    except Exception as e:
+        logger.error("更新活动失败: %s", e)
+        return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "更新活动失败"}})
+
+@app.delete("/api/activities/{activity_id}")
+async def delete_activity(activity_id: str, request: Request):
+    user = _get_current_user(request)
+    if not user:
+        return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
+    try:
+        c = db.conn.cursor()
+        c.execute("SELECT creator_id FROM activities WHERE id = ?", (activity_id,))
+        row = c.fetchone()
+        if not row:
+            return JSONResponse(status_code=404, content={"success": False, "error": {"code": "E404", "message": "活动不存在"}})
+        if row["creator_id"] != user["id"] and user.get("role") != "admin":
+            return JSONResponse(status_code=403, content={"success": False, "error": {"code": "E403", "message": "无权删除此活动"}})
+        db.conn.execute("DELETE FROM activity_signups WHERE activity_id = ?", (activity_id,))
+        db.conn.execute("DELETE FROM activities WHERE id = ?", (activity_id,))
+        db.conn.commit()
+        return JSONResponse(content={"success": True, "message": "活动已删除"})
+    except Exception as e:
+        logger.error("删除活动失败: %s", e)
+        return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "删除活动失败"}})
+
+@app.post("/api/activities/{activity_id}/cancel")
+async def cancel_activity_signup(activity_id: str, request: Request):
+    user = _get_current_user(request)
+    if not user:
+        return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
+    try:
+        c = db.conn.cursor()
+        c.execute("SELECT id FROM activity_signups WHERE activity_id = ? AND user_id = ?", (activity_id, user["id"]))
+        if not c.fetchone():
+            return JSONResponse(status_code=400, content={"success": False, "error": {"code": "E400", "message": "未报名该活动"}})
+        db.conn.execute("DELETE FROM activity_signups WHERE activity_id = ? AND user_id = ?", (activity_id, user["id"]))
+        db.conn.execute("UPDATE activities SET current_participants = current_participants - 1 WHERE id = ? AND current_participants > 0", (activity_id,))
+        db.conn.commit()
+        return JSONResponse(content={"success": True, "message": "已取消报名"})
+    except Exception as e:
+        logger.error("取消报名失败: %s", e)
+        return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "操作失败"}})
 
 
 # ==================== 程序入口 ====================

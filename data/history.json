@@ -1,5 +1,16 @@
 [
   {
+    "category": "其他垃圾",
+    "category_id": 2,
+    "label_cn": "脏塑料",
+    "bin_color": "#333333",
+    "confidence": 0.4426,
+    "guidance": "请投入灰色/黑色其他垃圾桶",
+    "is_demo_mode": false,
+    "id": "2285fb2170",
+    "created_at": "2026-05-25T12:20:20Z"
+  },
+  {
     "category": "可回收物",
     "category_id": 1,
     "label_cn": "金属制品",

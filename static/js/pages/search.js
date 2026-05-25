@@ -11,6 +11,7 @@ import { store } from '../store.js';
 import { api } from '../api.js';
 import { showToast, showLoading, hideLoading } from '../utils/ui.js';
 import { ConfusingPairCard } from '../components/confusing-pair-card.js';
+import { SearchSuggest } from '../components/search-suggest.js';
 
 // ==================== 工具函数 ====================
 
@@ -48,6 +49,13 @@ export class SearchPage {
     /** 绑定的事件处理器引用集合 */
     _boundHandlers = {};
 
+    /** 搜索联想下拉组件实例 */
+    _suggest = null;
+
+    /** 搜索历史相关 */
+    static SEARCH_HISTORY_KEY = 'ecosort_search_history';
+    static MAX_SEARCH_HISTORY = 20;
+
     /**
      * 初始化搜索结果页
      * 解析 URL 参数、渲染界面、自动聚焦搜索框
@@ -68,6 +76,10 @@ export class SearchPage {
         this._cacheDOM();
         /* 填充搜索词并聚焦 */
         this._initSearchInput();
+        /* F-2.2.4 渲染搜索历史（无预设关键词时显示） */
+        if (!this._currentQuery) {
+            this._renderSearchHistory();
+        }
         /* 绑定事件 */
         this._bindEvents();
 
@@ -90,6 +102,12 @@ export class SearchPage {
             this.searchInput.removeEventListener('input', this._boundHandlers.input);
         }
 
+        /* 销毁搜索联想组件 */
+        if (this._suggest) {
+            this._suggest.destroy();
+            this._suggest = null;
+        }
+
         /* 清空容器 */
         if (this.container) {
             this.container.innerHTML = '';
@@ -100,6 +118,7 @@ export class SearchPage {
         this.searchInput = null;
         this.resultsContainer = null;
         this.emptyState = null;
+        this._historyArea = null;
         this._currentQuery = '';
         this._searching = false;
         this._boundHandlers = {};
@@ -169,7 +188,8 @@ export class SearchPage {
 
             <!-- 搜索结果列表区域 -->
             <div id="searchResultsArea">
-                <!-- 动态内容：结果列表或空状态提示 -->
+                <!-- F-2.2.4 搜索历史区域（初始展示，搜索后隐藏） -->
+                <div id="searchHistoryArea" class="search-history-area"></div>
             </div>
         `;
     }
@@ -183,6 +203,7 @@ export class SearchPage {
     _cacheDOM() {
         this.searchInput = document.getElementById('searchPageInput');
         this.resultsContainer = document.getElementById('searchResultsArea');
+        this._historyArea = document.getElementById('searchHistoryArea');
     }
 
     // ==================== 私有方法：搜索初始化 ====================
@@ -228,6 +249,14 @@ export class SearchPage {
         if (this.searchInput) {
             this.searchInput.addEventListener('keydown', this._boundHandlers.keydown);
         }
+
+        /* 搜索联想下拉 (F-2.2.3) */
+        this._suggest = new SearchSuggest({
+            inputEl: this.searchInput,
+            onSelect: (keyword) => {
+                this._doSearch(keyword);
+            }
+        });
 
         /* 输入时隐藏空状态（如有） */
         this._boundHandlers.input = () => {
@@ -294,6 +323,14 @@ export class SearchPage {
                 this._renderEmptyState(this._currentQuery);
             }
 
+            /* F-2.2.4 保存搜索词到历史记录 */
+            this._saveSearchHistory(this._currentQuery);
+
+            /* F-2.2.4 同步更新SearchSuggest组件的历史缓存（保持数据一致性） */
+            if (this._suggest && typeof this._suggest.saveToHistory === 'function') {
+                this._suggest.saveToHistory(this._currentQuery);
+            }
+
         } catch (error) {
             hideLoading();
             console.error('[SearchPage] 搜索失败:', error);
@@ -323,6 +360,11 @@ export class SearchPage {
      */
     _renderResults(results) {
         if (!this.resultsContainer) return;
+
+        /* 隐藏搜索历史区域 */
+        if (this._historyArea) {
+            this._historyArea.style.display = 'none';
+        }
 
         /* 构建结果列表 HTML（所有动态内容均经过转义） */
         const listHTML = results.map((item, index) => `
@@ -480,6 +522,107 @@ export class SearchPage {
                     this._doSearch(this._currentQuery);
                 }
             });
+        }
+    }
+
+    // ==================== F-2.2.4 搜索历史 ====================
+
+    _getSearchHistory() {
+        try {
+            const raw = localStorage.getItem(SearchPage.SEARCH_HISTORY_KEY);
+            return raw ? JSON.parse(raw) : [];
+        } catch { return []; }
+    }
+
+    _saveSearchHistory(query) {
+        if (!query || !query.trim()) return;
+        const q = query.trim();
+        try {
+            let history = this._getSearchHistory();
+            history = history.filter(item => item !== q);
+            history.unshift(q);
+            if (history.length > SearchPage.MAX_SEARCH_HISTORY) {
+                history = history.slice(0, SearchPage.MAX_SEARCH_HISTORY);
+            }
+            localStorage.setItem(SearchPage.SEARCH_HISTORY_KEY, JSON.stringify(history));
+        } catch (e) {
+            console.warn('[SearchPage] 保存搜索历史失败:', e);
+        }
+    }
+
+    _renderSearchHistory() {
+        if (!this._historyArea) return;
+        const history = this._getSearchHistory();
+        if (history.length === 0) {
+            this._historyArea.innerHTML = '';
+            this._historyArea.style.display = 'none';
+            return;
+        }
+        this._historyArea.style.display = '';
+        const itemsHTML = history.map(q => `
+            <div class="search-history-item" data-query="${escapeHtml(q)}" role="button" tabindex="0">
+                <svg viewBox="0 0 24 24" width="14" height="14" stroke="#95A0AA" stroke-width="2" fill="none">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                </svg>
+                <span class="search-history-text">${escapeHtml(q)}</span>
+                <svg class="search-history-del" viewBox="0 0 24 24" width="14" height="14" stroke="#C0C8D0" stroke-width="2" fill="none" data-del="${escapeHtml(q)}">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </div>
+        `).join('');
+        this._historyArea.innerHTML = `
+            <div class="card search-history-card">
+                <div class="search-history-header">
+                    <span class="search-history-title">🕐 最近搜索</span>
+                    <button class="search-history-clear-btn" id="clearHistoryBtn">清空</button>
+                </div>
+                <div class="search-history-list">${itemsHTML}</div>
+            </div>
+        `;
+        this._bindSearchHistoryEvents();
+    }
+
+    _bindSearchHistoryEvents() {
+        if (!this._historyArea) return;
+        this._historyArea.addEventListener('click', (e) => {
+            const delBtn = e.target.closest('.search-history-del');
+            if (delBtn) {
+                const q = delBtn.dataset.del;
+                this._removeSearchHistoryItem(q);
+                return;
+            }
+            const item = e.target.closest('.search-history-item');
+            if (item) {
+                const q = item.dataset.query;
+                if (q && this.searchInput) {
+                    this.searchInput.value = q;
+                    this._doSearch(q);
+                }
+            }
+        });
+        const clearBtn = document.getElementById('clearHistoryBtn');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                try {
+                    localStorage.removeItem(SearchPage.SEARCH_HISTORY_KEY);
+                    this._renderSearchHistory();
+                    showToast('已清空搜索历史', 'success');
+                } catch (e) {
+                    console.warn('[SearchPage] 清空搜索历史失败:', e);
+                }
+            });
+        }
+    }
+
+    _removeSearchHistoryItem(query) {
+        try {
+            let history = this._getSearchHistory().filter(item => item !== query);
+            localStorage.setItem(SearchPage.SEARCH_HISTORY_KEY, JSON.stringify(history));
+            this._renderSearchHistory();
+        } catch (e) {
+            console.warn('[SearchPage] 删除搜索历史失败:', e);
         }
     }
 }

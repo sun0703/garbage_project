@@ -88,7 +88,42 @@ class Router {
         /** @type {Function|null} hashchange事件的绑定引用（用于销毁） */
         this._boundHandler = null;
 
-        /* 路由由 app.js 统一注册，此处不再预注册 */
+        /* 注册内置基础路由作为安全兜底 */
+        this._registerBuiltInRoutes();
+    }
+
+    // ==================== 内置路由注册 ====================
+
+    /**
+     * 注册内置基础路由 —— 安全兜底方案
+     *
+     * 每个路由对应的处理器仅执行 CSS 视图切换（_switchPage），
+     * 不包含页面模块懒加载和生命周期管理。
+     * 若外部（如 app.js）需要更完整的生命周期控制，
+     * 应先调用 clearRoutes() 清除内置路由，再按需重新注册。
+     *
+     * @private
+     * @returns {void}
+     */
+    _registerBuiltInRoutes() {
+        /* 根路径重定向到首页 */
+        this.register('/', (params, query) => this._switchPage('home'));
+
+        /* 核心功能页面路由 */
+        this.register('/home', (params, query) => this._switchPage('home'));
+        this.register('/preview', (params, query) => this._switchPage('preview'));
+        this.register('/result', (params, query) => this._switchPage('result'));
+        this.register('/search', (params, query) => this._switchPage('search'));
+        this.register('/guide', (params, query) => this._switchPage('guide'));
+        this.register('/history', (params, query) => this._switchPage('history'));
+
+        /* 动态参数路由：物品详情页 */
+        this.register('/item/:keyword', (params, query) => this._switchPage('item', { keyword: params.keyword, query }));
+
+        /* 辅助功能页面路由 */
+        this.register('/map', (params, query) => this._switchPage('map'));
+        this.register('/community', (params, query) => this._switchPage('community'));
+        this.register('/profile', (params, query) => this._switchPage('profile'));
     }
 
     // ==================== 私有方法 ====================
@@ -371,6 +406,26 @@ class Router {
         this._routes.set(pattern, { handler, paramKeys });
 
         /* 支持链式调用 */
+        return this;
+    }
+
+    /**
+     * 清空路由表 —— 移除所有已注册的路由规则
+     *
+     * 典型使用场景：外部（如 app.js）需要接管路由控制权时，
+     * 先清除构造函数自动注册的内置路由，再按需重新注册
+     * 具有完整生命周期管理的处理函数。
+     *
+     * @public
+     * @returns {this} 支持链式调用
+     *
+     * @example
+     * router.clearRoutes()
+     *       .register('/home', myHandler)
+     *       .register('/search', myHandler);
+     */
+    clearRoutes() {
+        this._routes.clear();
         return this;
     }
 

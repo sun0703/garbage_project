@@ -49,29 +49,28 @@ function _getOrCreateElement(id, tag, appendTo = 'body') {
  *              显示完毕后自动触发下一条。若队列为空则重置状态
  */
 function _processToastQueue() {
-  // 队列为空或已在显示中则跳过
   if (_toastQueue.length === 0 || _isToastShowing) return;
 
-  // 标记为正在显示
   _isToastShowing = true;
   const { msg, type, duration } = _toastQueue.shift();
 
-  // 获取或创建Toast容器
-  const toastEl = _getOrCreateElement('toast', 'div');
+  const containerEl = _getOrCreateElement('toastContainer', 'div');
+  containerEl.className = 'toast-container';
 
-  // 设置消息文本和类型样式类
+  const toastEl = document.createElement('div');
   toastEl.textContent = msg;
   toastEl.className = `toast toast--${type}`;
+  containerEl.appendChild(toastEl);
 
-  // 定时自动隐藏
   _toastTimer = setTimeout(() => {
     toastEl.classList.add('exiting');
-    // 等待CSS退场动画完成后清理状态
     setTimeout(() => {
+      if (toastEl.parentNode) {
+        toastEl.parentNode.removeChild(toastEl);
+      }
       _isToastShowing = false;
-      // 递归处理队列中的下一条消息
       _processToastQueue();
-    }, 300); // 与CSS过渡时间保持一致
+    }, 300);
   }, duration);
 }
 
@@ -132,10 +131,10 @@ export function hideToast() {
   _toastQueue = [];
   _isToastShowing = false;
 
-  // 移除Toast元素的可见样式，触发退场动画
-  const toastEl = document.getElementById('toast');
-  if (toastEl) {
-    toastEl.classList.add('exiting');
+  // 移除所有Toast元素
+  const container = document.getElementById('toastContainer');
+  if (container) {
+    container.innerHTML = '';
   }
 }
 

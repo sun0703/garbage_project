@@ -213,7 +213,9 @@ function createPageHandler(pageName, modulePath) {
  * @returns {void}
  */
 function registerAllRoutes(router) {
+    /* 清除构造函数中自动注册的内置兜底路由，替换为完整生命周期处理器 */
     router
+        .clearRoutes()
         /* 首页：拍照上传 + 搜索入口 */
         .register('/home', createPageHandler('home', './pages/home.js'))
         .register('/', createPageHandler('home', './pages/home.js'))

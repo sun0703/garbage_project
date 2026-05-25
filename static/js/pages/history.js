@@ -57,6 +57,11 @@ export class HistoryPage {
      * 移除事件监听、清空容器、释放引用
      */
     destroy() {
+        /* 移除列表容器事件委托 */
+        if (this.listContainer && this._boundHandlers.listClick) {
+            this.listContainer.removeEventListener('click', this._boundHandlers.listClick);
+        }
+
         /* 移除清空按钮事件 */
         const clearBtn = document.getElementById('clearAllBtn');
         if (clearBtn) {
@@ -220,9 +225,6 @@ export class HistoryPage {
                 ${itemsHTML}
             </div>
         `;
-
-        /* 为列表项绑定交互事件 */
-        this._bindRecordEvents(sortedRecords);
     }
 
     /**
@@ -398,32 +400,25 @@ export class HistoryPage {
         if (clearBtn) {
             clearBtn.addEventListener('click', this._boundHandlers.clear);
         }
-    }
 
-    /**
-     * 为历史记录列表项绑定交互事件
-     * 包含：点击回看详情(F-1.5.3)、删除单条记录
-     *
-     * @param {Array<Object>} records - 排序后的记录数组
-     * @private
-     */
-    _bindRecordEvents(records) {
-        const items = this.listContainer?.querySelectorAll('.history-record-item');
-        if (!items) return;
+        /* 列表容器事件委托：点击查看详情 / 删除单条记录 */
+        this._boundHandlers.listClick = (e) => {
+            const deleteBtn = e.target.closest('.record-delete-btn');
+            if (deleteBtn) {
+                const recordId = deleteBtn.dataset.deleteId;
+                const itemEl = deleteBtn.closest('.history-record-item');
+                if (recordId && itemEl) {
+                    this._deleteRecord(recordId, itemEl);
+                }
+                return;
+            }
 
-        items.forEach((itemEl) => {
-            const recordId = itemEl.dataset.recordId;
-
-            /* ---- 点击整行 → 回看详情 (F-1.5.3) ---- */
-            itemEl.addEventListener('click', (e) => {
-                /* 排除点击删除按钮的情况 */
-                if (e.target.closest('.record-delete-btn')) return;
-
-                /* 查找对应记录数据 */
-                const record = records.find(r => r.id === recordId);
+            const itemEl = e.target.closest('.history-record-item');
+            if (itemEl) {
+                const recordId = itemEl.dataset.recordId;
+                const record = this._records.find(r => r.id === recordId);
                 if (!record) return;
 
-                /* 将历史记录格式化为 predictResult 格式存入 store */
                 store.set('predictResult', {
                     label_cn: record.label_cn || record.label || '',
                     category: record.category || '',
@@ -432,19 +427,13 @@ export class HistoryPage {
                     guidance: record.guidance || ''
                 });
 
-                /* 跳转到结果展示页（复用 ResultCard） */
                 window.location.hash = '#/result';
-            });
-
-            /* ---- 删除按钮 → 删除单条记录 ---- */
-            const deleteBtn = itemEl.querySelector(`[data-delete-id="${recordId}"]`);
-            if (deleteBtn) {
-                deleteBtn.addEventListener('click', async (e) => {
-                    e.stopPropagation(); /* 阻止冒泡触发行点击 */
-                    await this._deleteRecord(recordId, itemEl);
-                });
             }
-        });
+        };
+
+        if (this.listContainer) {
+            this.listContainer.addEventListener('click', this._boundHandlers.listClick);
+        }
     }
 
     // ==================== 私有方法：操作处理 ====================

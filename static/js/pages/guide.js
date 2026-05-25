@@ -1,116 +1,121 @@
 /**
- * 分类指南页视图（Guide Page）
+ * 分类指南页视图（Guide Page）— 阶段二增强版
  *
  * 职责：展示4类垃圾分类的标准说明卡片（厨余/可回收/其他/有害）；
- *       每个卡片包含类别名称、颜色标识、图标、描述、常见示例列表；
- *       包含易错物品对比专题区域（F-2.4）；
- *       数据来源优先 API 接口，失败时使用本地静态数据兜底。
+ *       每个卡片包含：类别名称、颜色标识、图标、定义、投放注意事项、
+ *       常见示例、校园特有物品、容易分错的物品；
+ *       支持折叠/展开交互；
+ *       数据来源优先 /api/guide/standard 接口，失败时使用本地静态数据兜底。
  * 容器：#page-guide
  */
 
-// ==================== 模块依赖导入 ====================
 import { api } from '../api.js';
 import { showToast, showLoading, hideLoading } from '../utils/ui.js';
 import { ConfusingPairCard } from '../components/confusing-pair-card.js';
 
-// ==================== 本地静态兜底数据（API 不可用时使用） ====================
-
-/** 四类垃圾标准分类数据 */
 const FALLBACK_CATEGORIES = [
     {
-        id: 0,
-        name: '厨余垃圾',
-        color: '#8B4513',
-        bgGradient: 'linear-gradient(135deg, #8B4513, #A0522D)',
-        icon: '🍎',
-        description: '易腐烂的食物残渣和生物质废弃物',
-        binColor: '棕色/绿色',
-        tip: '投放时需沥干水分，去除包装后投入专用垃圾桶',
-        examples: [
-            { name: '剩饭剩菜', desc: '餐后剩余食物' },
-            { name: '果皮果核', desc: '水果外皮及果核' },
-            { name: '茶叶渣', desc: '泡过的茶叶残渣' },
-            { name: '蛋壳', desc: '鸡蛋、鸭蛋等蛋壳' },
-            { name: '过期食品', desc: '已过保质期的食物' }
+        id: 0, name: '厨余垃圾', color: '#8B4513',
+        bg_gradient: 'linear-gradient(135deg, #8B4513, #A0522D)',
+        icon: '🍎', bin_color: '棕色/绿色',
+        definition: '易腐烂的食物残渣和生物质废弃物',
+        disposal_tips: ['投放前沥干水分', '去除食品包装物', '大骨头属于其他垃圾'],
+        common_items: [
+            {name: '剩饭剩菜', tip: '沥干水分后投放'},
+            {name: '果皮果核', tip: '苹果核、香蕉皮等'},
+            {name: '蛋壳', tip: '鸡蛋壳、鸭蛋壳'},
+            {name: '茶叶渣', tip: '沥干水分'}
+        ],
+        campus_special_items: [
+            {name: '食堂剩饭剩菜', tip: '沥干汤汁后投入厨余垃圾桶'},
+            {name: '奶茶中的珍珠', tip: '珍珠倒入厨余，杯子归其他垃圾'}
+        ],
+        wrong_items: [
+            {name: '大骨头', correct_category: '其他垃圾', reason: '难以分解'},
+            {name: '用过的纸巾', correct_category: '其他垃圾', reason: '已污染'}
         ]
     },
     {
-        id: 1,
-        name: '可回收物',
-        color: '#007bff',
-        bgGradient: 'linear-gradient(135deg, #007bff, #0056b3)',
-        icon: '♻️',
-        description: '可循环利用的废弃物，具有再生利用价值',
-        binColor: '蓝色',
-        tip: '投放前请清空内容物，简单清洗并压扁以节省空间',
-        examples: [
-            { name: '塑料瓶', desc: '饮料瓶、矿泉水瓶等' },
-            { name: '废纸类', desc: '报纸、书本、纸箱等' },
-            { name: '金属罐', desc: '易拉罐、铁罐、铝罐等' },
-            { name: '玻璃制品', desc: '玻璃瓶、镜子碎片等' },
-            { name: '旧衣物', desc: '干净的可再利用纺织品' }
+        id: 1, name: '可回收物', color: '#007bff',
+        bg_gradient: 'linear-gradient(135deg, #007bff, #0056b3)',
+        icon: '♻️', bin_color: '蓝色',
+        definition: '可循环利用的废弃物，具有再生利用价值',
+        disposal_tips: ['投放前清空内容物', '纸箱压扁折叠', '塑料瓶压扁投放'],
+        common_items: [
+            {name: '塑料瓶', tip: '清空冲洗，压扁投放'},
+            {name: '废纸类', tip: '报纸、书本、纸箱'},
+            {name: '易拉罐', tip: '踩扁后投放'},
+            {name: '旧衣物', tip: '清洗打包后投放'}
+        ],
+        campus_special_items: [
+            {name: '快递纸箱', tip: '拆开压扁后投入蓝色可回收桶'},
+            {name: '教材书本', tip: '保持整洁，可捐赠或投入可回收桶'}
+        ],
+        wrong_items: [
+            {name: '用过的纸巾', correct_category: '其他垃圾', reason: '已污染'},
+            {name: '外卖餐盒(有残留)', correct_category: '其他垃圾', reason: '被食物污染'}
         ]
     },
     {
-        id: 2,
-        name: '其他垃圾',
-        color: '#333333',
-        bgGradient: 'linear-gradient(135deg, #555555, #333333)',
-        icon: '🗑️',
-        description: '除以上三类之外的其他生活废弃物',
-        binColor: '灰色/黑色',
-        tip: '难以归类的物品通常属于此类，注意不要混入有害物质',
-        examples: [
-            { name: '污染纸张', desc: '已沾染油污的纸巾' },
-            { name: '陶瓷碎片', desc: '破碎的碗碟瓷片' },
-            { name: '烟蒂', desc: '吸烟后的烟头' },
-            { name: '尘土', desc: '清扫的灰尘垃圾' },
-            { name: '一次性餐具', desc: '污染的一次性筷子/饭盒' }
+        id: 2, name: '其他垃圾', color: '#333333',
+        bg_gradient: 'linear-gradient(135deg, #555555, #333333)',
+        icon: '🗑️', bin_color: '灰色/黑色',
+        definition: '除以上三类之外的其他生活废弃物',
+        disposal_tips: ['尽量沥干水分', '尖锐物品用纸包裹', '大件垃圾投放至指定收集点'],
+        common_items: [
+            {name: '用过的纸巾', tip: '卫生纸、面巾纸'},
+            {name: '烟蒂', tip: '熄灭后投放'},
+            {name: '陶瓷碎片', tip: '包裹后投放'},
+            {name: '大骨头', tip: '猪腿骨、牛骨'}
+        ],
+        campus_special_items: [
+            {name: '外卖餐盒(有残留)', tip: '清空食物残渣后投入灰色桶'},
+            {name: '奶茶杯(有残留)', tip: '珍珠倒入厨余，杯子归其他垃圾'}
+        ],
+        wrong_items: [
+            {name: '废电池', correct_category: '有害垃圾', reason: '含重金属'},
+            {name: '果皮', correct_category: '厨余垃圾', reason: '食物残渣'}
         ]
     },
     {
-        id: 3,
-        name: '有害垃圾',
-        color: '#dc3545',
-        bgGradient: 'linear-gradient(135deg, #dc3545, #c82333)',
-        icon: '☠️',
-        description: '对人体健康或自然环境造成直接或潜在危害的废弃物',
-        binColor: '红色',
-        tip: '需特殊安全处理，请勿与其他垃圾混合投放',
-        examples: [
-            { name: '废电池', desc: '各类充电电池、干电池' },
-            { name: '废灯管', desc: '荧光灯管、节能灯管' },
-            { name: '过期药品', desc: '已过期的药物及包装' },
-            { name: '油漆桶', desc: '废弃的油漆涂料容器' },
-            { name: '杀虫剂', desc: '废弃的农药/杀虫剂瓶子' }
+        id: 3, name: '有害垃圾', color: '#dc3545',
+        bg_gradient: 'linear-gradient(135deg, #dc3545, #c82333)',
+        icon: '☠️', bin_color: '红色',
+        definition: '对人体健康或自然环境造成直接或潜在危害的废弃物',
+        disposal_tips: ['投放时轻放防止破损', '废灯管保持完整', '过期药品连同包装投放'],
+        common_items: [
+            {name: '废电池', tip: '充电电池、纽扣电池'},
+            {name: '废灯管', tip: '荧光灯管、节能灯'},
+            {name: '过期药品', tip: '药品及包装'},
+            {name: '水银温度计', tip: '小心轻放'}
+        ],
+        campus_special_items: [
+            {name: '充电宝/锂电池', tip: '投入红色有害垃圾桶，防止短路'},
+            {name: '废墨盒/硒鼓', tip: '打印机耗材投入有害垃圾桶'}
+        ],
+        wrong_items: [
+            {name: 'LED灯', correct_category: '可回收物', reason: '不含汞'},
+            {name: '普通玻璃瓶', correct_category: '可回收物', reason: '不含害物质'}
         ]
     }
 ];
 
-// ==================== 页面类定义 ====================
+function escapeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
 export class GuidePage {
-    /** 页面根容器 DOM 引用 */
     container = null;
-
-    /** 分类数据（来自 API 或本地兜底） */
     _categories = [];
-
-    /** 易错对比数据（来自 JSON 或 API） */
     _confusingPairs = [];
-
-    /** 易错卡片组件实例集合 */
-    _confusingCardInstances = [];
-
-    /** 是否正在加载数据 */
     _loading = false;
-
-    /** 绑定的事件处理器引用集合 */
+    _expandedCardId = null;
+    _pairCard = null;
     _boundHandlers = {};
 
-    /**
-     * 初始化分类指南页
-     * 加载分类数据并渲染4类标准说明卡片 + 易错对比专题
-     */
     init() {
         this.container = document.getElementById('page-guide');
         if (!this.container) {
@@ -118,50 +123,34 @@ export class GuidePage {
             return;
         }
 
-        /* 渲染页面骨架（含易错专题区域） */
+        this._pairCard = new ConfusingPairCard();
         this._render();
-        /* 加载分类数据 */
         this._loadCategories();
-        /* 加载易错对比数据 */
         this._loadConfusingPairs();
 
         console.log('[GuidePage] 分类指南页初始化完成');
     }
 
-    /**
-     * 销毁分类指南页
-     * 清空容器、释放引用（含易错卡片组件）
-     */
     destroy() {
-        /* 销毁所有易错对比卡片实例 */
-        this._confusingCardInstances.forEach(card => card.destroy());
-        this._confusingCardInstances = [];
-
-        /* 清空容器 */
         if (this.container) {
             this.container.innerHTML = '';
         }
 
-        /* 释放引用 */
         this.container = null;
         this._categories = [];
         this._confusingPairs = [];
-        this._loading = false;
+        this._expandedCardId = null;
+        if (this._pairCard) {
+            this._pairCard.destroy();
+            this._pairCard = null;
+        }
         this._boundHandlers = {};
 
         console.log('[GuidePage] 分类指南页已销毁');
     }
 
-    // ==================== 私有方法：渲染 ====================
-
-    /**
-     * 渲染页面 HTML 骨架结构
-     * 包含标题区 + 分类卡片容器 + 易错对比专题区域
-     * @private
-     */
     _render() {
         this.container.innerHTML = `
-            <!-- 导航栏 -->
             <div class="guide-nav">
                 <button class="nav-back-btn" id="guideBackBtn">
                     <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none">
@@ -172,7 +161,6 @@ export class GuidePage {
                 <h2 class="guide-nav-title">分类指南</h2>
             </div>
 
-            <!-- 页面简介 -->
             <div class="guide-intro card">
                 <div class="guide-intro-icon">
                     <svg viewBox="0 0 24 24" width="32" height="32" fill="#2D9B5E">
@@ -185,9 +173,7 @@ export class GuidePage {
                 </div>
             </div>
 
-            <!-- 分类卡片列表容器（动态填充） -->
             <div id="categoryCardsContainer" class="category-cards-list">
-                <!-- 加载骨架屏 -->
                 <div class="guide-loading-skeleton">
                     <div class="skeleton-card"></div>
                     <div class="skeleton-card"></div>
@@ -196,233 +182,113 @@ export class GuidePage {
                 </div>
             </div>
 
-            <!-- ========== 易错物品对比专题区域（F-2.4）========== -->
-            <section class="confusing-section" id="confusingSection">
-                <!-- 区域头部 -->
+            <div class="confusing-section">
                 <div class="confusing-section-header">
-                    <div class="confusing-section-title-row">
-                        <span class="confusing-section-icon">🎯</span>
-                        <h3 class="confusing-section-title">易错物品对比专题</h3>
+                    <h3 class="confusing-section-title">
+                        <span>⚠️</span> 易混淆物品对比
+                    </h3>
+                    <div class="confusing-filter-bar">
+                        <button class="confusing-filter-btn active" data-filter="all">全部</button>
+                        <button class="confusing-filter-btn" data-filter="critical">极易混淆</button>
+                        <button class="confusing-filter-btn" data-filter="high">常混淆</button>
+                        <button class="confusing-filter-btn" data-filter="medium">易混淆</button>
                     </div>
-                    <p class="confusing-section-desc">这些物品最容易分错，左右滑动查看详细区别</p>
                 </div>
-
-                <!-- 对比卡片列表容器（动态填充） -->
                 <div id="confusingPairsContainer" class="confusing-pairs-list">
-                    <!-- 加载占位 -->
-                    <div class="confusing-loading-placeholder">
-                        <div class="confusing-skeleton-card"></div>
-                        <div class="confusing-skeleton-card"></div>
+                    <div class="guide-loading-skeleton">
+                        <div class="skeleton-card"></div>
+                        <div class="skeleton-card"></div>
                     </div>
                 </div>
-            </section>
+            </div>
 
-            <!-- 底部提示 -->
             <div class="guide-footer">
                 <p>数据来源：国家标准《生活垃圾分类标志》GB/T 19095-2019</p>
             </div>
         `;
     }
 
-    // ==================== 私有方法：数据加载 ====================
-
-    /**
-     * 加载分类数据
-     * 优先从 API 获取，失败时使用本地静态数据兜底
-     * @private
-     */
     async _loadCategories() {
         this._loading = true;
 
         try {
-            /* 尝试从 API 获取最新分类数据 */
-            const response = await api.getCategories();
+            const response = await api.getGuideStandard();
 
             if (response.categories && response.categories.length > 0) {
-                /* 使用 API 返回的数据 */
                 this._categories = response.categories;
                 console.log(`[GuidePage] 从 API 加载了 ${this._categories.length} 条分类数据`);
             } else {
-                /* API 返回空数组，使用本地数据 */
                 this._categories = FALLBACK_CATEGORIES;
                 console.log('[GuidePage] API 返回空数据，使用本地兜底');
             }
-
         } catch (error) {
-            /* API 请求失败，使用本地静态数据兜底 */
             console.warn('[GuidePage] API 加载失败，使用本地兜底数据:', error);
             this._categories = FALLBACK_CATEGORIES;
-
         } finally {
             this._loading = false;
-            /* 渲染分类卡片 */
             this._renderCategoryCards();
         }
     }
 
-    /**
-     * 加载易错对比数据
-     * 优先从 API 获取，失败时加载本地 JSON 文件兜底
-     * @private
-     */
-    async _loadConfusingPairs() {
-        try {
-            /* 尝试从 API 获取易错数据（阶段二接口预留） */
-            const response = await api.getConfusingPairs?.();
-
-            if (response?.pairs && response.pairs.length > 0) {
-                this._confusingPairs = response.pairs;
-                console.log(`[GuidePage] 从 API 加载了 ${this._confusingPairs.length} 组易错数据`);
-            } else {
-                /* 加载本地 JSON 数据 */
-                await this._loadLocalConfusingPairs();
-            }
-        } catch (error) {
-            /* API 不可用，使用本地 JSON 兜底 */
-            console.warn('[GuidePage] 易错API不可用，加载本地数据:', error);
-            await this._loadLocalConfusingPairs();
-        }
-
-        /* 渲染易错对比卡片 */
-        this._renderConfusingPairs();
-    }
-
-    /**
-     * 加载本地 confusing-pairs.json 静态数据
-     * @private
-     */
-    async _loadLocalConfusingPairs() {
-        try {
-            const res = await fetch('./data/confusing-pairs.json');
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const data = await res.json();
-            this._confusingPairs = data.pairs || [];
-            console.log(`[GuidePage] 从本地JSON加载了 ${this._confusingPairs.length} 组易错数据`);
-        } catch (error) {
-            console.error('[GuidePage] 本地易错数据加载失败:', error);
-            this._confusingPairs = [];
-        }
-    }
-
-    // ==================== 私有方法：卡片渲染 ====================
-
-    /**
-     * 渲染所有分类说明卡片
-     * 每个卡片包含：颜色标识 + 类别名称 + 图标 + 描述 + 常见示例列表
-     * @private
-     */
     _renderCategoryCards() {
         const container = document.getElementById('categoryCardsContainer');
         if (!container) return;
 
-        /* 如果没有数据则显示提示 */
         if (!this._categories || this._categories.length === 0) {
-            container.innerHTML = `
-                <div class="card empty-categories">
-                    <p>暂无分类数据</p>
-                </div>
-            `;
+            container.innerHTML = `<div class="card empty-categories"><p>暂无分类数据</p></div>`;
             return;
         }
 
-        /* 为每个分类生成卡片 HTML */
         const cardsHTML = this._categories.map((category, index) => {
             return this._buildCategoryCard(category, index);
         }).join('');
 
         container.innerHTML = cardsHTML;
-
-        /* 绑定返回按钮事件 */
         this._bindEvents();
     }
 
-    /**
-     * 渲染易错对比卡片列表
-     * 使用 ConfusingPairCard 组件实例化每一条易错对数据
-     * @private
-     */
-    _renderConfusingPairs() {
-        const container = document.getElementById('confusingPairsContainer');
-        if (!container) return;
-
-        /* 清理旧实例 */
-        this._confusingCardInstances.forEach(card => card.destroy());
-        this._confusingCardInstances = [];
-
-        /* 无数据时显示空状态 */
-        if (!this._confusingPairs || this._confusingPairs.length === 0) {
-            container.innerHTML = `
-                <div class="card empty-confusing">
-                    <p>暂无易错对比数据</p>
-                </div>
-            `;
-            return;
-        }
-
-        /* 按频率排序：高频优先展示 */
-        const sortedPairs = [...this._confusingPairs].sort((a, b) => {
-            const order = { high: 0, medium: 1, low: 2 };
-            return (order[a.frequency] || 1) - (order[b.frequency] || 1);
-        });
-
-        /* 清空容器并渲染卡片 */
-        container.innerHTML = '';
-
-        /* 取前8组展示（避免首屏过长，其余可滚动查看） */
-        const displayPairs = sortedPairs.slice(0, 8);
-
-        displayPairs.forEach((pairData, index) => {
-            /* 创建组件实例 */
-            const card = new ConfusingPairCard({
-                showAnimation: true,
-                expandable: true,
-                showScene: true
-            });
-
-            /* 渲染到容器 */
-            const cardEl = card.render(container);
-            if (cardEl) {
-                /* 设置动画延迟实现交错入场效果 */
-                cardEl.style.animationDelay = `${index * 0.1}s`;
-                /* 填充数据 */
-                card.update(pairData);
-                /* 保存实例引用 */
-                this._confusingCardInstances.push(card);
-            }
-        });
-
-        /* 数据量提示 */
-        if (this._confusingPairs.length > 8) {
-            const hintEl = document.createElement('div');
-            hintEl.className = 'confusing-more-hint';
-            hintEl.textContent = `共 ${this._confusingPairs.length} 组易错对比，已展示高频前8组`;
-            container.appendChild(hintEl);
-        }
-    }
-
-    /**
-     * 构建单个分类说明卡片的 HTML
-     *
-     * @param {Object} category - 分类数据对象
-     * @param {number} index - 分类索引（用于动画延迟）
-     * @returns {string} 卡片 HTML 字符串
-     * @private
-     */
     _buildCategoryCard(category, index) {
-        const color = category.color || '#666';
-        const bgGradient = category.bgGradient || `linear-gradient(135deg, ${color}, ${color}dd)`;
+        const color = category.color || category.color_code || '#666';
+        const bgGradient = category.bg_gradient || `linear-gradient(135deg, ${color}, ${color}dd)`;
         const icon = category.icon || '';
-        const name = category.name || '未命名分类';
-        const description = category.description || '';
-        const binColor = category.binColor || '';
-        const tip = category.tip || '';
-        const examples = category.examples || [];
+        const name = escapeHtml(category.name || '未命名分类');
+        const definition = escapeHtml(category.definition || category.description || '');
+        const binColor = escapeHtml(category.bin_color || category.binColor || '');
+        const disposalTips = category.disposal_tips || [];
+        const commonItems = category.common_items || category.examples || [];
+        const campusItems = category.campus_special_items || [];
+        const wrongItems = category.wrong_items || [];
 
-        /* 构建示例列表项 */
-        const examplesHTML = examples.map(ex => `
-            <li class="example-item">
-                <span class="example-name">${ex.name}</span>
-                <span class="example-desc">${ex.desc}</span>
+        const tipsHTML = disposalTips.map(tip => `
+            <li class="disposal-tip-item">
+                <span class="tip-bullet">•</span>
+                <span>${escapeHtml(tip)}</span>
+            </li>
+        `).join('');
+
+        const commonItemsHTML = commonItems.map(item => {
+            const itemName = item.name || item;
+            const itemTip = item.tip || item.desc || '';
+            return `
+                <li class="guide-item-chip" title="${escapeHtml(itemTip)}">
+                    ${escapeHtml(itemName)}
+                </li>
+            `;
+        }).join('');
+
+        const campusItemsHTML = campusItems.map(item => `
+            <li class="campus-item">
+                <span class="campus-item-name">${escapeHtml(item.name)}</span>
+                <span class="campus-item-tip">${escapeHtml(item.tip)}</span>
+            </li>
+        `).join('');
+
+        const wrongItemsHTML = wrongItems.map(item => `
+            <li class="wrong-item">
+                <span class="wrong-item-name">${escapeHtml(item.name)}</span>
+                <span class="wrong-item-arrow">→</span>
+                <span class="wrong-item-correct">${escapeHtml(item.correct_category)}</span>
+                <span class="wrong-item-reason">${escapeHtml(item.reason)}</span>
             </li>
         `).join('');
 
@@ -431,9 +297,7 @@ export class GuidePage {
                  data-category-id="${category.id}"
                  style="animation-delay: ${index * 0.1}s">
 
-                <!-- 卡片头部：颜色条 + 类别信息 -->
-                <div class="category-card-header" style="background: ${bgGradient}">
-                    <div class="category-color-bar" style="background: ${color}"></div>
+                <div class="category-card-header" style="background: ${bgGradient}" data-toggle="${category.id}">
                     <div class="category-header-info">
                         <span class="category-icon">${icon}</span>
                         <div class="category-title-group">
@@ -441,28 +305,49 @@ export class GuidePage {
                             ${binColor ? `<span class="category-bin-label">🪣 ${binColor}桶</span>` : ''}
                         </div>
                     </div>
+                    <div class="category-expand-icon">
+                        <svg viewBox="0 0 24 24" width="20" height="20" stroke="white" stroke-width="2" fill="none">
+                            <polyline points="6 9 12 15 18 9"/>
+                        </svg>
+                    </div>
                 </div>
 
-                <!-- 卡片主体：描述 + 示例 -->
-                <div class="category-card-body">
-                    <!-- 类别描述 -->
-                    <p class="category-description">${description}</p>
+                <div class="category-card-body" id="cardBody-${category.id}">
+                    ${definition ? `<p class="category-definition">${definition}</p>` : ''}
 
-                    ${tip ? `
-                    <!-- 投放提示 -->
-                    <div class="category-tip-box">
-                        <span class="tip-icon">💡</span>
-                        <span class="tip-text">${tip}</span>
+                    ${disposalTips.length > 0 ? `
+                    <div class="guide-section">
+                        <h4 class="guide-section-title">
+                            <span class="section-icon">📋</span>投放注意事项
+                        </h4>
+                        <ul class="disposal-tips-list">${tipsHTML}</ul>
                     </div>
                     ` : ''}
 
-                    <!-- 常见示例列表 -->
-                    ${examples.length > 0 ? `
-                    <div class="category-examples">
-                        <h4 class="examples-title">常见示例</h4>
-                        <ul class="examples-list">
-                            ${examplesHTML}
-                        </ul>
+                    ${commonItems.length > 0 ? `
+                    <div class="guide-section">
+                        <h4 class="guide-section-title">
+                            <span class="section-icon">📦</span>常见物品
+                        </h4>
+                        <div class="guide-items-chips">${commonItemsHTML}</div>
+                    </div>
+                    ` : ''}
+
+                    ${campusItems.length > 0 ? `
+                    <div class="guide-section">
+                        <h4 class="guide-section-title">
+                            <span class="section-icon">🏫</span>校园特有物品
+                        </h4>
+                        <ul class="campus-items-list">${campusItemsHTML}</ul>
+                    </div>
+                    ` : ''}
+
+                    ${wrongItems.length > 0 ? `
+                    <div class="guide-section">
+                        <h4 class="guide-section-title">
+                            <span class="section-icon">⚠️</span>容易分错的物品
+                        </h4>
+                        <ul class="wrong-items-list">${wrongItemsHTML}</ul>
                     </div>
                     ` : ''}
                 </div>
@@ -470,28 +355,84 @@ export class GuidePage {
         `;
     }
 
-    // ==================== 私有方法：事件绑定 ====================
-
-    /**
-     * 绑定交互事件
-     * @private
-     */
     _bindEvents() {
-        /* 返回按钮 — 回到首页 */
         const backBtn = document.getElementById('guideBackBtn');
         if (backBtn) {
-            backBtn.addEventListener('click', () => {
-                window.location.hash = '#/';
-            });
+            this._boundHandlers.back = () => { window.location.hash = '#/'; };
+            backBtn.addEventListener('click', this._boundHandlers.back);
         }
 
-        /* 可扩展：点击卡片展开详情（阶段二实现） */
-        const cards = this.container?.querySelectorAll('.category-card');
-        cards?.forEach(card => {
-            card.addEventListener('click', () => {
-                /* 阶段一仅做视觉反馈，阶段二可扩展为跳转详情 */
-                card.classList.toggle('expanded');
-            });
+        const headers = this.container?.querySelectorAll('.category-card-header[data-toggle]');
+        headers?.forEach(header => {
+            const categoryId = header.dataset.toggle;
+            this._boundHandlers[`toggle-${categoryId}`] = () => this._toggleCard(categoryId);
+            header.addEventListener('click', this._boundHandlers[`toggle-${categoryId}`]);
+        });
+    }
+
+    _toggleCard(categoryId) {
+        const card = this.container?.querySelector(`.category-card[data-category-id="${categoryId}"]`);
+        const body = document.getElementById(`cardBody-${categoryId}`);
+        if (!card || !body) return;
+
+        const isExpanded = card.classList.contains('expanded');
+
+        if (isExpanded) {
+            card.classList.remove('expanded');
+            body.style.maxHeight = '0';
+            body.style.opacity = '0';
+        } else {
+            card.classList.add('expanded');
+            body.style.maxHeight = body.scrollHeight + 'px';
+            body.style.opacity = '1';
+        }
+    }
+
+    async _loadConfusingPairs(frequency = '') {
+        try {
+            const response = await api.getConfusingPairs(35, frequency);
+            if (response.pairs && response.pairs.length > 0) {
+                this._confusingPairs = response.pairs;
+            }
+        } catch (error) {
+            console.warn('[GuidePage] 易混淆数据加载失败:', error);
+            this._confusingPairs = [];
+        } finally {
+            this._renderConfusingPairs();
+        }
+    }
+
+    _renderConfusingPairs() {
+        const container = document.getElementById('confusingPairsContainer');
+        if (!container) return;
+
+        if (!this._confusingPairs || this._confusingPairs.length === 0) {
+            container.innerHTML = `<div class="card empty-categories"><p>暂无易混淆数据</p></div>`;
+            return;
+        }
+
+        container.innerHTML = '';
+
+        this._confusingPairs.forEach(pair => {
+            if (!this._pairCard) return;
+            const cardEl = this._pairCard.render(pair);
+            container.appendChild(cardEl);
+        });
+
+        this._bindFilterEvents();
+    }
+
+    _bindFilterEvents() {
+        const filterBtns = this.container?.querySelectorAll('.confusing-filter-btn');
+        filterBtns?.forEach(btn => {
+            const filter = btn.dataset.filter;
+            this._boundHandlers[`filter-${filter}`] = (e) => {
+                this.container?.querySelectorAll('.confusing-filter-btn').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                const freq = filter === 'all' ? '' : filter;
+                this._loadConfusingPairs(freq);
+            };
+            btn.addEventListener('click', this._boundHandlers[`filter-${filter}`]);
         });
     }
 }

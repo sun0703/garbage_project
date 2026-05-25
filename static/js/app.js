@@ -197,7 +197,7 @@ function createPageHandler(pageName, modulePath) {
 
         /* 同步TabBar激活状态 */
         if (tabBarInstance && typeof tabBarInstance.setActiveTab === 'function') {
-            const tabIndex = { home: 0, search: 1, guide: 2, history: 3 }[pageName];
+            const tabIndex = { home: 0, search: 1, map: 2, community: 3, profile: 4 }[pageName];
             if (tabIndex !== undefined) {
                 tabBarInstance.setActiveTab(tabIndex);
             }

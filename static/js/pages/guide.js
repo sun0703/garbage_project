@@ -119,8 +119,10 @@ export class GuidePage {
 
         this._pairCard = new ConfusingPairCard();
         this._render();
-        this._loadCategories();
-        this._loadConfusingPairs();
+        Promise.all([
+            this._loadCategories(),
+            this._loadConfusingPairs()
+        ]);
 
         console.log('[GuidePage] 分类指南页初始化完成');
     }

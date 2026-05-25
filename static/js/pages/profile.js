@@ -1,5 +1,6 @@
 import { store } from '../store.js';
 import { api } from '../api.js';
+import { escapeHtml } from '../utils/escape.js';
 
 export class ProfilePage {
     container = null;
@@ -78,13 +79,19 @@ export class ProfilePage {
         const quizEl = document.getElementById('statQuiz');
         const actionsEl = document.getElementById('profileActions');
 
+        const safeNickname = escapeHtml(user.nickname || user.username || '');
+        const safeUsername = escapeHtml(user.username || '');
+        const safeAvatar = escapeHtml(user.avatar || '');
+        const safeInitial = escapeHtml((user.nickname || user.username || '?')[0]);
+        const isSafeUrl = (url) => /^https?:/.test(url);
+
         if (nameEl) nameEl.textContent = user.nickname || user.username;
         if (usernameEl) usernameEl.textContent = `@${user.username}`;
         if (avatarEl) {
-            if (user.avatar) {
-                avatarEl.innerHTML = `<img src="${user.avatar}" alt="头像" class="avatar-img-lg">`;
+            if (user.avatar && isSafeUrl(user.avatar)) {
+                avatarEl.innerHTML = `<img src="${safeAvatar}" alt="头像" class="avatar-img-lg">`;
             } else {
-                avatarEl.innerHTML = `<div class="avatar-placeholder-lg">${(user.nickname || user.username)[0]}</div>`;
+                avatarEl.innerHTML = `<div class="avatar-placeholder-lg">${safeInitial}</div>`;
             }
         }
         if (pointsEl) pointsEl.textContent = user.points || 0;
@@ -113,7 +120,7 @@ export class ProfilePage {
                     return `
                         <div class="checkin-record">
                             <span class="record-date">${dateStr}</span>
-                            <span class="record-category">${r.category || '日常打卡'}</span>
+                            <span class="record-category">${escapeHtml(r.category || '日常打卡')}</span>
                             <span class="record-points">+${r.points_earned}</span>
                         </div>
                     `;

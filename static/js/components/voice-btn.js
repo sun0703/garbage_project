@@ -353,8 +353,8 @@ export class VoiceButton {
      * @private
      */
     _bindEvents() {
-        // 点击切换录音状态
-        this.btnEl.addEventListener('click', () => this.toggle());
+        this._boundClick = () => this.toggle();
+        this.btnEl.addEventListener('click', this._boundClick);
 
         // 长按支持（移动端友好）
         let pressTimer;
@@ -630,7 +630,8 @@ export class VoiceButton {
             fallbackContainer.remove();
         }
 
-        this.btnEl?.removeEventListener('click', this.toggle);
+        this.btnEl?.removeEventListener('click', this._boundClick);
+        this._boundClick = null;
         this.onResult = null;
         this.onError = null;
         this.onStateChange = null;

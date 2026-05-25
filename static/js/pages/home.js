@@ -94,6 +94,11 @@ export class HomePage {
         // 移除粘贴事件（全局）
         document.removeEventListener('paste', this._boundHandlers.paste);
 
+        if (this._voiceButton) {
+            this._voiceButton.destroy();
+            this._voiceButton = null;
+        }
+
         // 清空容器
         if (this.container) {
             this.container.innerHTML = '';

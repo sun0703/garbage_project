@@ -79,6 +79,9 @@ export class ResultPage {
         if (shareBtn) shareBtn.removeEventListener('click', this._boundHandlers.share);
         if (homeBtn) homeBtn.removeEventListener('click', this._boundHandlers.home);
 
+        const backBtn = document.getElementById('resultBackBtn');
+        if (backBtn && this._boundHandlers.back) backBtn.removeEventListener('click', this._boundHandlers.back);
+
         /* 销毁子组件实例释放事件监听 */
         if (this._resultCard && typeof this._resultCard.destroy === 'function') {
             this._resultCard.destroy();
@@ -243,9 +246,8 @@ export class ResultPage {
         /* 导航栏返回按钮 */
         const backBtn = document.getElementById('resultBackBtn');
         if (backBtn) {
-            backBtn.addEventListener('click', () => {
-                window.location.hash = '#/';
-            });
+            this._boundHandlers.back = () => { window.location.hash = '#/'; };
+            backBtn.addEventListener('click', this._boundHandlers.back);
         }
     }
 

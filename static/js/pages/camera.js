@@ -343,11 +343,7 @@ export class PreviewPage {
                     if (FALLBACK_ERROR_CODES.has(error.code)) {
                         console.log('[PreviewPage] 触发自动降级模式');
                         setLoadingText('使用备用模式识别...');
-                        try {
-                            result = await api.analyzeFallback(base64Data);
-                        } catch (fallbackError) {
-                            throw fallbackError;
-                        }
+                        result = await api.analyzeFallback(base64Data);
                     } else {
                         /* 其他 API 错误直接抛出 */
                         throw error;
@@ -382,7 +378,7 @@ export class PreviewPage {
             /* 根据错误类型给出不同提示 (F-1.4.1) */
             let errorMsg = '识别失败，请重试';
             if (error instanceof ApiError) {
-                errorMsg = error.userMessage || error.message;
+                errorMsg = error.message;
             } else if (error.name === 'TypeError' && !navigator.onLine) {
                 errorMsg = '网络连接不可用，请检查网络设置';
             }

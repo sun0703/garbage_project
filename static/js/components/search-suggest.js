@@ -1,4 +1,5 @@
 import { api } from '../api.js';
+import { escapeHtml } from '../utils/escape.js';
 
 /** 防抖延迟时间（毫秒） */
 const DEBOUNCE_MS = 300;
@@ -358,8 +359,8 @@ export class SearchSuggest {
                 return `<div class="search-suggest__item" role="option" data-index="${idx}" tabindex="-1">
                     <div class="search-suggest__item-icon">${icon}</div>
                     <div class="search-suggest__item-info">
-                        <div class="search-suggest__item-label">${this._escapeHtml(label)}</div>
-                        <div class="search-suggest__item-category">${this._escapeHtml(category)}</div>
+                        <div class="search-suggest__item-label">${escapeHtml(label)}</div>
+                        <div class="search-suggest__item-category">${escapeHtml(category)}</div>
                     </div>
                     ${score ? `<div class="search-suggest__item-score">${score}%</div>` : ''}
                 </div>`;
@@ -385,10 +386,10 @@ export class SearchSuggest {
         const displayItems = this._historyCache.slice(0, MAX_DISPLAY_HISTORY);
 
         const itemsHTML = displayItems.map(q => `
-            <div class="suggest-history-item" data-query="${this._escapeHtml(q)}" role="button" tabindex="0">
+            <div class="suggest-history-item" data-query="${escapeHtml(q)}" role="button" tabindex="0">
                 <span class="suggest-history-icon">🕐</span>
-                <span class="suggest-history-text">${this._escapeHtml(q)}</span>
-                <button class="suggest-history-del" data-del="${this._escapeHtml(q)}" aria-label="删除此条历史">✕</button>
+                <span class="suggest-history-text">${escapeHtml(q)}</span>
+                <button class="suggest-history-del" data-del="${escapeHtml(q)}" aria-label="删除此条历史">✕</button>
             </div>
         `).join('');
 
@@ -568,8 +569,8 @@ export class SearchSuggest {
             return `<div class="search-suggest__item" role="option" data-index="${idx}" tabindex="-1">
                 <div class="search-suggest__item-icon">${icon}</div>
                 <div class="search-suggest__item-info">
-                    <div class="search-suggest__item-label">${this._escapeHtml(label)}</div>
-                    <div class="search-suggest__item-category">${this._escapeHtml(category)}</div>
+                    <div class="search-suggest__item-label">${escapeHtml(label)}</div>
+                    <div class="search-suggest__item-category">${escapeHtml(category)}</div>
                 </div>
                 ${score ? `<div class="search-suggest__item-score">${score}%</div>` : ''}
             </div>`;
@@ -684,12 +685,6 @@ export class SearchSuggest {
         if (value.length >= MIN_CHARS && this._items.length > 0) {
             this._open();
         }
-    }
-
-    _escapeHtml(str) {
-        if (typeof str !== 'string') return '';
-        const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-        return str.replace(/[&<>"']/g, (ch) => map[ch]);
     }
 
     destroy() {

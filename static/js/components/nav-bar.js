@@ -16,6 +16,8 @@
  * navBar.set_title('塑料瓶 - 识别结果');
  */
 
+import { escapeHtml } from '../utils/escape.js';
+
 export class NavBar {
     /**
      * 构造函数 - 初始化导航栏配置
@@ -74,7 +76,7 @@ export class NavBar {
                     </svg>
                 </div>
                 <!-- 标题文字 -->
-                <span class="nav-bar__title" id="navTitle">${this._escapeHtml(this._title)}</span>
+                <span class="nav-bar__title" id="navTitle">${escapeHtml(this._title)}</span>
             </div>
 
             <!-- 右侧：操作按钮区域 -->
@@ -187,18 +189,6 @@ export class NavBar {
         this._element.dispatchEvent(new CustomEvent('nav:history', {
             bubbles: true
         }));
-    }
-
-    /**
-     * HTML转义 - 防止XSS注入
-     * @private
-     * @param {string} text - 需要转义的文本
-     * @returns {string} 转义后的安全文本
-     */
-    _escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
     }
 
     /**

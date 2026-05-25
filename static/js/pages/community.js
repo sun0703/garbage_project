@@ -13,10 +13,12 @@ export class CommunityPage {
     init() {
         this.container = document.getElementById('page-community');
         this._render();
-        this._loadUserData();
-        this._loadDailyQuiz();
-        this._loadActivities();
-        this._loadTodayCheckin();
+        Promise.all([
+            this._loadUserData(),
+            this._loadDailyQuiz(),
+            this._loadActivities(),
+            this._loadTodayCheckin()
+        ]);
     }
 
     _render() {
@@ -366,6 +368,7 @@ export class CommunityPage {
     _showLoginModal() {
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay';
+        this._loginModalOverlay = overlay;
         overlay.innerHTML = `
             <div class="modal-card">
                 <div class="modal-tabs">
@@ -490,5 +493,9 @@ export class CommunityPage {
         document.getElementById('loginBtn')?.removeEventListener('click', this._boundHandlers.login);
         document.getElementById('logoutBtn')?.removeEventListener('click', this._boundHandlers.logout);
         document.getElementById('checkinBtn')?.removeEventListener('click', this._boundHandlers.checkin);
+        if (this._loginModalOverlay) {
+            this._loginModalOverlay.remove();
+            this._loginModalOverlay = null;
+        }
     }
 }

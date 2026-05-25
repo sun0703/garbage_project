@@ -1,5 +1,6 @@
 import { store } from '../store.js';
 import { api } from '../api.js';
+import { escapeHtml } from '../utils/escape.js';
 
 export class MapPage {
     container = null;
@@ -70,11 +71,22 @@ export class MapPage {
 
             const script = document.createElement('script');
             script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+            let _scriptLoaded = false;
             script.onload = () => {
+                _scriptLoaded = true;
+                clearTimeout(timeoutId);
                 _jsReady = true;
                 _tryInit();
             };
             document.head.appendChild(script);
+
+            const timeoutId = setTimeout(() => {
+                if (!_scriptLoaded) {
+                    _jsReady = true;
+                    console.warn('[MapPage] Leaflet JS 加载超时，地图不可用');
+                    _tryInit();
+                }
+            }, 10000);
         } else {
             this._initMap();
         }
@@ -162,8 +174,8 @@ export class MapPage {
 
             marker.bindPopup(`
                 <div class="map-popup">
-                    <strong>${p.name}</strong>
-                    <p class="popup-address">${p.address}</p>
+                    <strong>${escapeHtml(p.name)}</strong>
+                    <p class="popup-address">${escapeHtml(p.address)}</p>
                     <div class="popup-cats">${catTags}</div>
                     ${p.is_indoor ? '<span class="popup-indoor">室内</span>' : '<span class="popup-outdoor">室外</span>'}
                     <!-- F-3.1.4 导航跳转按钮 -->
@@ -190,10 +202,10 @@ export class MapPage {
         listEl.innerHTML = points.map(p => `
             <div class="point-card card" data-point-id="${p.id}" data-lat="${p.lat}" data-lng="${p.lng}">
                 <div class="point-card-header">
-                    <h3 class="point-card-name">${p.name}</h3>
-                    <span class="point-card-zone">${p.campus_zone}</span>
+                    <h3 class="point-card-name">${escapeHtml(p.name)}</h3>
+                    <span class="point-card-zone">${escapeHtml(p.campus_zone)}</span>
                 </div>
-                <p class="point-card-address">${p.address}</p>
+                <p class="point-card-address">${escapeHtml(p.address)}</p>
                 <div class="point-card-cats">
                     ${p.categories.map(c => `<span class="point-cat-tag" style="background:${catColors[c] || '#666'}">${c}</span>`).join('')}
                 </div>
@@ -243,6 +255,8 @@ export class MapPage {
         const iosUrl = `https://maps.apple.com/?daddr=${lat},${lng}`;
         const amapUrl = `https://uri.amap.com/navigation?to=${lng},${lat},${encodeURIComponent(name)}&mode=car`;
 
+        const safeName = escapeHtml(name);
+
         /* 创建导航选项弹窗HTML */
         const modal = document.createElement('div');
         modal.id = 'mapNavModal';
@@ -250,7 +264,7 @@ export class MapPage {
         modal.innerHTML = `
             <div class="map-nav-modal">
                 <div class="map-nav-modal-header">
-                    <h3 class="map-nav-modal-title">🧭 导航到 ${this._escapeHtml(name)}</h3>
+                    <h3 class="map-nav-modal-title">🧭 导航到 ${safeName}</h3>
                     <button class="map-nav-modal-close" id="mapNavCloseBtn" aria-label="关闭">✕</button>
                 </div>
                 <div class="map-nav-modal-body">
@@ -305,29 +319,20 @@ export class MapPage {
         }
     }
 
-    /**
-     * HTML特殊字符转义（防止XSS注入）
-     * @param {string} str - 需要转义的字符串
-     * @returns {string} 转义后的安全字符串
-     * @private
-     */
-    _escapeHtml(str) {
-        if (typeof str !== 'string') return '';
-        const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-        return str.replace(/[&<>"']/g, (ch) => map[ch]);
-    }
-
     _getUserLocation() {
         if (!navigator.geolocation) return;
         navigator.geolocation.getCurrentPosition(pos => {
             this._userLat = pos.coords.latitude;
             this._userLng = pos.coords.longitude;
-        }, () => {});
+        }, (err) => {
+            console.warn('[MapPage] 获取位置失败:', err.message);
+        });
     }
 
     destroy() {
         document.getElementById('mapZoneFilter')?.removeEventListener('change', this._boundHandlers.filterChange);
         document.getElementById('mapCatFilter')?.removeEventListener('change', this._boundHandlers.filterChange);
+        this._closeNavModal();
         if (this._map) {
             this._map.remove();
             this._map = null;

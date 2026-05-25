@@ -11,6 +11,7 @@
 import { store } from '../store.js';
 import { api } from '../api.js';
 import { showToast, confirm, showModal } from '../utils/ui.js';
+import { escapeHtml } from '../utils/escape.js';
 
 // ==================== 页面类定义 ====================
 export class HistoryPage {
@@ -238,6 +239,8 @@ export class HistoryPage {
     _buildRecordItem(record, index) {
         const label = record.label_cn || record.label || '未知物品';
         const category = record.category || '未知类别';
+        const safeLabel = escapeHtml(label);
+        const safeCategory = escapeHtml(category);
         const categoryColor = record.bin_color || '#666';
         const confidence = record.confidence ? Math.round(record.confidence * 100) : 0;
         const timestamp = record.created_at ? this._formatTimestamp(record.created_at) : '';
@@ -250,17 +253,17 @@ export class HistoryPage {
                 <!-- 左侧：缩略图区域（API 无图片，固定显示占位图标） -->
                 <div class="record-thumbnail">
                     <div class="thumb-placeholder" style="background: ${categoryColor}20;">
-                        <span style="color: ${categoryColor}">${label.charAt(0)}</span>
+                        <span style="color: ${categoryColor}">${escapeHtml(label.charAt(0))}</span>
                     </div>
                 </div>
 
                 <!-- 中间：信息区域 -->
                 <div class="record-info">
                     <div class="record-name-row">
-                        <span class="record-name">${label}</span>
+                        <span class="record-name">${safeLabel}</span>
                         <span class="record-category-tag"
                               style="background: ${categoryColor}15; color: ${categoryColor}; border: 1px solid ${categoryColor}30;">
-                            ${category}
+                            ${safeCategory}
                         </span>
                     </div>
                     <div class="record-meta">

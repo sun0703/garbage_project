@@ -6,12 +6,7 @@
  *       中间显示关键区分点。
  */
 
-function escapeHtml(str) {
-    if (!str) return '';
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-}
+import { escapeHtml } from '../utils/escape.js';
 
 const CATEGORY_COLORS = {
     0: { bg: '#8B4513', light: '#FFF3E0', label: '厨余垃圾' },

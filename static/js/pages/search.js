@@ -90,6 +90,18 @@ export class SearchPage {
             this.searchInput.removeEventListener('input', this._boundHandlers.input);
         }
 
+        /* 移除返回按钮事件 */
+        const backBtn = document.getElementById('searchBackBtn');
+        if (backBtn && this._boundHandlers.backClick) {
+            backBtn.removeEventListener('click', this._boundHandlers.backClick);
+        }
+
+        /* 移除语音按钮事件 */
+        const voiceBtn = document.getElementById('searchVoiceBtn');
+        if (voiceBtn && this._boundHandlers.voiceClick) {
+            voiceBtn.removeEventListener('click', this._boundHandlers.voiceClick);
+        }
+
         /* 销毁搜索联想组件 */
         if (this._suggest) {
             this._suggest.destroy();

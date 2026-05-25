@@ -29,6 +29,8 @@
  * });
  */
 
+import { escapeHtml } from '../utils/escape.js';
+
 export class ResultCard {
     /**
      * 构造函数 - 初始化结果卡片配置
@@ -448,7 +450,7 @@ export class ResultCard {
         /* 数组类型：渲染为有序步骤列表 */
         if (Array.isArray(tips) && tips.length > 0) {
             const html = tips
-                .map((step, i) => `<div class="result-card__tip-step"><span class="result-card__tip-num">${i + 1}</span><span>${this._escapeHtml(step)}</span></div>`)
+                .map((step, i) => `<div class="result-card__tip-step"><span class="result-card__tip-num">${i + 1}</span><span>${escapeHtml(step)}</span></div>`)
                 .join('');
             textEl.innerHTML = html;
             this._showElement('#rcTipsSection');
@@ -578,18 +580,6 @@ export class ResultCard {
     _hideElement(selector) {
         const el = this._element.querySelector(selector);
         if (el) el.style.display = 'none';
-    }
-
-    /**
-     * HTML转义（防止XSS注入）
-     * @private
-     * @param {string} str - 原始字符串
-     * @returns {string} 转义后的安全字符串
-     */
-    _escapeHtml(str) {
-        const div = document.createElement('div');
-        div.textContent = str;
-        return div.innerHTML;
     }
 
     /**

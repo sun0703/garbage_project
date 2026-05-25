@@ -1,10 +1,26 @@
+# ==================== Web框架 ====================
 fastapi>=0.100.0
 uvicorn[standard]>=0.23.0
-onnxruntime>=1.16.0
-Pillow>=10.0.0
 python-multipart>=0.0.6
+
+# ==================== AI/ML ====================
+ultralytics>=8.0.0
+onnxruntime>=1.16.0
+numpy>=1.24.0
+Pillow>=10.0.0
+
+# ==================== 中文处理 ====================
+pypinyin>=0.50.0
+jieba>=0.42.0
 fuzzywuzzy>=0.18.0
 python-Levenshtein>=0.23.0
-pypinyin>=0.50.0
-numpy>=1.24.0
-ultralytics>=8.0.0
+
+# ==================== 图像处理 ====================
+opencv-python>=4.8.0
+imagehash>=4.3.0
+
+# ==================== 配置管理 ====================
+python-dotenv>=1.0.0
+
+# ==================== HTTP客户端（OAuth） ====================
+httpx>=0.25.0

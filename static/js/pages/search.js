@@ -10,21 +10,9 @@
 import { store } from '../store.js';
 import { api } from '../api.js';
 import { showToast, showLoading, hideLoading } from '../utils/ui.js';
+import { escapeHtml } from '../utils/escape.js';
 import { ConfusingPairCard } from '../components/confusing-pair-card.js';
 import { SearchSuggest } from '../components/search-suggest.js';
-
-// ==================== 工具函数 ====================
-
-/**
- * HTML特殊字符转义，防止XSS注入
- * @param {string} str - 需要转义的字符串
- * @returns {string} 转义后的安全字符串
- */
-function escapeHtml(str) {
-    if (typeof str !== 'string') return '';
-    const escapeMap = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-    return str.replace(/[&<>"']/g, (ch) => escapeMap[ch]);
-}
 
 // ==================== 页面类定义 ====================
 export class SearchPage {

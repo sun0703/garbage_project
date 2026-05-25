@@ -1,4 +1,4 @@
-﻿"""
+"""
 校园生活垃圾智能分类识别系统 - 后端主程序（增强版）
 技术栈：FastAPI + Uvicorn + ONNX Runtime + FuzzyWuzzy + Pillow + OpenCV
 功能：图像分类识别 + 语音/文字模糊搜索 + 智能演示模式
@@ -13,6 +13,7 @@ import base64
 import hashlib
 import json
 import logging
+import logging.handlers
 import os
 import random
 import time
@@ -47,11 +48,31 @@ except ImportError:
 from db import db
 from PIL import Image
 
-# ==================== 日志配置 ====================
+# ==================== 公共工具函数导入 ====================
+from utils.image import decode_base64_image
+from utils.json_loader import load_json_data
+from utils.response import success_response, error_response
+
+# ==================== 配置管理导入 ====================
+from config import settings
+
+# ==================== 日志配置（同时输出到控制台和文件） ====================
+log_dir = Path(__file__).parent / "logs"
+log_dir.mkdir(exist_ok=True)
+
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
+    level=getattr(logging, settings.log_level.upper(), logging.INFO),
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
+    handlers=[
+        logging.StreamHandler(),
+        logging.handlers.RotatingFileHandler(
+            log_dir / "app.log",
+            maxBytes=10 * 1024 * 1024,
+            backupCount=5,
+            encoding="utf-8",
+        ),
+    ],
 )
 logger = logging.getLogger(__name__)
 
@@ -2110,6 +2131,7 @@ def startup_event() -> None:
 
     db.connect()
     db.init_tables()
+    db.add_indexes()
     db.seed_disposal_points()
     db.seed_quiz_questions()
     db.seed_activities()
@@ -2157,12 +2179,7 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
     timing = {"preprocess_ms": 0, "inference_ms": 0, "postprocess_ms": 0}
 
     try:
-        if "," in request.image:
-            _, encoded_data = request.image.split(",", 1)
-        else:
-            encoded_data = request.image
-        image_data = base64.b64decode(encoded_data)
-        image = Image.open(BytesIO(image_data)).convert("RGB")
+        image, image_data = decode_base64_image(request.image)
         timing["preprocess_ms"] = int((time.time() - start_time) * 1000)
         logger.info("图片解码成功，尺寸: %s (预处理耗时=%dms)", image.size, timing["preprocess_ms"])
 
@@ -2474,12 +2491,7 @@ async def predict_multimodal(request: PredictRequest) -> JSONResponse:
         )
 
     try:
-        if "," in request.image:
-            _, encoded_data = request.image.split(",", 1)
-        else:
-            encoded_data = request.image
-        image_data = base64.b64decode(encoded_data)
-        image = Image.open(BytesIO(image_data)).convert("RGB")
+        image, image_data = decode_base64_image(request.image)
         logger.info("🔍 [多模态] 图片解码成功, 尺寸: %s", image.size)
 
     except ValueError as e:
@@ -2683,51 +2695,32 @@ async def get_categories() -> JSONResponse:
 @app.get("/api/guide/standard")
 async def get_guide_standard() -> JSONResponse:
     """获取完整的校园垃圾分类标准数据"""
-    guide_file = BASE_DIR / "data" / "guide_standard.json"
-    if not guide_file.exists():
-        return JSONResponse(
-            status_code=404,
-            content={"success": False, "error": {"code": "E004", "message": "分类标准数据文件不存在"}}
-        )
+    data = load_json_data(BASE_DIR / "data" / "guide_standard.json")
+    if data is None:
+        return error_response("E004", "分类标准数据文件不存在", 404)
 
     try:
-        with open(guide_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return JSONResponse(
-            content={
-                "success": True,
-                "categories": data.get("categories", []),
-                "version": data.get("version", "1.0"),
-            }
-        )
+        return JSONResponse(content={
+            "success": True,
+            "categories": data.get("categories", []),
+            "version": data.get("version", "1.0"),
+        })
     except Exception as e:
         logger.error("[GuideAPI] 读取分类标准数据失败: %s", e)
-        return JSONResponse(
-            status_code=500,
-            content={"success": False, "error": {"code": "E003", "message": "读取分类标准数据失败"}}
-        )
+        return error_response("E003", "读取分类标准数据失败", 500)
 
 
 @app.get("/api/guide/category/{category_id}")
 async def get_guide_category(category_id: int) -> JSONResponse:
     """获取单个类别的详细分类标准"""
     if category_id not in (0, 1, 2, 3):
-        return JSONResponse(
-            status_code=400,
-            content={"success": False, "error": {"code": "E001", "message": "类别ID必须为0-3"}}
-        )
+        return error_response("E001", "类别ID必须为0-3", 400)
 
-    guide_file = BASE_DIR / "data" / "guide_standard.json"
-    if not guide_file.exists():
-        return JSONResponse(
-            status_code=404,
-            content={"success": False, "error": {"code": "E004", "message": "分类标准数据文件不存在"}}
-        )
+    data = load_json_data(BASE_DIR / "data" / "guide_standard.json")
+    if data is None:
+        return error_response("E004", "分类标准数据文件不存在", 404)
 
     try:
-        with open(guide_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
         for cat in data.get("categories", []):
             if cat.get("id") == category_id:
                 items_in_category = search_engine.get_items_by_category(category_id) if search_engine else []
@@ -2737,83 +2730,48 @@ async def get_guide_category(category_id: int) -> JSONResponse:
                 ]
                 return JSONResponse(content={"success": True, "category": cat})
 
-        return JSONResponse(
-            status_code=404,
-            content={"success": False, "error": {"code": "E004", "message": f"未找到类别 {category_id}"}}
-        )
+        return error_response("E004", f"未找到类别 {category_id}", 404)
     except Exception as e:
         logger.error("[GuideAPI] 读取分类标准数据失败: %s", e)
-        return JSONResponse(
-            status_code=500,
-            content={"success": False, "error": {"code": "E003", "message": "读取分类标准数据失败"}}
-        )
+        return error_response("E003", "读取分类标准数据失败", 500)
 
 
 @app.get("/api/guide/confusing")
 async def get_confusing_pairs(limit: int = 10, frequency: str = "") -> JSONResponse:
     """获取易混淆物品对比列表"""
-    pairs_file = BASE_DIR / "data" / "confusing_pairs.json"
-    if not pairs_file.exists():
-        return JSONResponse(
-            status_code=404,
-            content={"success": False, "error": {"code": "E004", "message": "易混淆数据文件不存在"}}
-        )
+    data = load_json_data(BASE_DIR / "data" / "confusing_pairs.json")
+    if data is None:
+        return error_response("E004", "易混淆数据文件不存在", 404)
 
     try:
-        with open(pairs_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
         pairs = data.get("pairs", [])
-
         if frequency:
             pairs = [p for p in pairs if p.get("frequency") == frequency]
-
         pairs = sorted(pairs, key=lambda x: {"critical": 0, "high": 1, "medium": 2, "low": 3}.get(x.get("frequency", "medium"), 2))
-
         total = len(pairs)
         pairs = pairs[:limit]
-
-        return JSONResponse(content={
-            "success": True,
-            "pairs": pairs,
-            "total": total,
-        })
+        return JSONResponse(content={"success": True, "pairs": pairs, "total": total})
     except Exception as e:
         logger.error("[GuideAPI] 读取易混淆数据失败: %s", e)
-        return JSONResponse(
-            status_code=500,
-            content={"success": False, "error": {"code": "E003", "message": "读取易混淆数据失败"}}
-        )
+        return error_response("E003", "读取易混淆数据失败", 500)
 
 
 @app.get("/api/guide/confusing/{pair_id}")
 async def get_confusing_pair(pair_id: int) -> JSONResponse:
     """获取单个易混淆物品对比详情"""
-    pairs_file = BASE_DIR / "data" / "confusing_pairs.json"
-    if not pairs_file.exists():
-        return JSONResponse(
-            status_code=404,
-            content={"success": False, "error": {"code": "E004", "message": "易混淆数据文件不存在"}}
-        )
+    data = load_json_data(BASE_DIR / "data" / "confusing_pairs.json")
+    if data is None:
+        return error_response("E004", "易混淆数据文件不存在", 404)
 
     try:
-        with open(pairs_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
         for pair in data.get("pairs", []):
             if pair.get("id") == pair_id:
                 return JSONResponse(content={"success": True, "pair": pair})
 
-        return JSONResponse(
-            status_code=404,
-            content={"success": False, "error": {"code": "E004", "message": f"未找到对比组 {pair_id}"}}
-        )
+        return error_response("E004", f"未找到对比组 {pair_id}", 404)
     except Exception as e:
         logger.error("[GuideAPI] 读取易混淆数据失败: %s", e)
-        return JSONResponse(
-            status_code=500,
-            content={"success": False, "error": {"code": "E003", "message": "读取易混淆数据失败"}}
-        )
+        return error_response("E003", "读取易混淆数据失败", 500)
 
 
 @app.get("/api/guide/item/{keyword}")
@@ -2833,11 +2791,9 @@ async def get_guide_item(keyword: str) -> JSONResponse:
 
     disposal_steps = []
     disposal_tips = []
-    steps_file = BASE_DIR / "data" / "disposal_steps.json"
-    if steps_file.exists():
+    steps_data = load_json_data(BASE_DIR / "data" / "disposal_steps.json")
+    if steps_data:
         try:
-            with open(steps_file, "r", encoding="utf-8") as f:
-                steps_data = json.load(f)
             label = item.get("label", "")
             label_steps = steps_data.get("steps", {}).get(label)
             if label_steps:
@@ -2853,13 +2809,11 @@ async def get_guide_item(keyword: str) -> JSONResponse:
     ][:6]
 
     confusing_pairs = []
-    pairs_file = BASE_DIR / "data" / "confusing_pairs.json"
-    if pairs_file.exists():
+    pairs_data = load_json_data(BASE_DIR / "data" / "confusing_pairs.json")
+    if pairs_data:
         try:
-            with open(pairs_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
             keyword_lower = keyword.lower()
-            for pair in data.get("pairs", []):
+            for pair in pairs_data.get("pairs", []):
                 tags = [t.lower() for t in pair.get("tags", [])]
                 item_names = [pair["item_a"]["name"].lower(), pair["item_b"]["name"].lower()]
                 if keyword_lower in item_names or any(keyword_lower in t for t in tags):
@@ -2881,14 +2835,8 @@ async def get_guide_item(keyword: str) -> JSONResponse:
 async def debug_analyze_image(request: PredictRequest) -> JSONResponse:
     """调试接口：分析图片的详细特征"""
     try:
-        # 兼容 Data URL 格式和纯 Base64 格式
-        if "," in request.image:
-            _, encoded_data = request.image.split(",", 1)
-        else:
-            encoded_data = request.image
-        image_data = base64.b64decode(encoded_data)
-        image = Image.open(BytesIO(image_data)).convert("RGB")
-        
+        image, image_data = decode_base64_image(request.image)
+
         # 分析特征
         features = ImageFeatureAnalyzer.analyze(image)
         
@@ -3207,13 +3155,7 @@ async def batch_predict_waste(request: BatchPredictRequest) -> JSONResponse:
     results = []
     for idx, img_str in enumerate(images):
         try:
-            # 兼容 Data URL 格式和纯 Base64 格式
-            if "," in img_str:
-                _, encoded_data = img_str.split(",", 1)
-            else:
-                encoded_data = img_str
-            image_data = base64.b64decode(encoded_data)
-            image = Image.open(BytesIO(image_data)).convert("RGB")
+            image, image_data = decode_base64_image(img_str)
         except Exception:
             results.append({
                 "index": idx,
@@ -4765,5 +4707,11 @@ async def no_cache_static_middleware(request: Request, call_next):
 
 # ==================== 程序入口 ====================
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8001, reload=True, log_level="info")
+    uvicorn.run(
+        "main:app",
+        host=settings.host,
+        port=settings.port,
+        reload=settings.reload,
+        log_level=settings.log_level,
+    )
 

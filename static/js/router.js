@@ -18,12 +18,16 @@
  * @constant
  */
 const PAGE_ID_MAP = Object.freeze({
-    home:     'page-home',       // 首页：拍照上传 + 搜索入口
-    preview:  'page-preview',    // 预览确认页：图片裁剪/确认
-    result:   'page-result',     // 结果展示页：AI识别结果
-    search:   'page-search',     // 搜索结果页：关键词匹配列表
-    guide:    'page-guide',      // 分类指南页：四类垃圾说明
-    history:  'page-history'     // 历史记录页：过往识别记录
+    home:      'page-home',       // 首页：拍照上传 + 搜索入口
+    preview:   'page-preview',    // 预览确认页：图片裁剪/确认
+    result:    'page-result',     // 结果展示页：AI识别结果
+    search:    'page-search',     // 搜索结果页：关键词匹配列表
+    guide:     'page-guide',      // 分类指南页：四类垃圾说明
+    history:   'page-history',    // 历史记录页：过往识别记录
+    item:      'page-item',       // 物品详情页：处理步骤+易混淆对比
+    map:       'page-map',        // 投放点地图页
+    community: 'page-community',  // 社区活动页
+    profile:   'page-profile',    // 个人中心页
 });
 
 /** 默认首页路由路径 */

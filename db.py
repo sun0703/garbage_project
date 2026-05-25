@@ -49,7 +49,10 @@ class Database:
                 checkin_count INTEGER DEFAULT 0,
                 quiz_correct INTEGER DEFAULT 0,
                 quiz_total INTEGER DEFAULT 0,
+                oauth_provider TEXT DEFAULT '',
+                oauth_id TEXT DEFAULT '',
                 created_at REAL NOT NULL,
+                updated_at REAL DEFAULT 0,
                 last_login REAL DEFAULT 0
             )
         """)
@@ -131,8 +134,10 @@ class Database:
                 max_participants INTEGER DEFAULT 0,
                 current_participants INTEGER DEFAULT 0,
                 organizer TEXT DEFAULT '',
+                creator_id TEXT DEFAULT '',
                 status TEXT DEFAULT 'open',
-                created_at REAL NOT NULL
+                created_at REAL NOT NULL,
+                updated_at REAL DEFAULT 0
             )
         """)
 
@@ -150,6 +155,29 @@ class Database:
 
         self.conn.commit()
         logger.info("数据库表初始化完成")
+
+    def add_indexes(self):
+        """创建高频查询字段的索引（幂等操作，重复执行安全）"""
+        c = self.conn.cursor()
+        indexes = [
+            "CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)",
+            "CREATE INDEX IF NOT EXISTS idx_checkins_user_id ON checkins(user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_checkins_date ON checkins(created_at)",
+            "CREATE INDEX IF NOT EXISTS idx_quiz_records_user_id ON quiz_records(user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_quiz_records_date ON quiz_records(created_at)",
+            "CREATE INDEX IF NOT EXISTS idx_disposal_points_campus ON disposal_points(campus_zone)",
+            "CREATE INDEX IF NOT EXISTS idx_users_oauth ON users(oauth_provider, oauth_id)",
+            "CREATE INDEX IF NOT EXISTS idx_activity_signups_user ON activity_signups(user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_activities_status ON activities(status)",
+        ]
+        for sql in indexes:
+            try:
+                c.execute(sql)
+            except Exception as e:
+                logger.warning("索引创建跳过: %s", e)
+        self.conn.commit()
+        logger.info("数据库索引优化完成")
 
     def seed_disposal_points(self):
         c = self.conn.cursor()

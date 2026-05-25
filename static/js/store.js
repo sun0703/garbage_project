@@ -12,15 +12,17 @@
 
 /** @type {Object} 状态字段默认值映射表，用于reset时快速恢复 */
 const DEFAULT_STATE = Object.freeze({
-    currentPage: 'home',          // 当前激活页面标识
-    selectedImage: null,           // 当前选中图片的Base64编码字符串
-    selectedFile: null,            // 原始文件对象（File实例），用于二次上传
-    predictResult: null,           // 最新一次AI识别的完整结果对象
-    searchResults: [],             // 搜索接口返回的结果列表
-    historyList: [],               // 用户历史识别记录（本地持久化候选）
-    isLoading: false,              // 全局加载状态标记
-    error: null,                   // 最近一次错误信息字符串
-    isDemoMode: false              // 演示模式开关（无后端时的模拟数据）
+    currentPage: 'home',
+    selectedImage: null,
+    selectedFile: null,
+    predictResult: null,
+    searchResults: [],
+    historyList: [],
+    isLoading: false,
+    error: null,
+    isDemoMode: false,
+    currentUser: null,
+    currentItemKeyword: ''
 });
 
 // ==================== Store 类定义 ====================

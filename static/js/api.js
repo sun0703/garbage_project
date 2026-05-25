@@ -370,6 +370,29 @@ class ApiClient {
         return this.request('GET', '/api/categories');
     }
 
+    async getGuideStandard() {
+        return this.request('GET', '/api/guide/standard');
+    }
+
+    async getGuideCategory(categoryId) {
+        return this.request('GET', `/api/guide/category/${categoryId}`);
+    }
+
+    async getConfusingPairs(limit = 10, frequency = '') {
+        const params = new URLSearchParams();
+        params.set('limit', String(limit));
+        if (frequency) params.set('frequency', frequency);
+        return this.request('GET', `/api/guide/confusing?${params.toString()}`);
+    }
+
+    async getConfusingPair(pairId) {
+        return this.request('GET', `/api/guide/confusing/${pairId}`);
+    }
+
+    async getGuideItem(keyword) {
+        return this.request('GET', `/api/guide/item/${encodeURIComponent(keyword)}`);
+    }
+
     /**
      * 批量识别接口 - 同时对多张图片进行AI分类
      *
@@ -391,8 +414,8 @@ class ApiClient {
             throw new ApiError('E001', '图片列表不能为空', 400);
         }
 
-        if (images.length > 10) {
-            throw new ApiError('E005', '单次最多上传10张图片', 429);
+        if (images.length > 5) {
+            throw new ApiError('E005', '单次最多上传5张图片', 429);
         }
 
         return this.request('POST', '/api/batch-predict', {
@@ -469,6 +492,82 @@ class ApiClient {
      */
     async clearAllHistory() {
         return this.request('DELETE', '/api/history');
+    }
+
+    async register(username, password, nickname = '') {
+        return this.request('POST', '/api/auth/register', {
+            body: { username, password, nickname }
+        });
+    }
+
+    async login(username, password) {
+        return this.request('POST', '/api/auth/login', {
+            body: { username, password }
+        });
+    }
+
+    async logout() {
+        return this.request('POST', '/api/auth/logout');
+    }
+
+    async getMe() {
+        return this.request('GET', '/api/auth/me');
+    }
+
+    async getDisposalPoints(zone = '', category = '') {
+        const params = new URLSearchParams();
+        if (zone) params.set('zone', zone);
+        if (category) params.set('category', category);
+        return this.request('GET', `/api/map/points?${params.toString()}`);
+    }
+
+    async getDisposalPoint(pointId) {
+        return this.request('GET', `/api/map/point/${pointId}`);
+    }
+
+    async checkin(pointId = '', lat = 0, lng = 0, category = '') {
+        return this.request('POST', '/api/checkin', {
+            body: { point_id: pointId, lat, lng, category }
+        });
+    }
+
+    async getTodayCheckin() {
+        return this.request('GET', '/api/checkin/today');
+    }
+
+    async getCheckinHistory(page = 1) {
+        return this.request('GET', `/api/checkin/history?page=${page}`);
+    }
+
+    async getDailyQuiz() {
+        return this.request('GET', '/api/quiz/daily');
+    }
+
+    async answerQuiz(questionId, selected) {
+        return this.request('POST', '/api/quiz/answer', {
+            body: { question_id: questionId, selected }
+        });
+    }
+
+    async getActivities(status = '', page = 1) {
+        const params = new URLSearchParams();
+        if (status) params.set('status', status);
+        params.set('page', page);
+        return this.request('GET', `/api/activities?${params.toString()}`);
+    }
+
+    async getActivity(activityId) {
+        return this.request('GET', `/api/activities/${activityId}`);
+    }
+
+    async signupActivity(activityId) {
+        return this.request('POST', '/api/activities/signup', {
+            body: { activity_id: activityId }
+        });
+    }
+
+    async checkActivitySignup(activityId) {
+        return this.request('GET', `/api/activities/${activityId}/signed`);
     }
 }
 

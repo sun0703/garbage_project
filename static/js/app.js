@@ -231,7 +231,19 @@ function registerAllRoutes(router) {
         .register('/guide', createPageHandler('guide', './pages/guide.js'))
 
         /* 历史记录页：过往识别记录列表 */
-        .register('/history', createPageHandler('history', './pages/history.js'));
+        .register('/history', createPageHandler('history', './pages/history.js'))
+
+        /* 物品详情页：投放指引+处理步骤+相关推荐 */
+        .register('/item/:keyword', createPageHandler('item', './pages/item-detail.js'))
+
+        /* 投放点地图页 */
+        .register('/map', createPageHandler('map', './pages/map.js'))
+
+        /* 环保社区页：打卡+问答+活动 */
+        .register('/community', createPageHandler('community', './pages/community.js'))
+
+        /* 个人中心页 */
+        .register('/profile', createPageHandler('profile', './pages/profile.js'));
 
     if (APP_CONFIG.logLevel !== 'silent') {
         console.log(`[App] 已注册 ${router.getRouteCount()} 条路由规则`);

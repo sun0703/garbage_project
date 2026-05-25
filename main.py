@@ -1,4 +1,4 @@
-﻿"""
+"""
 校园生活垃圾智能分类识别系统 - 后端主程序（增强版）
 技术栈：FastAPI + Uvicorn + ONNX Runtime + FuzzyWuzzy + Pillow + OpenCV
 功能：图像分类识别 + 语音/文字模糊搜索 + 智能演示模式
@@ -20,19 +20,21 @@ import uuid
 from collections import OrderedDict
 from io import BytesIO
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
 import cv2
 import imagehash
 import numpy as np
 import onnxruntime as ort
 import uvicorn
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, Request, Cookie, Response
 from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import BaseModel, Field
 from fastapi.staticfiles import StaticFiles
 from fuzzywuzzy import process as fuzz_process
+
+from db import db
 from PIL import Image
-from pydantic import BaseModel
 
 # ==================== 日志配置 ====================
 logging.basicConfig(
@@ -332,6 +334,48 @@ app = FastAPI(
     version="1.1.0",
 )
 
+# CORS 中间件配置（开发环境允许所有来源，生产环境应限制具体域名）
+from fastapi.middleware.cors import CORSMiddleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 生产环境应替换为具体前端域名
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.middleware("http")
+async def rate_limit_middleware(request, call_next):
+    from starlette.requests import Request
+    if not isinstance(request, Request):
+        return await call_next(request)
+
+    if request.url.path.startswith("/api/"):
+        client_ip = request.client.host if request.client else "unknown"
+        allowed, remaining = _check_rate_limit(client_ip)
+
+        if not allowed:
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "success": False,
+                    "error": {
+                        "code": "E429",
+                        "message": "请求过于频繁，请稍后再试",
+                    },
+                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                },
+                headers={"Retry-After": str(remaining)},
+            )
+
+        response = await call_next(request)
+        response.headers["X-RateLimit-Limit"] = str(RATE_LIMIT_MAX_REQUESTS)
+        response.headers["X-RateLimit-Remaining"] = str(remaining)
+        return response
+
+    return await call_next(request)
+
 
 # 全局限流器实例：每IP每分钟最多30次请求
 _rate_limiter = RateLimiter(max_requests=30, window_seconds=60)
@@ -395,10 +439,20 @@ class BatchPredictRequest(BaseModel):
 
 class FeedbackRequest(BaseModel):
     """用户反馈请求体"""
-    image_base64: str           # 原始图片Base64
-    predicted_category_id: int  # 模型预测的类别 0-3
-    correct_category_id: int    # 用户认为的正确类别 0-3
-    comment: str = ""           # 用户备注（可选）
+    image_base64: str                          # 原始图片Base64
+    predicted_category_id: int                 # 模型预测的类别 0-3
+    correct_category_id: int                   # 用户认为的正确类别 0-3
+    comment: str = ""                          # 用户备注（可选，最长500字）
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "image_base64": "data:image/jpeg;base64,...",
+                "predicted_category_id": 1,
+                "correct_category_id": 0,
+                "comment": "应该是厨余垃圾"
+            }
+        }
 
 
 # ==================== 内存存储层 ====================
@@ -455,8 +509,8 @@ class HistoryStore:
             # 只存最近100条到磁盘
             with open(self._backup_path, "w", encoding="utf-8") as f:
                 json.dump(self._records[:100], f, ensure_ascii=False, indent=2)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("历史记录持久化失败: %s", e)
 
     def _load_from_disk(self) -> None:
         if not self._backup_path or not self._backup_path.exists():
@@ -464,8 +518,8 @@ class HistoryStore:
         try:
             with open(self._backup_path, "r", encoding="utf-8") as f:
                 self._records = json.load(f)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("历史记录加载失败: %s", e)
 
 
 class FeedbackStore:
@@ -492,8 +546,8 @@ class FeedbackStore:
         try:
             with open(self._backup_path, "w", encoding="utf-8") as f:
                 json.dump(self._records, f, ensure_ascii=False, indent=2)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("反馈记录持久化失败: %s", e)
 
     def _load_from_disk(self) -> None:
         if not self._backup_path or not self._backup_path.exists():
@@ -501,8 +555,8 @@ class FeedbackStore:
         try:
             with open(self._backup_path, "r", encoding="utf-8") as f:
                 self._records = json.load(f)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("反馈记录加载失败: %s", e)
 
 
 class InferenceCache:
@@ -1284,7 +1338,7 @@ class VisionEngine:
 
     def _load_onnx_model(self, model_path: str) -> None:
         """加载ONNX格式模型"""
-        self.session = ort.InferenceSession(str(model_file))
+        self.session = ort.InferenceSession(str(model_path))
         self.input_name = self.session.get_inputs()[0].name
         self.output_name = self.session.get_outputs()[0].name
 
@@ -1582,20 +1636,48 @@ class SearchEngine:
                 data = json.load(f)
             self.vocab = data.get("items", [])
             self.vocab_labels = [item["label"] for item in self.vocab]
-            logger.info("词库加载成功: %d 条记录", len(self.vocab))
+            # 构建别名到主标签的映射，提升搜索覆盖率
+            self._alias_to_label: dict[str, str] = {}
+            for item in self.vocab:
+                for alias in item.get("aliases", []):
+                    if alias and alias not in self._alias_to_label:
+                        self._alias_to_label[alias] = item["label"]
+            logger.info("词库加载成功: %d 条记录, %d 个别名索引", len(self.vocab), len(self._alias_to_label))
         except Exception as e:
             logger.error("词库加载失败: %s", e)
 
     def search(self, query: str, top_k: int = 3) -> list[dict]:
-        """执行模糊搜索"""
+        """执行模糊搜索（同时搜索主标签和别名）"""
         if not self.vocab_labels:
             return []
-        raw_results = fuzz_process.extract(query, self.vocab_labels, limit=top_k)
+
+        # 构建合并搜索池：主标签 + 别名
+        all_searchable = list(self.vocab_labels)
+        alias_list = list(self._alias_to_label.keys())
+        all_searchable.extend(alias_list)
+
+        raw_results = fuzz_process.extract(query, all_searchable, limit=top_k * 2)
         matched = []
-        for label, score in raw_results:
-            item = next((v for v in self.vocab if v["label"] == label), None)
+        seen_labels = set()
+
+        for match_text, score in raw_results:
+            # 如果匹配到的是别名，映射回主标签
+            if match_text in self._alias_to_label:
+                main_label = self._alias_to_label[match_text]
+            else:
+                main_label = match_text
+
+            # 去重：同一主标签只保留最高分
+            if main_label in seen_labels:
+                continue
+            seen_labels.add(main_label)
+
+            item = next((v for v in self.vocab if v["label"] == main_label), None)
             if item:
                 matched.append({**item, "similarity_score": score})
+            if len(matched) >= top_k:
+                break
+
         return matched
 
     def get_by_yolo_label(self, yolo_label: str) -> Optional[dict]:
@@ -1692,20 +1774,35 @@ search_engine: Optional[SearchEngine] = None
 history_store: Optional[HistoryStore] = None
 feedback_store: Optional[FeedbackStore] = None
 inference_cache: Optional[InferenceCache] = None
+disposal_steps_data: dict = {}
 
 
 @app.on_event("startup")
 def startup_event() -> None:
     """应用启动时初始化"""
-    global vision_engine, search_engine, history_store, feedback_store, inference_cache
+    global vision_engine, search_engine, history_store, feedback_store, inference_cache, disposal_steps_data
     logger.info("正在初始化服务...")
     vision_engine = VisionEngine(str(MODEL_PATH))
     search_engine = SearchEngine(str(VOCAB_PATH))
     history_store = HistoryStore(backup_path=BASE_DIR / "data" / "history.json")
     feedback_store = FeedbackStore(backup_path=BASE_DIR / "data" / "feedback.json")
 
-    # 初始化推理缓存（LRU + TTL 策略）
     inference_cache = InferenceCache(max_size=500, ttl_seconds=86400)
+
+    steps_file = BASE_DIR / "data" / "disposal_steps.json"
+    if steps_file.exists():
+        try:
+            with open(steps_file, "r", encoding="utf-8") as f:
+                disposal_steps_data = json.load(f).get("steps", {})
+            logger.info("处理步骤数据加载完成: %d 条", len(disposal_steps_data))
+        except Exception as e:
+            logger.warning("处理步骤数据加载失败: %s", e)
+
+    db.connect()
+    db.init_tables()
+    db.seed_disposal_points()
+    db.seed_quiz_questions()
+    db.seed_activities()
 
     if STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -1743,36 +1840,39 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
     """
     图像分类识别接口（增强版）
     支持智能演示模式，基于图像特征分析提高分类准确性
+    支持分阶段耗时记录（预处理/推理/后处理）
     """
     start_time = time.time()
+    timing = {"preprocess_ms": 0, "inference_ms": 0, "postprocess_ms": 0}
 
     try:
-        _, encoded_data = request.image.split(",", 1)
+        if "," in request.image:
+            _, encoded_data = request.image.split(",", 1)
+        else:
+            encoded_data = request.image
         image_data = base64.b64decode(encoded_data)
         image = Image.open(BytesIO(image_data)).convert("RGB")
-        logger.info("图片解码成功，尺寸: %s", image.size)
+        timing["preprocess_ms"] = int((time.time() - start_time) * 1000)
+        logger.info("图片解码成功，尺寸: %s (预处理耗时=%dms)", image.size, timing["preprocess_ms"])
 
-        # ===== 推理缓存检查 =====
-        # 计算图像指纹用于缓存键生成（相同内容的图片命中同一缓存）
         if inference_cache:
             try:
                 cache_key = inference_cache._make_key(image_data)
                 cached_result = inference_cache.get(cache_key)
                 if cached_result:
-                    # 缓存命中：直接返回缓存结果，跳过模型推理
-                    inference_ms = int((time.time() - start_time) * 1000)
+                    total_ms = int((time.time() - start_time) * 1000)
                     req_id = uuid.uuid4().hex[:12]
-                    logger.info("🎯 缓存命中: %s (响应时间=%dms)", cache_key[:20], inference_ms)
+                    logger.info("🎯 缓存命中: %s (响应时间=%dms)", cache_key[:20], total_ms)
                     return JSONResponse(content={
                         "success": True,
                         "result": cached_result,
-                        "inference_time_ms": inference_ms,
+                        "inference_time_ms": total_ms,
+                        "timing": {"preprocess_ms": timing["preprocess_ms"], "inference_ms": 0, "postprocess_ms": 0, "cache_hit": True},
                         "request_id": req_id,
                         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
                         "cache_hit": True,
                     })
             except Exception as e:
-                # 缓存操作异常不影响主流程，仅记录警告日志
                 logger.warning("缓存检查异常，将执行正常推理: %s", e)
     except ValueError as e:
         logger.error("图片格式错误: %s", e)
@@ -1790,7 +1890,7 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
             status_code=400,
             content={
                 "success": False,
-                "error": {"code": "E001", "message": f"解码失败: {str(e)}"},
+                "error": {"code": "E001", "message": "图片解码失败，请检查图片数据格式"},
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
             },
         )
@@ -1807,7 +1907,11 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
         )
 
     try:
+        inference_start = time.time()
         result = vision_engine.predict(image)
+        timing["inference_ms"] = int((time.time() - inference_start) * 1000)
+
+        postprocess_start = time.time()
         inference_ms = int((time.time() - start_time) * 1000)
         req_id = uuid.uuid4().hex[:12]
 
@@ -1927,6 +2031,7 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
             "success": True,
             "result": {**result, **class_info},
             "inference_time_ms": inference_ms,
+            "timing": timing,
             "request_id": req_id,
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
@@ -1934,7 +2039,6 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
         if result.get("is_demo_mode"):
             response_data["demo_notice"] = "🔬 智能演示模式：基于图像特征分析（颜色、透明度、形状等），非专门训练的垃圾分类模型"
 
-        # 写入历史记录（仅存必要字段，不存完整base64图片）
         if history_store:
             history_store.add({
                 "category": class_info.get("category", ""),
@@ -1946,13 +2050,16 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
                 "is_demo_mode": result.get("is_demo_mode", False),
             })
 
-        # ===== 推理结果写入缓存 =====
-        # 将完整的推理结果存入缓存，下次相同图片可直接返回
         if inference_cache and 'cache_key' in locals():
             try:
                 inference_cache.set(cache_key, response_data["result"])
             except Exception as e:
                 logger.warning("缓存写入异常（不影响主流程）: %s", e)
+
+        timing["postprocess_ms"] = int((time.time() - postprocess_start) * 1000)
+        logger.info("⏱️ 耗时统计: 预处理=%dms, 推理=%dms, 后处理=%dms, 总计=%dms [req=%s]",
+                    timing["preprocess_ms"], timing["inference_ms"],
+                    timing["postprocess_ms"], inference_ms, req_id)
 
         return JSONResponse(content=response_data)
 
@@ -1962,7 +2069,7 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
             status_code=500,
             content={
                 "success": False,
-                "error": {"code": "E003", "message": f"推理出错: {str(e)}"},
+                "error": {"code": "E003", "message": "AI推理过程出错，请稍后重试"},
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
             },
         )
@@ -1974,14 +2081,14 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
             status_code=500,
             content={
                 "success": False,
-                "error": {"code": "E003", "message": f"内部错误: {str(e)}"},
+                "error": {"code": "E003", "message": "服务器内部错误，请稍后重试"},
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
             },
         )
 
 
 @app.get("/api/search")
-async def search_waste(query: str = Query(..., min_length=1)) -> JSONResponse:
+async def search_waste(query: str = Query(..., min_length=1, max_length=100)) -> JSONResponse:
     """模糊搜索接口"""
     if not search_engine or not search_engine.vocab:
         return JSONResponse(
@@ -2031,11 +2138,212 @@ async def get_categories() -> JSONResponse:
     )
 
 
+@app.get("/api/guide/standard")
+async def get_guide_standard() -> JSONResponse:
+    """获取完整的校园垃圾分类标准数据"""
+    guide_file = BASE_DIR / "data" / "guide_standard.json"
+    if not guide_file.exists():
+        return JSONResponse(
+            status_code=404,
+            content={"success": False, "error": {"code": "E004", "message": "分类标准数据文件不存在"}}
+        )
+
+    try:
+        with open(guide_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return JSONResponse(
+            content={
+                "success": True,
+                "categories": data.get("categories", []),
+                "version": data.get("version", "1.0"),
+            }
+        )
+    except Exception as e:
+        logger.error("[GuideAPI] 读取分类标准数据失败: %s", e)
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": {"code": "E003", "message": "读取分类标准数据失败"}}
+        )
+
+
+@app.get("/api/guide/category/{category_id}")
+async def get_guide_category(category_id: int) -> JSONResponse:
+    """获取单个类别的详细分类标准"""
+    if category_id not in (0, 1, 2, 3):
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "error": {"code": "E001", "message": "类别ID必须为0-3"}}
+        )
+
+    guide_file = BASE_DIR / "data" / "guide_standard.json"
+    if not guide_file.exists():
+        return JSONResponse(
+            status_code=404,
+            content={"success": False, "error": {"code": "E004", "message": "分类标准数据文件不存在"}}
+        )
+
+    try:
+        with open(guide_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        for cat in data.get("categories", []):
+            if cat.get("id") == category_id:
+                items_in_category = search_engine.get_items_by_category(category_id) if search_engine else []
+                cat["vocab_items"] = [
+                    {"label": item["label"], "aliases": item.get("aliases", []), "guidance": item.get("guidance", "")}
+                    for item in items_in_category
+                ]
+                return JSONResponse(content={"success": True, "category": cat})
+
+        return JSONResponse(
+            status_code=404,
+            content={"success": False, "error": {"code": "E004", "message": f"未找到类别 {category_id}"}}
+        )
+    except Exception as e:
+        logger.error("[GuideAPI] 读取分类标准数据失败: %s", e)
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": {"code": "E003", "message": "读取分类标准数据失败"}}
+        )
+
+
+@app.get("/api/guide/confusing")
+async def get_confusing_pairs(limit: int = 10, frequency: str = "") -> JSONResponse:
+    """获取易混淆物品对比列表"""
+    pairs_file = BASE_DIR / "data" / "confusing_pairs.json"
+    if not pairs_file.exists():
+        return JSONResponse(
+            status_code=404,
+            content={"success": False, "error": {"code": "E004", "message": "易混淆数据文件不存在"}}
+        )
+
+    try:
+        with open(pairs_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        pairs = data.get("pairs", [])
+
+        if frequency:
+            pairs = [p for p in pairs if p.get("frequency") == frequency]
+
+        pairs = sorted(pairs, key=lambda x: {"critical": 0, "high": 1, "medium": 2, "low": 3}.get(x.get("frequency", "medium"), 2))
+
+        total = len(pairs)
+        pairs = pairs[:limit]
+
+        return JSONResponse(content={
+            "success": True,
+            "pairs": pairs,
+            "total": total,
+        })
+    except Exception as e:
+        logger.error("[GuideAPI] 读取易混淆数据失败: %s", e)
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": {"code": "E003", "message": "读取易混淆数据失败"}}
+        )
+
+
+@app.get("/api/guide/confusing/{pair_id}")
+async def get_confusing_pair(pair_id: int) -> JSONResponse:
+    """获取单个易混淆物品对比详情"""
+    pairs_file = BASE_DIR / "data" / "confusing_pairs.json"
+    if not pairs_file.exists():
+        return JSONResponse(
+            status_code=404,
+            content={"success": False, "error": {"code": "E004", "message": "易混淆数据文件不存在"}}
+        )
+
+    try:
+        with open(pairs_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        for pair in data.get("pairs", []):
+            if pair.get("id") == pair_id:
+                return JSONResponse(content={"success": True, "pair": pair})
+
+        return JSONResponse(
+            status_code=404,
+            content={"success": False, "error": {"code": "E004", "message": f"未找到对比组 {pair_id}"}}
+        )
+    except Exception as e:
+        logger.error("[GuideAPI] 读取易混淆数据失败: %s", e)
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": {"code": "E003", "message": "读取易混淆数据失败"}}
+        )
+
+
+@app.get("/api/guide/item/{keyword}")
+async def get_guide_item(keyword: str) -> JSONResponse:
+    """获取物品详情（含处理步骤+相关物品+易错对比）"""
+    if not search_engine:
+        return JSONResponse(status_code=503, content={"success": False})
+
+    results = search_engine.search(keyword, top_k=1)
+    if not results:
+        return JSONResponse(
+            status_code=404,
+            content={"success": False, "error": {"code": "E004", "message": f"未找到物品 '{keyword}'"}}
+        )
+
+    item = results[0]
+
+    disposal_steps = []
+    disposal_tips = []
+    steps_file = BASE_DIR / "data" / "disposal_steps.json"
+    if steps_file.exists():
+        try:
+            with open(steps_file, "r", encoding="utf-8") as f:
+                steps_data = json.load(f)
+            label = item.get("label", "")
+            label_steps = steps_data.get("steps", {}).get(label)
+            if label_steps:
+                disposal_steps = label_steps.get("disposal_steps", [])
+                disposal_tips = label_steps.get("tips", [])
+        except Exception:
+            pass
+
+    same_category = [
+        {"label": i["label"], "guidance": i.get("guidance", "")}
+        for i in search_engine.vocab
+        if i.get("category_id") == item.get("category_id") and i["label"] != item["label"]
+    ][:6]
+
+    confusing_pairs = []
+    pairs_file = BASE_DIR / "data" / "confusing_pairs.json"
+    if pairs_file.exists():
+        try:
+            with open(pairs_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            keyword_lower = keyword.lower()
+            for pair in data.get("pairs", []):
+                tags = [t.lower() for t in pair.get("tags", [])]
+                item_names = [pair["item_a"]["name"].lower(), pair["item_b"]["name"].lower()]
+                if keyword_lower in item_names or any(keyword_lower in t for t in tags):
+                    confusing_pairs.append(pair)
+        except Exception:
+            pass
+
+    return JSONResponse(content={
+        "success": True,
+        "item": item,
+        "disposal_steps": disposal_steps,
+        "disposal_tips": disposal_tips,
+        "related_items": same_category,
+        "confusing_pairs": confusing_pairs,
+    })
+
+
 @app.post("/api/debug/analyze")
 async def debug_analyze_image(request: PredictRequest) -> JSONResponse:
     """调试接口：分析图片的详细特征"""
     try:
-        _, encoded_data = request.image.split(",", 1)
+        # 兼容 Data URL 格式和纯 Base64 格式
+        if "," in request.image:
+            _, encoded_data = request.image.split(",", 1)
+        else:
+            encoded_data = request.image
         image_data = base64.b64decode(encoded_data)
         image = Image.open(BytesIO(image_data)).convert("RGB")
         
@@ -2244,7 +2552,11 @@ def _get_class_info(class_index: int, is_demo_mode: bool = False,
     获取类别详细信息（增强版 v2.3）
     支持基于物品类型和金属特征智能选择示例名称
     支持显示7类模型的原始检测名称
+<<<<<<< HEAD
+    支持从 disposal_steps.json 获取处理建议
+=======
     新增：按物品类型返回差异化投放建议（tips字段）
+>>>>>>> origin/main
     """
     base_info = WASTE_CATEGORIES.get(class_index, WASTE_CATEGORIES[2]).copy()
 
@@ -2255,14 +2567,13 @@ def _get_class_info(class_index: int, is_demo_mode: bool = False,
         "bin_icon": base_info["icon"],
         "guidance": f"请投入{base_info['bin_color']}{base_info['name']}桶",
         "label_cn": original_class_name if original_class_name else "识别物品",
+        "tips": None,
     }
 
-    # 只有在没有YOLO/COCO原始检测名称时，才使用词库名称补充
     use_vocab_name = (original_class_name is None or original_class_name == "")
 
     if search_engine and search_engine.vocab and use_vocab_name:
         if is_demo_mode:
-            # 使用物品类型和金属特征智能选择示例（v2.1 核心改进）
             sample_item = search_engine.get_smart_item(class_index, item_type, is_metallic)
             if sample_item:
                 info.update({
@@ -2289,9 +2600,24 @@ def _get_class_info(class_index: int, is_demo_mode: bool = False,
                         "yolo_label": matched.get("yolo_label", ""),
                     })
 
+<<<<<<< HEAD
+    label = info.get("label_cn", "")
+    if disposal_steps_data and label:
+        label_steps = disposal_steps_data.get(label)
+        if not label_steps:
+            for key in disposal_steps_data:
+                if key in label or label in key:
+                    label_steps = disposal_steps_data[key]
+                    break
+        if label_steps:
+            tips_list = label_steps.get("tips", [])
+            if tips_list:
+                info["tips"] = "；".join(tips_list)
+=======
     # v2.3 新增：根据最终 label_cn 生成差异化投放建议 
     final_label = info.get("label_cn", "")
     info["tips"] = _get_disposal_tips(final_label, class_index)
+>>>>>>> origin/main
 
     return info
 
@@ -2332,7 +2658,11 @@ async def batch_predict_waste(request: BatchPredictRequest) -> JSONResponse:
     results = []
     for idx, img_str in enumerate(images):
         try:
-            _, encoded_data = img_str.split(",", 1)
+            # 兼容 Data URL 格式和纯 Base64 格式
+            if "," in img_str:
+                _, encoded_data = img_str.split(",", 1)
+            else:
+                encoded_data = img_str
             image_data = base64.b64decode(encoded_data)
             image = Image.open(BytesIO(image_data)).convert("RGB")
         except Exception:
@@ -2343,14 +2673,15 @@ async def batch_predict_waste(request: BatchPredictRequest) -> JSONResponse:
             continue
 
         # ===== 批量识别中的单张图片缓存检查 =====
+        current_cache_key = None
         cached_item = None
         if inference_cache:
             try:
-                cache_key = inference_cache._make_key(image_data)
-                cached_result = inference_cache.get(cache_key)
+                current_cache_key = inference_cache._make_key(image_data)
+                cached_result = inference_cache.get(current_cache_key)
                 if cached_result:
                     # 缓存命中：直接使用缓存结果，跳过模型推理
-                    logger.info("🎯 批量识别-第%d张 缓存命中: %s", idx + 1, cache_key[:20])
+                    logger.info("批量识别-第%d张 缓存命中: %s", idx + 1, current_cache_key[:20])
                     cached_item = {
                         "index": idx,
                         "category": cached_result.get("category", ""),
@@ -2420,11 +2751,9 @@ async def batch_predict_waste(request: BatchPredictRequest) -> JSONResponse:
             results.append(item)
 
             # ===== 推理结果写入缓存（批量识别） =====
-            if inference_cache:
+            if inference_cache and current_cache_key:
                 try:
-                    # 使用之前生成的 cache_key（如果在缓存检查阶段已生成）
-                    if 'cache_key' in locals():
-                        inference_cache.set(cache_key, item)
+                    inference_cache.set(current_cache_key, item)
                 except Exception as e:
                     logger.warning("批量识别-第%d张 缓存写入异常（不影响主流程）: %s", idx + 1, e)
 
@@ -2508,6 +2837,14 @@ async def clear_history() -> JSONResponse:
 @app.post("/api/feedback")
 async def submit_feedback(request: FeedbackRequest) -> JSONResponse:
     """提交识别结果反馈"""
+    if request.predicted_category_id not in (0, 1, 2, 3):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "success": False,
+                "error": {"code": "E001", "message": "predicted_category_id 必须为 0-3"},
+            },
+        )
     if request.correct_category_id not in (0, 1, 2, 3):
         return JSONResponse(
             status_code=400,
@@ -2523,11 +2860,13 @@ async def submit_feedback(request: FeedbackRequest) -> JSONResponse:
             content={"success": False, "error": {"code": "E006", "message": "反馈服务未就绪"}},
         )
 
+    # 仅存储图片哈希摘要，避免大量 Base64 数据撑爆内存
+    image_hash = hashlib.sha256(request.image_base64.encode("utf-8")).hexdigest()[:16]
     feedback_id = feedback_store.add({
-        "image_base64": request.image_base64,
+        "image_hash": image_hash,
         "predicted_category_id": request.predicted_category_id,
         "correct_category_id": request.correct_category_id,
-        "comment": request.comment,
+        "comment": request.comment[:500],  # 限制评论长度
     })
 
     logger.info("📝 收到用户反馈: %s, 预测=%d, 正确=%d", feedback_id,
@@ -2538,6 +2877,433 @@ async def submit_feedback(request: FeedbackRequest) -> JSONResponse:
         "message": "反馈已提交，感谢您的帮助",
         "feedback_id": feedback_id,
     })
+
+
+# ==================== 第三阶段：用户系统 + 地图 + 打卡 + 问答 + 活动 ====================
+
+SESSION_COOKIE_NAME = "session_id"
+SESSION_EXPIRE_SECONDS = 86400 * 7
+
+
+class RegisterRequest(BaseModel):
+    username: str = Field(..., min_length=3, max_length=20)
+    password: str = Field(..., min_length=6, max_length=32)
+    nickname: str = Field("", max_length=20)
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class CheckinRequest(BaseModel):
+    point_id: str = ""
+    lat: float = 0
+    lng: float = 0
+    category: str = ""
+
+
+class QuizAnswerRequest(BaseModel):
+    question_id: str
+    selected: int = Field(..., ge=0, le=3)
+
+
+class ActivitySignupRequest(BaseModel):
+    activity_id: str
+
+
+def _hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+
+
+def _get_current_user(request: Request) -> Optional[dict]:
+    session_id = request.cookies.get(SESSION_COOKIE_NAME)
+    if not session_id:
+        return None
+    try:
+        c = db.conn.cursor()
+        c.execute("SELECT user_id FROM sessions WHERE id = ? AND expires_at > ?", (session_id, time.time()))
+        row = c.fetchone()
+        if not row:
+            return None
+        c.execute("SELECT id, username, nickname, avatar, points, checkin_count, quiz_correct, quiz_total FROM users WHERE id = ?", (row["user_id"],))
+        user = c.fetchone()
+        return dict(user) if user else None
+    except Exception:
+        return None
+
+
+def _create_session(user_id: str) -> str:
+    session_id = uuid.uuid4().hex
+    now = time.time()
+    db.conn.execute(
+        "INSERT INTO sessions (id, user_id, created_at, expires_at) VALUES (?,?,?,?)",
+        (session_id, user_id, now, now + SESSION_EXPIRE_SECONDS)
+    )
+    db.conn.commit()
+    return session_id
+
+
+# ---------- F-3.2 用户系统 ----------
+
+@app.post("/api/auth/register")
+async def register(req: RegisterRequest, response: Response):
+    try:
+        c = db.conn.cursor()
+        c.execute("SELECT id FROM users WHERE username = ?", (req.username,))
+        if c.fetchone():
+            return JSONResponse(status_code=400, content={"success": False, "error": {"code": "E409", "message": "用户名已存在"}})
+
+        user_id = uuid.uuid4().hex[:12]
+        now = time.time()
+        db.conn.execute(
+            "INSERT INTO users (id, username, password_hash, nickname, created_at, last_login) VALUES (?,?,?,?,?,?)",
+            (user_id, req.username, _hash_password(req.password), req.nickname or req.username, now, now)
+        )
+        db.conn.commit()
+
+        session_id = _create_session(user_id)
+        response = JSONResponse(content={
+            "success": True,
+            "user": {"id": user_id, "username": req.username, "nickname": req.nickname or req.username, "points": 0}
+        })
+        response.set_cookie(SESSION_COOKIE_NAME, session_id, max_age=SESSION_EXPIRE_SECONDS, httponly=True, samesite="lax")
+        return response
+    except Exception as e:
+        logger.error("注册失败: %s", e)
+        return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "注册失败，请稍后重试"}})
+
+
+@app.post("/api/auth/login")
+async def login(req: LoginRequest, response: Response):
+    try:
+        c = db.conn.cursor()
+        c.execute("SELECT id, username, password_hash, nickname, points FROM users WHERE username = ?", (req.username,))
+        user = c.fetchone()
+        if not user or user["password_hash"] != _hash_password(req.password):
+            return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "用户名或密码错误"}})
+
+        db.conn.execute("UPDATE users SET last_login = ? WHERE id = ?", (time.time(), user["id"]))
+        db.conn.commit()
+
+        session_id = _create_session(user["id"])
+        resp = JSONResponse(content={
+            "success": True,
+            "user": {"id": user["id"], "username": user["username"], "nickname": user["nickname"], "points": user["points"]}
+        })
+        resp.set_cookie(SESSION_COOKIE_NAME, session_id, max_age=SESSION_EXPIRE_SECONDS, httponly=True, samesite="lax")
+        return resp
+    except Exception as e:
+        logger.error("登录失败: %s", e)
+        return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "登录失败"}})
+
+
+@app.post("/api/auth/logout")
+async def logout(request: Request, response: Response):
+    session_id = request.cookies.get(SESSION_COOKIE_NAME)
+    if session_id:
+        try:
+            db.conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+            db.conn.commit()
+        except Exception:
+            pass
+    resp = JSONResponse(content={"success": True, "message": "已退出登录"})
+    resp.delete_cookie(SESSION_COOKIE_NAME)
+    return resp
+
+
+@app.get("/api/auth/me")
+async def get_current_user(request: Request):
+    user = _get_current_user(request)
+    if not user:
+        return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "未登录"}})
+    return JSONResponse(content={"success": True, "user": user})
+
+
+# ---------- F-3.1 投放点地图 ----------
+
+@app.get("/api/map/points")
+async def get_disposal_points(zone: str = "", category: str = ""):
+    try:
+        c = db.conn.cursor()
+        c.execute("SELECT * FROM disposal_points")
+        rows = c.fetchall()
+        points = []
+        for row in rows:
+            p = dict(row)
+            p["categories"] = json.loads(p["categories"]) if isinstance(p["categories"], str) else p["categories"]
+            if zone and p.get("campus_zone") != zone:
+                continue
+            if category and category not in p.get("categories", []):
+                continue
+            points.append(p)
+        return JSONResponse(content={"success": True, "points": points, "total": len(points)})
+    except Exception as e:
+        logger.error("获取投放点失败: %s", e)
+        return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "获取投放点失败"}})
+
+
+@app.get("/api/map/point/{point_id}")
+async def get_disposal_point(point_id: str):
+    try:
+        c = db.conn.cursor()
+        c.execute("SELECT * FROM disposal_points WHERE id = ?", (point_id,))
+        row = c.fetchone()
+        if not row:
+            return JSONResponse(status_code=404, content={"success": False, "error": {"code": "E404", "message": "投放点不存在"}})
+        p = dict(row)
+        p["categories"] = json.loads(p["categories"]) if isinstance(p["categories"], str) else p["categories"]
+        return JSONResponse(content={"success": True, "point": p})
+    except Exception as e:
+        logger.error("获取投放点详情失败: %s", e)
+        return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "获取投放点详情失败"}})
+
+
+# ---------- F-3.3 环保打卡 ----------
+
+@app.post("/api/checkin")
+async def create_checkin(request: Request, req: CheckinRequest):
+    user = _get_current_user(request)
+    if not user:
+        return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
+
+    try:
+        c = db.conn.cursor()
+        today_start = time.time() - (time.time() % 86400)
+        c.execute("SELECT id FROM checkins WHERE user_id = ? AND created_at > ?", (user["id"], today_start))
+        if c.fetchone():
+            return JSONResponse(status_code=400, content={"success": False, "error": {"code": "E400", "message": "今日已打卡"}})
+
+        checkin_id = uuid.uuid4().hex[:12]
+        points_earned = 5
+        now = time.time()
+        db.conn.execute(
+            "INSERT INTO checkins (id, user_id, point_id, lat, lng, category, points_earned, created_at) VALUES (?,?,?,?,?,?,?,?)",
+            (checkin_id, user["id"], req.point_id, req.lat, req.lng, req.category, points_earned, now)
+        )
+        db.conn.execute("UPDATE users SET points = points + ?, checkin_count = checkin_count + 1 WHERE id = ?",
+                        (points_earned, user["id"]))
+        db.conn.commit()
+
+        return JSONResponse(content={
+            "success": True,
+            "checkin": {"id": checkin_id, "points_earned": points_earned},
+            "message": f"打卡成功！获得 {points_earned} 积分"
+        })
+    except Exception as e:
+        logger.error("打卡失败: %s", e)
+        return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "打卡失败"}})
+
+
+@app.get("/api/checkin/today")
+async def get_today_checkin(request: Request):
+    user = _get_current_user(request)
+    if not user:
+        return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
+
+    try:
+        c = db.conn.cursor()
+        today_start = time.time() - (time.time() % 86400)
+        c.execute("SELECT * FROM checkins WHERE user_id = ? AND created_at > ?", (user["id"], today_start))
+        row = c.fetchone()
+        return JSONResponse(content={"success": True, "checked_in": row is not None, "checkin": dict(row) if row else None})
+    except Exception as e:
+        logger.error("获取打卡状态失败: %s", e)
+        return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "获取打卡状态失败"}})
+
+
+@app.get("/api/checkin/history")
+async def get_checkin_history(request: Request, page: int = 1, page_size: int = 20):
+    user = _get_current_user(request)
+    if not user:
+        return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
+
+    try:
+        c = db.conn.cursor()
+        offset = (page - 1) * page_size
+        c.execute("SELECT COUNT(*) FROM checkins WHERE user_id = ?", (user["id"],))
+        total = c.fetchone()[0]
+        c.execute("SELECT * FROM checkins WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                  (user["id"], page_size, offset))
+        records = [dict(row) for row in c.fetchall()]
+        return JSONResponse(content={"success": True, "records": records, "total": total, "page": page})
+    except Exception as e:
+        logger.error("获取打卡历史失败: %s", e)
+        return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "获取打卡历史失败"}})
+
+
+# ---------- F-3.4 知识问答 ----------
+
+@app.get("/api/quiz/daily")
+async def get_daily_quiz(request: Request):
+    user = _get_current_user(request)
+
+    try:
+        c = db.conn.cursor()
+        today_start = time.time() - (time.time() % 86400)
+
+        if user:
+            c.execute("SELECT question_id FROM quiz_records WHERE user_id = ? AND created_at > ?", (user["id"], today_start))
+            answered = [row["question_id"] for row in c.fetchall()]
+        else:
+            answered = []
+
+        c.execute("SELECT * FROM quiz_questions")
+        all_questions = [dict(row) for row in c.fetchall()]
+
+        unanswered = [q for q in all_questions if q["id"] not in answered]
+        if not unanswered:
+            return JSONResponse(content={"success": True, "quiz": None, "message": "今日题目已全部完成"})
+
+        quiz = random.choice(unanswered)
+        quiz["options"] = json.loads(quiz["options"]) if isinstance(quiz["options"], str) else quiz["options"]
+        return JSONResponse(content={"success": True, "quiz": quiz})
+    except Exception as e:
+        logger.error("获取每日问答失败: %s", e)
+        return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "获取问答失败"}})
+
+
+@app.post("/api/quiz/answer")
+async def answer_quiz(request: Request, req: QuizAnswerRequest):
+    user = _get_current_user(request)
+    if not user:
+        return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
+
+    try:
+        c = db.conn.cursor()
+        c.execute("SELECT * FROM quiz_questions WHERE id = ?", (req.question_id,))
+        question = c.fetchone()
+        if not question:
+            return JSONResponse(status_code=400, content={"success": False, "error": {"code": "E404", "message": "题目不存在"}})
+
+        is_correct = req.selected == question["answer"]
+        points_earned = 3 if is_correct else 0
+        record_id = uuid.uuid4().hex[:12]
+        now = time.time()
+
+        db.conn.execute(
+            "INSERT INTO quiz_records (id, user_id, question_id, selected, is_correct, points_earned, created_at) VALUES (?,?,?,?,?,?,?)",
+            (record_id, user["id"], req.question_id, req.selected, int(is_correct), points_earned, now)
+        )
+        if is_correct:
+            db.conn.execute("UPDATE users SET points = points + ?, quiz_correct = quiz_correct + 1, quiz_total = quiz_total + 1 WHERE id = ?",
+                            (points_earned, user["id"]))
+        else:
+            db.conn.execute("UPDATE users SET quiz_total = quiz_total + 1 WHERE id = ?", (user["id"],))
+        db.conn.commit()
+
+        options = json.loads(question["options"]) if isinstance(question["options"], str) else question["options"]
+        return JSONResponse(content={
+            "success": True,
+            "result": {
+                "is_correct": is_correct,
+                "correct_answer": question["answer"],
+                "explanation": question["explanation"],
+                "points_earned": points_earned,
+                "options": options
+            }
+        })
+    except Exception as e:
+        logger.error("回答问答失败: %s", e)
+        return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "提交答案失败"}})
+
+
+# ---------- F-3.5 环保活动 ----------
+
+@app.get("/api/activities")
+async def get_activities(status: str = "", page: int = 1, page_size: int = 10):
+    try:
+        c = db.conn.cursor()
+        offset = (page - 1) * page_size
+        if status:
+            c.execute("SELECT COUNT(*) FROM activities WHERE status = ?", (status,))
+            total = c.fetchone()[0]
+            c.execute("SELECT * FROM activities WHERE status = ? ORDER BY start_time DESC LIMIT ? OFFSET ?",
+                      (status, page_size, offset))
+        else:
+            c.execute("SELECT COUNT(*) FROM activities")
+            total = c.fetchone()[0]
+            c.execute("SELECT * FROM activities ORDER BY start_time DESC LIMIT ? OFFSET ?", (page_size, offset))
+
+        activities = []
+        for row in c.fetchall():
+            a = dict(row)
+            a["start_time_iso"] = time.strftime("%Y-%m-%dT%H:%M", time.localtime(a["start_time"]))
+            a["end_time_iso"] = time.strftime("%Y-%m-%dT%H:%M", time.localtime(a["end_time"]))
+            activities.append(a)
+        return JSONResponse(content={"success": True, "activities": activities, "total": total, "page": page})
+    except Exception as e:
+        logger.error("获取活动列表失败: %s", e)
+        return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "获取活动列表失败"}})
+
+
+@app.get("/api/activities/{activity_id}")
+async def get_activity(activity_id: str):
+    try:
+        c = db.conn.cursor()
+        c.execute("SELECT * FROM activities WHERE id = ?", (activity_id,))
+        row = c.fetchone()
+        if not row:
+            return JSONResponse(status_code=404, content={"success": False, "error": {"code": "E404", "message": "活动不存在"}})
+        a = dict(row)
+        a["start_time_iso"] = time.strftime("%Y-%m-%dT%H:%M", time.localtime(a["start_time"]))
+        a["end_time_iso"] = time.strftime("%Y-%m-%dT%H:%M", time.localtime(a["end_time"]))
+        return JSONResponse(content={"success": True, "activity": a})
+    except Exception as e:
+        logger.error("获取活动详情失败: %s", e)
+        return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "获取活动详情失败"}})
+
+
+@app.post("/api/activities/signup")
+async def signup_activity(request: Request, req: ActivitySignupRequest):
+    user = _get_current_user(request)
+    if not user:
+        return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
+
+    try:
+        c = db.conn.cursor()
+        c.execute("SELECT * FROM activities WHERE id = ?", (req.activity_id,))
+        activity = c.fetchone()
+        if not activity:
+            return JSONResponse(status_code=400, content={"success": False, "error": {"code": "E404", "message": "活动不存在"}})
+
+        if activity["status"] != "open":
+            return JSONResponse(status_code=400, content={"success": False, "error": {"code": "E400", "message": "活动已截止报名"}})
+
+        if activity["max_participants"] > 0 and activity["current_participants"] >= activity["max_participants"]:
+            return JSONResponse(status_code=400, content={"success": False, "error": {"code": "E400", "message": "活动名额已满"}})
+
+        c.execute("SELECT id FROM activity_signups WHERE activity_id = ? AND user_id = ?", (req.activity_id, user["id"]))
+        if c.fetchone():
+            return JSONResponse(status_code=400, content={"success": False, "error": {"code": "E409", "message": "已报名该活动"}})
+
+        signup_id = uuid.uuid4().hex[:12]
+        now = time.time()
+        db.conn.execute(
+            "INSERT INTO activity_signups (id, activity_id, user_id, created_at) VALUES (?,?,?,?)",
+            (signup_id, req.activity_id, user["id"], now)
+        )
+        db.conn.execute("UPDATE activities SET current_participants = current_participants + 1 WHERE id = ?", (req.activity_id,))
+        db.conn.commit()
+
+        return JSONResponse(content={"success": True, "message": "报名成功", "signup_id": signup_id})
+    except Exception as e:
+        logger.error("活动报名失败: %s", e)
+        return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "报名失败"}})
+
+
+@app.get("/api/activities/{activity_id}/signed")
+async def check_activity_signup(request: Request, activity_id: str):
+    user = _get_current_user(request)
+    if not user:
+        return JSONResponse(content={"success": True, "signed_up": False})
+
+    try:
+        c = db.conn.cursor()
+        c.execute("SELECT id FROM activity_signups WHERE activity_id = ? AND user_id = ?", (activity_id, user["id"]))
+        return JSONResponse(content={"success": True, "signed_up": c.fetchone() is not None})
+    except Exception:
+        return JSONResponse(content={"success": True, "signed_up": False})
 
 
 # ==================== 程序入口 ====================

@@ -208,6 +208,11 @@ export class ImageProcessor {
    * document.getElementById('preview').src = base64;
    */
   static toBase64(blob) {
+    /* 【防御性校验】参数必须是 Blob 或 File 类型，防止 FileReader 异常 */
+    if (!blob || !(blob instanceof Blob)) {
+      return Promise.reject(new Error('toBase64 参数必须是 Blob 或 File 类型'));
+    }
+
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
 

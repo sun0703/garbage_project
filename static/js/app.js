@@ -253,7 +253,14 @@ function registerAllRoutes(router) {
 // ==================== 应用启动入口 ====================
 
 function bootstrap() {
-    /* 第一步：绑定全局错误捕获 */
+    /* 【幂等守卫】检测重复初始化请求，防止模块热重载或脚本重复加载导致的双重初始化 */
+    if (window.__APP_BOOTSTRAPPED__) {
+        console.warn('[App] 检测到重复初始化请求，已跳过');
+        return;
+    }
+    window.__APP_BOOTSTRAPPED__ = true;
+
+    /* 第一步：绑定全局错误捕获（仅绑定一次） */
     window.addEventListener('error', handleGlobalError);
     window.addEventListener('unhandledrejection', handleUnhandledRejection);
 

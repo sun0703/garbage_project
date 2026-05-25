@@ -243,6 +243,20 @@ class ApiClient {
     _handleHttpError(response, responseData) {
         const status = response.status;
 
+        /* ---------- 401 未授权特殊处理 ---------- */
+        /* 401 是预期的业务行为（用户未登录），不应视为异常错误。
+         * 浏览器会对 Failed to load resource 始终显示红色 [error]，
+         * 此处仅抛出带有 UNAUTH 标识的 ApiError，供调用方静默处理，
+         * 不额外输出 console.error 避免双重噪音。 */
+        if (status === 401) {
+            throw new ApiError(
+                'UNAUTH',
+                '未授权，请先登录',
+                401,
+                response
+            );
+        }
+
         /* 尝试从响应体中提取业务错误码 */
         const serverCode = responseData?.error?.code || '';
         const serverMsg = responseData?.error?.message || '';

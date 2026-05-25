@@ -65,8 +65,12 @@ export class PreviewPage {
 
         /* 从 store 获取已选图片数据 */
         const selectedImage = store.get('selectedImage');
-        if (!selectedImage) {
-            /* 无已选图片时提示并返回首页 */
+
+        /* 【增强校验】图片数据必须存在且为 Blob/File 类型 */
+        if (!selectedImage || !(selectedImage instanceof Blob)) {
+            /* 清理无效状态，防止后续页面读取到脏数据 */
+            store.remove('selectedImage');
+            store.remove('selectedFile');
             showToast('未选择图片，请先上传', 'warning');
             window.location.hash = '#/';
             return;
@@ -300,6 +304,16 @@ export class PreviewPage {
 
         try {
             const selectedImage = store.get('selectedImage');
+
+            /* 【防御性校验】参数有效性检查 - 防止无效数据导致 FileReader 异常 */
+            if (!selectedImage || !(selectedImage instanceof Blob)) {
+                console.warn('[PreviewPage] selectedImage 无效或非 Blob 类型，取消识别');
+                showToast('图片数据无效，请重新上传', 'error');
+                this._updateState(RecognizeState.ERROR);
+                this._recognizing = false;
+                if (this.startBtn) this.startBtn.disabled = false;
+                return;
+            }
 
             /* ---- 阶段1：压缩图片 ---- */
             this._updateState(RecognizeState.COMPRESSING);

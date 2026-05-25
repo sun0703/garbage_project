@@ -15,8 +15,10 @@ const DEFAULT_STATE = Object.freeze({
     currentPage: 'home',
     selectedImage: null,
     selectedFile: null,
+    selectedFileName: '',        /* 当前选中文件的显示名称，上传时由 home.js 设置 */
     predictResult: null,
     searchResults: [],
+    searchQuery: '',             /* 当前搜索关键词，首页搜索框输入时同步 */
     historyList: [],
     isLoading: false,
     error: null,

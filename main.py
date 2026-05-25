@@ -55,6 +55,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# ==================== 多模态融合分类器导入 ====================
+try:
+    from multimodal_fusion import MultiModalFusionClassifier
+    _MULTIMODAL_AVAILABLE = True
+    logger.info("多模态融合模块加载成功 (YOLO + SAHI + 双层级联)")
+except ImportError as e:
+    _MULTIMODAL_AVAILABLE = False
+    MultiModalFusionClassifier = None  # type: ignore
+    logger.warning("多模态融合模块不可用 (%s)，将使用单模型模式", e)
+
 
 # ==================== 配置常量 ====================
 BASE_DIR = Path(__file__).parent
@@ -2061,17 +2071,33 @@ history_store: Optional[HistoryStore] = None
 feedback_store: Optional[FeedbackStore] = None
 inference_cache: Optional[InferenceCache] = None
 disposal_steps_data: dict = {}
+multimodal_classifier: Optional["MultiModalFusionClassifier"] = None  # 多模态融合分类器
 
 
 @app.on_event("startup")
 def startup_event() -> None:
     """应用启动时初始化"""
-    global vision_engine, search_engine, history_store, feedback_store, inference_cache, disposal_steps_data
+    global vision_engine, search_engine, history_store, feedback_store, inference_cache, disposal_steps_data, multimodal_classifier
     logger.info("正在初始化服务...")
     vision_engine = VisionEngine(str(MODEL_PATH))
     search_engine = SearchEngine(str(VOCAB_PATH))
     history_store = HistoryStore(backup_path=BASE_DIR / "data" / "history.json")
     feedback_store = FeedbackStore(backup_path=BASE_DIR / "data" / "feedback.json")
+
+    inference_cache = InferenceCache(max_size=500, ttl_seconds=86400)
+
+    # 初始化多模态融合分类器（YOLO + SAHI + 双层级联）
+    if _MULTIMODAL_AVAILABLE and MultiModalFusionClassifier is not None:
+        try:
+            multimodal_classifier = MultiModalFusionClassifier(
+                yolo_model_path=str(BASE_DIR / "models" / "garbage_yolov8m_best.pt"),
+                enable_sahi=True,
+                sahi_slice_size=(320, 320),
+            )
+            logger.info("✅ 多模态融合分类器初始化完成")
+        except Exception as e:
+            logger.warning("⚠️ 多模态融合分类器初始化失败: %s", e)
+            multimodal_classifier = None
 
     inference_cache = InferenceCache(max_size=500, ttl_seconds=86400)
 
@@ -2099,10 +2125,11 @@ def startup_event() -> None:
 @app.on_event("shutdown")
 def shutdown_event() -> None:
     """应用关闭时释放资源"""
-    global vision_engine
+    global vision_engine, multimodal_classifier
     if vision_engine:
         vision_engine.dispose()
         vision_engine = None
+    multimodal_classifier = None
     logger.info("服务已关闭")
 
 
@@ -2419,6 +2446,115 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
             content={
                 "success": False,
                 "error": {"code": "E003", "message": "服务器内部错误，请稍后重试"},
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            },
+        )
+
+
+# ==================== 多模态融合预测接口 ====================
+@app.post("/api/predict/multimodal")
+async def predict_multimodal(request: PredictRequest) -> JSONResponse:
+    """
+    多模态融合预测接口（YOLO + SAHI + 双层级联）
+
+    与 /api/predict 的区别：
+    - 使用三模型融合决策（YOLO检测 + SAHI切片增强 + 级联精细化）
+    - 返回各模型的独立结果和融合后的最终结果
+    - 一致性校验：多模型投票，降低误判率
+    """
+    start_time = time.time()
+    req_id = uuid.uuid4().hex[:12]
+
+    if not _MULTIMODAL_AVAILABLE or not multimodal_classifier:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "success": False,
+                "error": {"code": "E010", "message": "多模态融合分类器未就绪"},
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            },
+        )
+
+    try:
+        if "," in request.image:
+            _, encoded_data = request.image.split(",", 1)
+        else:
+            encoded_data = request.image
+        image_data = base64.b64decode(encoded_data)
+        image = Image.open(BytesIO(image_data)).convert("RGB")
+        logger.info("🔍 [多模态] 图片解码成功, 尺寸: %s", image.size)
+
+    except ValueError as e:
+        return JSONResponse(status_code=400, content={
+            "success": False, "error": {"code": "E001", "message": "图片格式无效"},
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        })
+    except Exception as e:
+        return JSONResponse(status_code=400, content={
+            "success": False, "error": {"code": "E001", "message": f"图片解码失败: {e}"},
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        })
+
+    try:
+        result = multimodal_classifier.predict(image)
+
+        final = result.final_prediction
+        fusion_details = result.fusion_details
+
+        # 构建响应数据
+        response_data = {
+            "success": True,
+            "result": {
+                "class_index": final.category.value,
+                "category_name": final.category_name,
+                "fine_class_id": final.fine_class_id,
+                "fine_class_name_cn": final.fine_class_name_cn,
+                "confidence": round(final.confidence, 4),
+                "consistency_score": round(result.consistency_score, 3),
+                "is_demo_mode": False,
+                "source": "multimodal_fusion",
+            },
+            "multimodal_details": {
+                "yolo": {
+                    "class_name_cn": result.yolo_result.fine_class_name_cn if result.yolo_result else None,
+                    "category_name": result.yolo_result.category_name if result.yolo_result else None,
+                    "confidence": round(result.yolo_result.confidence, 4) if result.yolo_result else None,
+                } if result.yolo_result else None,
+                "sahi": {
+                    "class_name_cn": result.sahi_result.fine_class_name_cn if result.sahi_result else None,
+                    "category_name": result.sahi_result.category_name if result.sahi_result else None,
+                    "confidence": round(result.sahi_result.confidence, 4) if result.sahi_result else None,
+                } if result.sahi_result else None,
+                "cascade": {
+                    "class_name_cn": result.transformer_result.fine_class_name_cn if result.transformer_result else None,
+                    "category_name": result.transformer_result.category_name if result.transformer_result else None,
+                    "confidence": round(result.transformer_result.confidence, 4) if result.transformer_result else None,
+                    "routing_strategy": result.transformer_result.features.get("cascade_routing_strategy") if result.transformer_result and result.transformer_result.features else None,
+                } if result.transformer_result else None,
+                "fusion": fusion_details,
+            },
+            "inference_time_ms": int(result.total_inference_time_ms),
+            "timing": {"total_ms": int((time.time() - start_time) * 1000)},
+            "request_id": req_id,
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+
+        logger.info("✅ [多模态] 预测完成: %s (%s), 置信度=%.1f%%, 一致性=%.0f%%, 耗时=%dms",
+                   final.fine_class_name_cn, final.category_name,
+                   final.confidence * 100, result.consistency_score * 100,
+                   result.total_inference_time_ms)
+
+        return JSONResponse(content=response_data)
+
+    except Exception as e:
+        logger.error("[多模态] 推理异常: %s", e)
+        import traceback
+        logger.error("堆栈:\n%s", traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "error": {"code": "E003", "message": f"多模态推理异常: {e}"},
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
             },
         )
@@ -2801,7 +2937,28 @@ async def debug_analyze_image(request: PredictRequest) -> JSONResponse:
 
 @app.get("/api/health")
 async def health_check() -> JSONResponse:
-    """健康检查接口"""
+    """健康检查接口（含多模态融合系统状态）"""
+    # 获取多模态融合系统信息
+    multimodal_status = None
+    if _MULTIMODAL_AVAILABLE and multimodal_classifier:
+        try:
+            system_info = multimodal_classifier.get_system_info()
+            multimodal_status = {
+                "available": True,
+                "architecture": system_info.get("architecture", "unknown"),
+                "layers": {
+                    k: v for k, v in system_info.get("layers", {}).items()
+                },
+                "total_classes": system_info.get("total_fine_grained_classes", 0),
+            }
+        except Exception:
+            multimodal_status = {"available": False, "error": "获取状态失败"}
+    else:
+        multimodal_status = {
+            "available": False,
+            "reason": "模块未加载" if not _MULTIMODAL_AVAILABLE else "分类器未初始化",
+        }
+
     return JSONResponse(
         content={
             "status": "healthy",
@@ -2809,6 +2966,7 @@ async def health_check() -> JSONResponse:
             "model_type": "专用垃圾分类模型" if (vision_engine and vision_engine.is_waste_model) else "智能演示模式（图像特征分析）",
             "vocab_loaded": len(search_engine.vocab) > 0 if search_engine else False,
             "uptime_info": "running",
+            "multimodal_fusion": multimodal_status,
         }
     )
 
@@ -4582,6 +4740,29 @@ async def cancel_activity_signup(activity_id: str, request: Request):
     except Exception as e:
         logger.error("取消报名失败: %s", e)
         return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "操作失败"}})
+
+
+# ==================== Vite 开发客户端请求兜底 ====================
+@app.get("/@vite/{path:path}")
+async def vite_client_fallback(path: str):
+    """
+    Vite 开发客户端请求兜底 — 项目未使用 Vite，返回空 JS 以避免 404 控制台噪音
+    某些浏览器扩展或开发工具会自动注入 /@vite/client 请求
+    """
+    return Response(content="/* EcoSort: not using Vite */", media_type="application/javascript")
+
+
+# ==================== 开发环境禁用静态资源缓存 ====================
+
+@app.middleware("http")
+async def no_cache_static_middleware(request: Request, call_next):
+    """对所有 /static 响应添加禁用缓存头，确保前端代码修改立即生效"""
+    response = await call_next(request)
+    if request.url.path.startswith("/static"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
 
 
 # ==================== 程序入口 ====================

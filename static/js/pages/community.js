@@ -70,7 +70,10 @@ export class CommunityPage {
                 this._renderUserCard(data.user);
             }
         } catch (e) {
-            console.info('用户未登录');
+            /* UNAUTH(401) 是预期行为：用户未登录，完全静默不输出任何日志 */
+            if (e.code !== 'UNAUTH') {
+                console.info('用户未登录');
+            }
         }
 
         this._boundHandlers.login = () => this._showLoginModal();
@@ -105,6 +108,13 @@ export class CommunityPage {
         const statusEl = document.getElementById('checkinStatus');
         const btn = document.getElementById('checkinBtn');
         if (!statusEl || !btn) return;
+
+        /* 登录状态预检：用户未登录时直接展示降级 UI，避免发起 401 请求 */
+        if (!store.get('currentUser')) {
+            statusEl.textContent = '请登录后打卡';
+            btn.disabled = true;
+            return;
+        }
 
         try {
             const data = await api.getTodayCheckin();

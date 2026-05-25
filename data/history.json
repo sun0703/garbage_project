@@ -1,5 +1,49 @@
 [
   {
+    "category": "可回收物",
+    "category_id": 1,
+    "label_cn": "金属制品",
+    "bin_color": "#007bff",
+    "confidence": 0.9679,
+    "guidance": "请投入蓝色可回收物桶",
+    "is_demo_mode": false,
+    "id": "51582a9476",
+    "created_at": "2026-05-24T17:06:49Z"
+  },
+  {
+    "category": "可回收物",
+    "category_id": 1,
+    "label_cn": "纸板/纸箱",
+    "bin_color": "#007bff",
+    "confidence": 0.4893,
+    "guidance": "请投入蓝色可回收物桶",
+    "is_demo_mode": false,
+    "id": "505022637f",
+    "created_at": "2026-05-24T17:05:30Z"
+  },
+  {
+    "category": "可回收物",
+    "category_id": 1,
+    "label_cn": "金属制品",
+    "bin_color": "#007bff",
+    "confidence": 0.9665,
+    "guidance": "请投入蓝色可回收物桶",
+    "is_demo_mode": false,
+    "id": "552435f420",
+    "created_at": "2026-05-24T17:01:18Z"
+  },
+  {
+    "category": "可回收物",
+    "category_id": 1,
+    "label_cn": "metal",
+    "bin_color": "#007bff",
+    "confidence": 0.96,
+    "guidance": "请投入蓝色可回收物桶",
+    "is_demo_mode": true,
+    "id": "0b12928506",
+    "created_at": "2026-05-24T17:01:02Z"
+  },
+  {
     "category": "其他垃圾",
     "category_id": 2,
     "label_cn": "一次性快餐盒",

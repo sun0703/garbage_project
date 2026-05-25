@@ -47,8 +47,8 @@ logger = logging.getLogger(__name__)
 # ==================== 配置常量 ====================
 BASE_DIR = Path(__file__).parent
 
-# 新的40类垃圾分类专用YOLOv8m模型（2025年最新，mAP@0.5: 91%）
-MODEL_PATH = BASE_DIR / "models" / "garbage_yolov8m_best.pt"
+# 新的40类垃圾分类专用YOLOv8m模型（best v2.pt - 用户指定版本）
+MODEL_PATH = BASE_DIR / "best v2.pt"
 USE_YOLO_PT_MODEL = True  # 使用PyTorch格式模型（推荐）
 
 # 备用：旧版ONNX模型
@@ -130,6 +130,30 @@ GARBAGE_40CLASSES = {
     37: {"name": "Hazardous Waste/Dry Batteries", "name_cn": "干电池", "category": 3},
     38: {"name": "Hazardous Waste/Ointments", "name_cn": "药膏", "category": 3},
     39: {"name": "Recyclable/Paper", "name_cn": "纸张", "category": 1},
+}
+
+# best v2.pt 12类垃圾分类模型专用映射
+# 模型来源：自定义训练的12类垃圾检测模型
+GARBAGE_12CLASSES = {
+    # ===== 有害垃圾 (Hazardous Waste) - category 3 =====
+    0: {"name": "battery", "name_cn": "电池", "category": 3},
+
+    # ===== 厨余垃圾 (Kitchen Waste) - category 0 =====
+    1: {"name": "biological", "name_cn": "厨余垃圾/生物降解", "category": 0},
+
+    # ===== 可回收物 (Recyclable) - category 1 =====
+    2: {"name": "brown-glass", "name_cn": "棕色玻璃", "category": 1},
+    3: {"name": "cardboard", "name_cn": "纸板/纸箱", "category": 1},
+    4: {"name": "clothes", "name_cn": "旧衣服/纺织品", "category": 1},
+    5: {"name": "green-glass", "name_cn": "绿色玻璃", "category": 1},
+    6: {"name": "metal", "name_cn": "金属制品", "category": 1},
+    7: {"name": "paper", "name_cn": "纸张/报纸", "category": 1},
+    8: {"name": "plastic", "name_cn": "塑料/塑料瓶", "category": 1},
+    11: {"name": "white-glass", "name_cn": "白色玻璃", "category": 1},
+
+    # ===== 其他垃圾 (Other Trash) - category 2 =====
+    9: {"name": "shoes", "name_cn": "鞋子（旧）", "category": 2},
+    10: {"name": "trash", "name_cn": "其他垃圾", "category": 2},
 }
 
 # COCO 80类 → 中国4类垃圾映射（使用官方COCO预训练模型时）
@@ -2145,10 +2169,16 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
         req_id = uuid.uuid4().hex[:12]
 
         # ===== 智能策略选择 =====
-        # 40类专用模型：直接使用YOLO检测结果（无需特征分析）
+        # 40类/12类专用模型：直接使用YOLO检测结果（无需特征分析）
         # COCO/通用模型：使用混合策略（YOLO + 特征分析）
 
-        if vision_engine.is_pt_model and vision_engine.num_classes >= 40:
+        # 判断是否为专用的垃圾分类模型（40类或12类）
+        is_garbage_model = (
+            vision_engine.is_pt_model and
+            (vision_engine.num_classes == 40 or vision_engine.num_classes == 12)
+        )
+
+        if is_garbage_model and vision_engine.num_classes >= 40:
             # 40类专用垃圾分类模型 - 直接使用结果
             logger.info("🎯 使用40类专用模型结果 (ID=%s, 名称=%s, 置信度=%.1f%%)",
                        result.get("original_class_id"),
@@ -2206,6 +2236,32 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
 
                 logger.info("✅ 特征分析降级完成: 类别=%d, 类型=%s, 置信度=%.1f%%, %s",
                            smart_class_index, item_type, demo_confidence * 100, reasoning)
+
+        elif is_garbage_model and vision_engine.num_classes == 12:
+            # 12类专用垃圾分类模型 (best v2.pt) - 直接使用结果
+            logger.info("🎯 使用12类专用模型结果 (ID=%s, 名称=%s, 置信度=%.1f%%)",
+                       result.get("original_class_id"),
+                       result.get("original_class_name"),
+                       result.get("confidence", 0) * 100)
+
+            original_class_id = result.get("original_class_id", -1)
+
+            # 将12类ID映射到中国4类垃圾系统
+            if original_class_id in GARBAGE_12CLASSES:
+                class_mapping = GARBAGE_12CLASSES[original_class_id]
+                category_4class = class_mapping["category"]  # 0-3 对应4类
+                class_name_cn = class_mapping["name_cn"]
+
+                result["class_index"] = category_4class
+                result["original_class_name"] = class_name_cn
+                result["reasoning"] = f"12类模型检测: {class_name_cn}"
+                result["is_demo_mode"] = False
+
+                logger.info("✅ 12类映射: ID=%d → %s (类别=%d)",
+                           original_class_id, class_name_cn, category_4class)
+            else:
+                logger.warning("⚠️ 未知类别ID: %d (12类模型)", original_class_id)
+                result["is_demo_mode"] = True
 
         else:
             # 旧版COCO/ONNX模型 - 使用混合策略v3.1
@@ -2730,11 +2786,19 @@ async def batch_predict_waste(request: BatchPredictRequest) -> JSONResponse:
 
             class_index = result.get("class_index", 2)
 
-            # 40类映射
+            # 40类/12类映射
             if vision_engine.is_pt_model and vision_engine.num_classes >= 40:
                 original_class_id = result.get("original_class_id", -1)
                 if original_class_id in GARBAGE_40CLASSES:
                     mapping = GARBAGE_40CLASSES[original_class_id]
+                    class_index = mapping["category"]
+                    result["original_class_name"] = mapping["name_cn"]
+                    result["is_demo_mode"] = False
+            elif vision_engine.is_pt_model and vision_engine.num_classes == 12:
+                # 12类模型映射 (best v2.pt)
+                original_class_id = result.get("original_class_id", -1)
+                if original_class_id in GARBAGE_12CLASSES:
+                    mapping = GARBAGE_12CLASSES[original_class_id]
                     class_index = mapping["category"]
                     result["original_class_name"] = mapping["name_cn"]
                     result["is_demo_mode"] = False

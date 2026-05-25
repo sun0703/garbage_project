@@ -1,0 +1,200 @@
+[
+  {
+    "category": "其他垃圾",
+    "category_id": 2,
+    "label_cn": "一次性快餐盒",
+    "bin_color": "#333333",
+    "confidence": 0.863,
+    "guidance": "请投入灰色/黑色其他垃圾桶",
+    "is_demo_mode": false,
+    "id": "f82dfdd524",
+    "created_at": "2026-05-23T21:32:12Z"
+  },
+  {
+    "category": "其他垃圾",
+    "category_id": 2,
+    "label_cn": "一次性快餐盒",
+    "bin_color": "#333333",
+    "confidence": 0.9329,
+    "guidance": "请投入灰色/黑色其他垃圾桶",
+    "is_demo_mode": false,
+    "id": "af836b85e5",
+    "created_at": "2026-05-23T21:32:04Z"
+  },
+  {
+    "category": "可回收物",
+    "category_id": 1,
+    "label_cn": "金属食品罐",
+    "bin_color": "#007bff",
+    "confidence": 0.4162,
+    "guidance": "请投入蓝色可回收物桶",
+    "is_demo_mode": false,
+    "id": "28f7299fdc",
+    "created_at": "2026-05-23T21:31:56Z"
+  },
+  {
+    "category": "可回收物",
+    "category_id": 1,
+    "label_cn": "化妆品瓶",
+    "bin_color": "#007bff",
+    "confidence": 0.25,
+    "guidance": "请投入蓝色可回收物桶",
+    "is_demo_mode": false,
+    "id": "e0a31cdd09",
+    "created_at": "2026-05-23T21:31:03Z"
+  },
+  {
+    "category": "可回收物",
+    "category_id": 1,
+    "label_cn": "铝罐/易拉罐",
+    "bin_color": "#007bff",
+    "confidence": 0.6834,
+    "guidance": "请投入蓝色可回收物桶",
+    "is_demo_mode": false,
+    "id": "f2522324e6",
+    "created_at": "2026-05-23T21:30:37Z"
+  },
+  {
+    "category": "可回收物",
+    "category_id": 1,
+    "label_cn": "易拉罐",
+    "bin_color": "蓝色",
+    "confidence": 0.96,
+    "guidance": "请将易拉罐清空内容物、简单冲洗后投入蓝色可回收物垃圾桶",
+    "is_demo_mode": true,
+    "id": "835a1c4765",
+    "created_at": "2026-05-23T21:27:58Z"
+  },
+  {
+    "category": "其他垃圾",
+    "category_id": -1,
+    "label_cn": "识别物品",
+    "bin_color": "#333333",
+    "confidence": 0.0,
+    "guidance": "请投入灰色/黑色其他垃圾桶",
+    "is_demo_mode": true,
+    "id": "9246ec6bc0",
+    "created_at": "2026-05-23T21:27:39Z"
+  },
+  {
+    "category": "其他垃圾",
+    "category_id": -1,
+    "label_cn": "识别物品",
+    "bin_color": "#333333",
+    "confidence": 0.0,
+    "guidance": "请投入灰色/黑色其他垃圾桶",
+    "is_demo_mode": true,
+    "id": "63993b215e",
+    "created_at": "2026-05-23T21:23:07Z"
+  },
+  {
+    "category": "可回收物",
+    "category_id": 1,
+    "label_cn": "电池组",
+    "bin_color": "#007bff",
+    "confidence": 0.3662,
+    "guidance": "请投入蓝色可回收物桶",
+    "is_demo_mode": false,
+    "id": "348da453ba",
+    "created_at": "2026-05-23T21:17:10Z"
+  },
+  {
+    "category": "其他垃圾",
+    "category_id": 2,
+    "label_cn": "一次性快餐盒",
+    "bin_color": "#333333",
+    "confidence": 0.8573,
+    "guidance": "请投入灰色/黑色其他垃圾桶",
+    "is_demo_mode": false,
+    "id": "e8221c72ee",
+    "created_at": "2026-05-23T20:54:40Z"
+  },
+  {
+    "category": "可回收物",
+    "category_id": 1,
+    "label_cn": "铝罐/易拉罐",
+    "bin_color": "#007bff",
+    "confidence": 0.4195,
+    "guidance": "请投入蓝色可回收物桶",
+    "is_demo_mode": false,
+    "id": "a998abb517",
+    "created_at": "2026-05-23T20:54:27Z"
+  },
+  {
+    "category": "其他垃圾",
+    "category_id": 2,
+    "label_cn": "脏塑料",
+    "bin_color": "#333333",
+    "confidence": 0.371,
+    "guidance": "请投入灰色/黑色其他垃圾桶",
+    "is_demo_mode": false,
+    "id": "a0076d06fe",
+    "created_at": "2026-05-23T20:54:21Z"
+  },
+  {
+    "category": "其他垃圾",
+    "category_id": 2,
+    "label_cn": "一次性快餐盒",
+    "bin_color": "#333333",
+    "confidence": 0.9328,
+    "guidance": "请投入灰色/黑色其他垃圾桶",
+    "is_demo_mode": false,
+    "id": "a758463e7a",
+    "created_at": "2026-05-23T20:54:16Z"
+  },
+  {
+    "category": "可回收物",
+    "category_id": 1,
+    "label_cn": "化妆品瓶",
+    "bin_color": "#007bff",
+    "confidence": 0.4146,
+    "guidance": "请投入蓝色可回收物桶",
+    "is_demo_mode": false,
+    "id": "d9fc78e47a",
+    "created_at": "2026-05-23T20:54:10Z"
+  },
+  {
+    "category": "可回收物",
+    "category_id": 1,
+    "label_cn": "电池组",
+    "bin_color": "#007bff",
+    "confidence": 0.3662,
+    "guidance": "请投入蓝色可回收物桶",
+    "is_demo_mode": false,
+    "id": "5089b7abc9",
+    "created_at": "2026-05-23T20:54:02Z"
+  },
+  {
+    "category": "可回收物",
+    "category_id": 1,
+    "label_cn": "化妆品瓶",
+    "bin_color": "#007bff",
+    "confidence": 0.4146,
+    "guidance": "请投入蓝色可回收物桶",
+    "is_demo_mode": false,
+    "id": "ac10c5ec84",
+    "created_at": "2026-05-23T20:16:16Z"
+  },
+  {
+    "category": "可回收物",
+    "category_id": 1,
+    "label_cn": "电池组",
+    "bin_color": "#007bff",
+    "confidence": 0.3662,
+    "guidance": "请投入蓝色可回收物桶",
+    "is_demo_mode": false,
+    "id": "8f1536c587",
+    "created_at": "2026-05-23T20:15:42Z"
+  },
+  {
+    "category": "其他垃圾",
+    "category_id": 2,
+    "label_cn": "一次性快餐盒",
+    "bin_color": "#333333",
+    "confidence": 0.9328,
+    "guidance": "请投入灰色/黑色其他垃圾桶",
+    "is_demo_mode": false,
+    "id": "1f17e46745",
+    "created_at": "2026-05-23T20:15:32Z"
+  }
+]

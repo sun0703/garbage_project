@@ -1379,7 +1379,7 @@ if __name__ == "__main__":
         return img_pil
 
     # 初始化系统（自动检测模型）
-    BASE_DIR = Path(__file__).parent
+    BASE_DIR = Path(__file__).parent.parent
     yolo_model = str(BASE_DIR / "models" / "garbage_yolov8m_best.pt")
 
     print(f"\n📦 正在初始化多模态融合分类器...")

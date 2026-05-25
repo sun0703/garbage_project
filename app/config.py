@@ -6,8 +6,8 @@
 from pathlib import Path
 from typing import Optional
 
-# 项目根目录
-BASE_DIR = Path(__file__).parent
+# 项目根目录（app/ 是子目录，上翻一级）
+BASE_DIR = Path(__file__).parent.parent
 
 
 class Settings:

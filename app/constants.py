@@ -7,7 +7,8 @@ from pathlib import Path
 import numpy as np
 
 # ==================== 路径常量 ====================
-BASE_DIR = Path(__file__).parent
+# app/ 是子目录，需上翻一级到项目根目录
+BASE_DIR = Path(__file__).parent.parent
 
 # 新的40类垃圾分类专用YOLOv8m模型（2025年最新，mAP@0.5: 91%）
 MODEL_PATH = BASE_DIR / "models" / "garbage_yolov8m_best.pt"

@@ -5,7 +5,7 @@
 
 import logging
 
-from constants import WASTE_CATEGORIES, GARBAGE_40CLASSES
+from app.constants import WASTE_CATEGORIES, GARBAGE_40CLASSES
 
 logger = logging.getLogger(__name__)
 

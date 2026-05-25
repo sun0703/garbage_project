@@ -10,7 +10,7 @@ import logging
 import time
 from pathlib import Path
 from PIL import Image
-from constants import (
+from app.constants import (
     INPUT_SIZE,
     YOLO_INPUT_SIZE,
     IMAGENET_MEAN,

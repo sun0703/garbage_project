@@ -12,7 +12,7 @@ import numpy as np
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-from models import PredictRequest
+from app.models import PredictRequest
 from utils.image import decode_base64_image
 from services.image_analyzer import ImageFeatureAnalyzer
 from services.garbage_utils import _get_class_info

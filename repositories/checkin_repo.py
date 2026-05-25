@@ -5,7 +5,7 @@ import time
 import logging
 from typing import Optional, List, Dict, Any, Tuple
 
-from db import db
+from app.db import db
 
 logger = logging.getLogger(__name__)
 

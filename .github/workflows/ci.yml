@@ -47,4 +47,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: 构建 Docker 镜像
-        run: docker build -t waste-classifier:latest .
+        run: docker build -t waste-classifier:latest -f docker/Dockerfile .

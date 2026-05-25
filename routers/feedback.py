@@ -11,8 +11,8 @@ import logging
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-from models import FeedbackRequest
-import backend_state
+from app.models import FeedbackRequest
+from app import backend_state
 
 logger = logging.getLogger(__name__)
 

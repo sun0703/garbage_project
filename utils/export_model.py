@@ -86,7 +86,7 @@ def export_yolov8_cls_to_onnx():
 
     print("\n" + "=" * 50)
     print("  🎉 导出完成！现在可以启动服务了:")
-    print("     uvicorn main:app --host 0.0.0.0 --port 8000 --reload")
+    print("     uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload")
     print("=" * 50)
 
     return True

@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 
 from repositories.quiz_repo import QuizRepository
 from repositories.user_repo import UserRepository
-from models import QuizAnswerRequest
+from app.models import QuizAnswerRequest
 
 logger = logging.getLogger(__name__)
 

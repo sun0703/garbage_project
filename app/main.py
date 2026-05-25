@@ -18,12 +18,12 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 # ==================== 配置管理导入 ====================
-from config import settings
-from constants import BASE_DIR, MODEL_PATH, VOCAB_PATH, STATIC_DIR, INDEX_HTML_PATH
-from db import db
+from app.config import settings
+from app.constants import BASE_DIR, MODEL_PATH, VOCAB_PATH, STATIC_DIR, INDEX_HTML_PATH
+from app.db import db
 
 # ==================== 日志配置（同时输出到控制台和文件） ====================
-log_dir = Path(__file__).parent / "logs"
+log_dir = Path(__file__).parent.parent / "logs"
 log_dir.mkdir(exist_ok=True)
 
 logging.basicConfig(
@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
 
 # ==================== 多模态融合分类器导入 ====================
 try:
-    from multimodal_fusion import MultiModalFusionClassifier
+    from app.multimodal_fusion import MultiModalFusionClassifier
     _MULTIMODAL_AVAILABLE = True
     logger.info("多模态融合模块加载成功 (YOLO + SAHI + 双层级联)")
 except ImportError as e:
@@ -62,7 +62,7 @@ from services.inference_cache import InferenceCache
 from services.asr_correction import set_search_engine
 
 # ==================== 全局状态注入 ====================
-import backend_state
+from app import backend_state
 
 # ==================== FastAPI 应用实例 ====================
 app = FastAPI(
@@ -256,7 +256,7 @@ app.include_router(activities_router)
 # ==================== 程序入口 ====================
 if __name__ == "__main__":
     uvicorn.run(
-        "main:app",
+        "app.main:app",
         host=settings.host,
         port=settings.port,
         reload=settings.reload,

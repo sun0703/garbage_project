@@ -11,7 +11,7 @@ import logging
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 
-import backend_state
+from app import backend_state
 from services.search_engine import _PINYIN_AVAILABLE
 
 logger = logging.getLogger(__name__)

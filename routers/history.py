@@ -8,7 +8,7 @@
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 
-import backend_state
+from app import backend_state
 
 router = APIRouter()
 

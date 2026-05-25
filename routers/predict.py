@@ -12,9 +12,9 @@ from pathlib import Path
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from constants import GARBAGE_40CLASSES, WASTE_CATEGORIES, INDEX_HTML_PATH
-import backend_state
-from models import PredictRequest, BatchPredictRequest
+from app.constants import GARBAGE_40CLASSES, WASTE_CATEGORIES, INDEX_HTML_PATH
+from app import backend_state
+from app.models import PredictRequest, BatchPredictRequest
 from utils.image import decode_base64_image
 from services.image_analyzer import ImageFeatureAnalyzer
 from services.garbage_utils import _calibrate_confidence_40class, _get_class_info, _get_disposal_tips

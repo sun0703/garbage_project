@@ -11,7 +11,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from repositories.activity_repo import ActivityRepository
-from models import ActivitySignupRequest, ActivityCreateRequest
+from app.models import ActivitySignupRequest, ActivityCreateRequest
 
 logger = logging.getLogger(__name__)
 

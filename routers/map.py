@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 from repositories.disposal_point_repo import DisposalPointRepository
 from repositories.checkin_repo import CheckinRepository
 from repositories.user_repo import UserRepository
-from models import CheckinRequest
+from app.models import CheckinRequest
 
 logger = logging.getLogger(__name__)
 

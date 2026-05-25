@@ -9,7 +9,7 @@ def client():
     import os
     os.environ.setdefault("DATABASE_PATH", "data/test_app.db")
 
-    from main import app
+    from app.main import app
     from fastapi.testclient import TestClient
     with TestClient(app) as c:
         yield c

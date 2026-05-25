@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 
 from repositories.user_repo import UserRepository
 from repositories.session_repo import SessionRepository
-from models import RegisterRequest, LoginRequest
+from app.models import RegisterRequest, LoginRequest
 
 logger = logging.getLogger(__name__)
 

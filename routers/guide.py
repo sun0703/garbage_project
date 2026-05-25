@@ -9,10 +9,10 @@ import logging
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-from constants import BASE_DIR
+from app.constants import BASE_DIR
 from utils.json_loader import load_json_data
 from utils.response import success_response, error_response
-import backend_state
+from app import backend_state
 
 logger = logging.getLogger(__name__)
 

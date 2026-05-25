@@ -55,7 +55,7 @@ function _processToastQueue() {
   const { msg, type, duration } = _toastQueue.shift();
 
   const containerEl = _getOrCreateElement('toastContainer', 'div');
-  containerEl.className = 'toast-container';
+  containerEl.classList.add('toast-container');
 
   const toastEl = document.createElement('div');
   toastEl.textContent = msg;

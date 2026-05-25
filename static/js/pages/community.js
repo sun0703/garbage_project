@@ -1,5 +1,7 @@
 import { store } from '../store.js';
 import { api } from '../api.js';
+import { escapeHtml } from '../utils/escape.js';
+import { showToast } from '../utils/ui.js';
 
 export class CommunityPage {
     container = null;
@@ -83,13 +85,20 @@ export class CommunityPage {
     _renderUserCard(user) {
         const card = document.getElementById('userCard');
         if (!card) return;
+
+        /* 对用户可控数据做 XSS 转义防护 */
+        const safeAvatar = escapeHtml(user.avatar || '');
+        const safeNickname = escapeHtml(user.nickname || user.username || '');
+        const nicknameInitial = escapeHtml((user.nickname || user.username || '?')[0]);
+        const safeUsername = escapeHtml(user.username || '');
+
         card.innerHTML = `
             <div class="user-card-info">
                 <div class="user-avatar">
-                    ${user.avatar ? `<img src="${user.avatar}" alt="头像">` : `<div class="avatar-placeholder">${(user.nickname || user.username)[0]}</div>`}
+                    ${user.avatar ? `<img src="${safeAvatar}" alt="头像">` : `<div class="avatar-placeholder">${nicknameInitial}</div>`}
                 </div>
                 <div class="user-detail">
-                    <h3 class="user-nickname">${user.nickname || user.username}</h3>
+                    <h3 class="user-nickname">${safeNickname}</h3>
                     <div class="user-stats">
                         <span class="stat-item">🏆 ${user.points || 0} 积分</span>
                         <span class="stat-item">📅 ${user.checkin_count || 0} 次打卡</span>
@@ -146,11 +155,11 @@ export class CommunityPage {
                 if (btn) { btn.textContent = '已打卡'; btn.classList.add('btn-disabled'); }
                 this._loadUserData();
             } else {
-                alert(data.error?.message || '打卡失败');
+                showToast(data.error?.message || '打卡失败', 'error');
                 if (btn) btn.disabled = false;
             }
         } catch (e) {
-            alert('打卡失败，请稍后重试');
+            showToast('打卡失败，请稍后重试', 'error');
             if (btn) btn.disabled = false;
         }
     }
@@ -178,13 +187,17 @@ export class CommunityPage {
         if (!quizCard) return;
 
         const labels = ['A', 'B', 'C', 'D'];
+        /* 对服务端返回的题目和选项做转义防护 */
+        const safeQuestion = escapeHtml(quiz.question || '');
+        const safeOptions = (quiz.options || []).map(opt => escapeHtml(opt));
+
         quizCard.innerHTML = `
             <div class="quiz-question">
                 <span class="quiz-difficulty">${'⭐'.repeat(quiz.difficulty || 1)}</span>
-                <p class="quiz-text">${quiz.question}</p>
+                <p class="quiz-text">${safeQuestion}</p>
             </div>
             <div class="quiz-options">
-                ${quiz.options.map((opt, i) => `
+                ${safeOptions.map((opt, i) => `
                     <button class="quiz-option" data-index="${i}">
                         <span class="option-label">${labels[i]}</span>
                         <span class="option-text">${opt}</span>
@@ -230,14 +243,14 @@ export class CommunityPage {
                         <div class="quiz-result-inner ${r.is_correct ? 'result-correct' : 'result-wrong'}">
                             <p class="result-status">${r.is_correct ? '✅ 回答正确！' : '❌ 回答错误'}</p>
                             ${r.points_earned > 0 ? `<p class="result-points">+${r.points_earned} 积分</p>` : ''}
-                            <p class="result-explanation">${r.explanation}</p>
+                            <p class="result-explanation">${escapeHtml(r.explanation || '')}</p>
                         </div>
                     `;
                 }
                 this._loadUserData();
             }
         } catch (e) {
-            alert('提交答案失败');
+            showToast('提交答案失败', 'error');
             options.forEach(btn => btn.style.pointerEvents = 'auto');
             this._quizAnswered = false;
         }
@@ -258,22 +271,22 @@ export class CommunityPage {
                 listEl.innerHTML = data.activities.map(a => `
                     <div class="activity-card card" data-activity-id="${a.id}">
                         <div class="activity-card-header">
-                            <h4 class="activity-title">${a.title}</h4>
+                            <h4 class="activity-title">${escapeHtml(a.title)}</h4>
                             <span class="activity-status activity-open">报名中</span>
                         </div>
-                        <p class="activity-desc">${a.description.substring(0, 80)}${a.description.length > 80 ? '...' : ''}</p>
+                        <p class="activity-desc">${escapeHtml((a.description || '').substring(0, 80))}${(a.description || '').length > 80 ? '...' : ''}</p>
                         <div class="activity-meta">
-                            <span>📍 ${a.location}</span>
+                            <span>📍 ${escapeHtml(a.location || '')}</span>
                             <span>👥 ${a.current_participants}/${a.max_participants || '不限'}</span>
-                            <span>🏢 ${a.organizer}</span>
+                            <span>🏢 ${escapeHtml(a.organizer || '')}</span>
                         </div>
                         <button class="btn btn-primary btn-sm activity-signup-btn" data-id="${a.id}">立即报名</button>
                         <div class="activity-detail" style="display:none">
                             <div class="activity-detail-inner">
-                                <p class="activity-full-desc">${a.description || '暂无描述'}</p>
+                                <p class="activity-full-desc">${escapeHtml(a.description || '暂无描述')}</p>
                                 <div class="activity-detail-meta">
                                     <p>⏰ 时间：${formatTime(a.start_time)} ~ ${formatTime(a.end_time)}</p>
-                                    <p>📍 地点：${a.location}</p>
+                                    <p>📍 地点：${escapeHtml(a.location || '')}</p>
                                     <p>👥 人数上限：${a.max_participants || '不限'}</p>
                                 </div>
                             </div>
@@ -291,10 +304,14 @@ export class CommunityPage {
 
                 const checkSignedMap = {};
                 try {
-                    for (const a of data.activities) {
-                        const res = await api.checkActivitySignup(a.id);
-                        checkSignedMap[a.id] = res.success && res.signed_up;
-                    }
+                    /* 并行检查所有活动的签到状态，减少串行等待时间 */
+                    const signupChecks = data.activities.map(a =>
+                        api.checkActivitySignup(a.id).catch(() => ({ success: false, signed_up: false }))
+                    );
+                    const results = await Promise.all(signupChecks);
+                    data.activities.forEach((a, i) => {
+                        checkSignedMap[a.id] = results[i]?.success && results[i]?.signed_up;
+                    });
                 } catch(e) {}
 
                 listEl.querySelectorAll('.activity-signup-btn').forEach(btn => {
@@ -327,12 +344,12 @@ export class CommunityPage {
                                 }
                             }
                             if (!res.success) {
-                                alert(res.error?.message || (isCancel ? '取消失败' : '报名失败'));
+                                showToast(res.error?.message || (isCancel ? '取消失败' : '报名失败'), 'error');
                                 btn.textContent = isCancel ? '取消报名' : '立即报名';
                             }
                             btn.disabled = false;
                         } catch (err) {
-                            alert(isCancel ? '取消失败，请稍后重试' : '报名失败，请稍后重试');
+                            showToast(isCancel ? '取消失败，请稍后重试' : '报名失败，请稍后重试', 'error');
                             btn.disabled = false;
                             btn.textContent = isCancel ? '取消报名' : '立即报名';
                         }

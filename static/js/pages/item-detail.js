@@ -11,6 +11,7 @@
 import { api } from '../api.js';
 import { store } from '../store.js';
 import { showToast, showLoading, hideLoading } from '../utils/ui.js';
+import { escapeHtml } from '../utils/escape.js';
 import { ConfusingPairCard } from '../components/confusing-pair-card.js';
 
 const CATEGORY_COLORS = {
@@ -19,13 +20,6 @@ const CATEGORY_COLORS = {
     2: { bg: '#333333', light: '#F5F5F5', name: '其他垃圾' },
     3: { bg: '#dc3545', light: '#FFEBEE', name: '有害垃圾' },
 };
-
-function escapeHtml(str) {
-    if (!str) return '';
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-}
 
 export class ItemDetailPage {
     container = null;
@@ -202,7 +196,7 @@ export class ItemDetailPage {
     _bindDetailEvents() {
         const backBtn = document.getElementById('itemBackBtn');
         if (backBtn) {
-            this._boundHandlers.back = () => { window.history.back(); };
+            this._boundHandlers.back = () => { window.location.hash = '#/'; };
             backBtn.addEventListener('click', this._boundHandlers.back);
         }
 

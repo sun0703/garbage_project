@@ -1177,16 +1177,16 @@ class MultiModalFusionClassifier:
         """
         logger.info("🚀 初始化多模态融合分类系统...")
 
-        # 自动检测模型路径
-        base_dir = Path(__file__).parent
+        # 自动检测模型路径（项目根目录为 app/ 的上级目录）
+        project_root = Path(__file__).parent.parent
 
         if not yolo_model_path:
-            default_yolo = str(base_dir / "models" / "garbage_yolov8m_best.pt")
+            default_yolo = str(project_root / "models" / "garbage_yolov8m_best.pt")
             if Path(default_yolo).exists():
                 yolo_model_path = default_yolo
 
         if not sahi_model_path:
-            default_sahi = str(base_dir / "models" / "garbage_yolov8m_best.pt")
+            default_sahi = str(project_root / "models" / "garbage_yolov8m_best.pt")
             if Path(default_sahi).exists():
                 sahi_model_path = default_sahi
             else:

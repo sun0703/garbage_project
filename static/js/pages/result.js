@@ -22,6 +22,12 @@ export class ResultPage {
     /** 当前识别结果数据 */
     _resultData = null;
 
+    /** ResultCard 组件实例引用（用于 destroy 时清理） */
+    _resultCard = null;
+
+    /** CategoryTag 组件实例引用（用于 destroy 时清理） */
+    _categoryTag = null;
+
     /** 绑定的事件处理器引用集合 */
     _boundHandlers = {};
 
@@ -72,6 +78,16 @@ export class ResultPage {
         if (continueBtn) continueBtn.removeEventListener('click', this._boundHandlers.continue);
         if (shareBtn) shareBtn.removeEventListener('click', this._boundHandlers.share);
         if (homeBtn) homeBtn.removeEventListener('click', this._boundHandlers.home);
+
+        /* 销毁子组件实例释放事件监听 */
+        if (this._resultCard && typeof this._resultCard.destroy === 'function') {
+            this._resultCard.destroy();
+            this._resultCard = null;
+        }
+        if (this._categoryTag && typeof this._categoryTag.destroy === 'function') {
+            this._categoryTag.destroy();
+            this._categoryTag = null;
+        }
 
         /* 清空容器 */
         if (this.container) {
@@ -175,17 +191,17 @@ export class ResultPage {
         /* ---- 渲染主结果卡片 (ResultCard) ---- */
         const cardContainer = document.getElementById('resultCardContainer');
         if (cardContainer && this._resultData) {
-            const resultCard = new ResultCard();
-            resultCard.render(cardContainer);
-            resultCard.update(this._resultData);
+            this._resultCard = new ResultCard();
+            this._resultCard.render(cardContainer);
+            this._resultCard.update(this._resultData);
         }
 
         /* ---- 渲染分类标签 (CategoryTag) ---- */
         const tagContainer = document.getElementById('categoryTagContainer');
         if (tagContainer && this._resultData?.category) {
-            const categoryTag = new CategoryTag();
-            categoryTag.render(tagContainer);
-            categoryTag.updateByName(this._resultData.category);
+            this._categoryTag = new CategoryTag();
+            this._categoryTag.render(tagContainer);
+            this._categoryTag.updateByName(this._resultData.category);
         }
     }
 

@@ -3,6 +3,8 @@
 import os
 import pytest
 
+from tests.fixtures.client import client  # noqa: F401 — 注册 client fixture 供测试用例使用
+
 
 @pytest.fixture(autouse=True)
 def _setup_env(monkeypatch):

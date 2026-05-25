@@ -491,10 +491,12 @@ export class HistoryPage {
 
         /* 二次确认弹窗 */
         const confirmed = await confirm(
-            '确认清空',
             `确定要清空全部 ${this._records.length} 条识别历史吗？此操作不可撤销。`,
-            '取消',
-            '确认清空'
+            {
+                title: '确认清空',
+                confirmText: '确认清空',
+                cancelText: '取消'
+            }
         );
 
         if (!confirmed) return; /* 用户取消 */

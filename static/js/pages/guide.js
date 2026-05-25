@@ -11,6 +11,7 @@
 
 import { api } from '../api.js';
 import { showToast, showLoading, hideLoading } from '../utils/ui.js';
+import { escapeHtml } from '../utils/escape.js';
 import { ConfusingPairCard } from '../components/confusing-pair-card.js';
 
 const FALLBACK_CATEGORIES = [
@@ -99,13 +100,6 @@ const FALLBACK_CATEGORIES = [
         ]
     }
 ];
-
-function escapeHtml(str) {
-    if (!str) return '';
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-}
 
 export class GuidePage {
     container = null;

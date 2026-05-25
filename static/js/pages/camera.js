@@ -387,7 +387,7 @@ export class PreviewPage {
                 errorMsg = '网络连接不可用，请检查网络设置';
             }
 
-            showModal('识别失败', errorMsg, '确定');
+            showModal({ title: '识别失败', content: errorMsg, confirmText: '确定' });
             showToast(errorMsg, 'error');
 
         } finally {

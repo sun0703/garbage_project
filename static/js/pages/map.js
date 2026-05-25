@@ -45,14 +45,35 @@ export class MapPage {
 
     _loadMap() {
         if (typeof L === 'undefined') {
+            /* 跟踪 CSS 和 JS 加载状态，二者就绪后才初始化地图 */
+            let _cssReady = false;
+            let _jsReady = false;
+
+            const _tryInit = () => {
+                if (_cssReady && _jsReady) {
+                    this._initMap();
+                }
+            };
+
             const link = document.createElement('link');
             link.rel = 'stylesheet';
             link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+            link.onload = () => {
+                _cssReady = true;
+                _tryInit();
+            };
+            link.onerror = () => {
+                _cssReady = true; /* CSS 加载失败也不阻塞，降级继续 */
+                _tryInit();
+            };
             document.head.appendChild(link);
 
             const script = document.createElement('script');
             script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-            script.onload = () => this._initMap();
+            script.onload = () => {
+                _jsReady = true;
+                _tryInit();
+            };
             document.head.appendChild(script);
         } else {
             this._initMap();

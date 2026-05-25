@@ -36,20 +36,20 @@ class TestSearchAPI:
     """搜索接口测试"""
 
     def test_search_empty_query(self, client):
-        """空关键词搜索应返回空结果"""
-        response = client.get("/api/search", params={"q": "", "top_k": 5})
-        assert response.status_code in (200, 400)
+        """空关键词搜索应返回422（参数校验 min_length=1）"""
+        response = client.get("/api/search", params={"query": "", "top_k": 5})
+        assert response.status_code == 422
 
     def test_search_common_word(self, client):
         """常见物品搜索应返回结果"""
-        response = client.get("/api/search", params={"q": "塑料瓶", "top_k": 3})
+        response = client.get("/api/search", params={"query": "塑料瓶", "top_k": 3})
         assert response.status_code == 200
         data = response.json()
         assert data.get("success", False)
 
     def test_search_with_limit(self, client):
         """验证 top_k 参数限制生效"""
-        response = client.get("/api/search/enhanced", params={"q": "纸", "top_k": 2})
+        response = client.get("/api/search/enhanced", params={"query": "纸", "top_k": 2})
         if response.status_code == 200:
             data = response.json()
             assert len(data.get("results", [])) <= 2

@@ -1,5 +1,7 @@
 """FastAPI 测试客户端 fixture"""
 
+import traceback
+
 import pytest
 
 
@@ -7,7 +9,8 @@ import pytest
 def client():
     """创建 FastAPI 测试客户端（session级别复用，避免重复启动）
 
-    捕获 ImportError 并输出明确的缺失依赖提示，避免 CI 环境中静默 ERROR。
+    宽异常捕获：覆盖 from app.main import app 及 TestClient(app)
+    lifespan 启动事件中可能抛出的任何异常，输出完整 traceback 到 pytest 失败信息。
     """
     import os
     os.environ.setdefault("DATABASE_PATH", "data/test_app.db")
@@ -26,5 +29,11 @@ def client():
     except ImportError:
         pytest.fail("缺少 fastapi 依赖，请执行: pip install fastapi")
 
-    with TestClient(app) as c:
-        yield c
+    try:
+        with TestClient(app) as c:
+            yield c
+    except Exception:
+        tb = traceback.format_exc()
+        pytest.fail(
+            f"TestClient 启动失败，应用 lifespan 事件可能抛出异常:\n{tb}"
+        )

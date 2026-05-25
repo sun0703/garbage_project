@@ -35,7 +35,7 @@ jobs:
           pip install --no-cache-dir -r requirements.txt
           pip install --no-cache-dir pytest pytest-cov httpx
       - name: 运行测试
-        run: pytest --cov=. --cov-report=xml --cov-report=term -v
+        run: pytest --cov=. --cov-report=xml --cov-report=term -v -s
       - name: 上传覆盖率报告
         uses: actions/upload-artifact@v4
         with:

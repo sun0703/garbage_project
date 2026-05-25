@@ -11,7 +11,7 @@ import logging
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 
-from backend_state import search_engine
+import backend_state
 from services.search_engine import _PINYIN_AVAILABLE
 
 logger = logging.getLogger(__name__)
@@ -22,7 +22,7 @@ router = APIRouter()
 @router.get("/api/search")
 async def search_waste(query: str = Query(..., min_length=1, max_length=100)) -> JSONResponse:
     """模糊搜索接口（支持拼音首字母搜索）"""
-    if not search_engine or not search_engine.vocab:
+    if not backend_state.search_engine or not backend_state.search_engine.vocab:
         return JSONResponse(
             status_code=503,
             content={
@@ -32,7 +32,7 @@ async def search_waste(query: str = Query(..., min_length=1, max_length=100)) ->
             },
         )
 
-    results = search_engine.search(query.strip(), top_k=3)
+    results = backend_state.search_engine.search(query.strip(), top_k=3)
     return JSONResponse(
         content={
             "success": True,
@@ -67,7 +67,7 @@ async def search_enhanced(
     """
     import re
     
-    if not search_engine or not search_engine.vocab:
+    if not backend_state.search_engine or not backend_state.search_engine.vocab:
         return JSONResponse(
             status_code=503,
             content={
@@ -83,9 +83,9 @@ async def search_enhanced(
     # 生成拼音搜索建议（当输入为纯字母时）
     if include_pinyin and re.match(r'^[a-z]+$', query_stripped.lower()):
         # 收集所有以查询为前缀的拼音键对应的标签作为建议
-        for py_key in search_engine._pinyin_index:
+        for py_key in backend_state.search_engine._pinyin_index:
             if py_key.startswith(query_stripped.lower()) and py_key != query_stripped.lower():
-                for item in search_engine._pinyin_index[py_key][:2]:  # 每个键最多取 2 个建议
+                for item in backend_state.search_engine._pinyin_index[py_key][:2]:  # 每个键最多取 2 个建议
                     suggestion = {
                         "label": item["label"],
                         "pinyin_key": py_key,
@@ -100,7 +100,7 @@ async def search_enhanced(
                     break
     
     # 执行搜索
-    results = search_engine.search(query_stripped, top_k=top_k)
+    results = backend_state.search_engine.search(query_stripped, top_k=top_k)
     
     return JSONResponse(
         content={
@@ -117,11 +117,11 @@ async def search_enhanced(
 @router.get("/api/categories")
 async def get_categories() -> JSONResponse:
     """获取所有类别信息"""
-    if not search_engine or not search_engine.vocab:
+    if not backend_state.search_engine or not backend_state.search_engine.vocab:
         return JSONResponse(status_code=503, content={"success": False})
 
     categories_map: dict[int, dict] = {}
-    for item in search_engine.vocab:
+    for item in backend_state.search_engine.vocab:
         cat_id = item["category_id"]
         if cat_id not in categories_map:
             categories_map[cat_id] = {

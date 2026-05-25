@@ -13,7 +13,7 @@ from fastapi import APIRouter
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from constants import GARBAGE_40CLASSES, WASTE_CATEGORIES, INDEX_HTML_PATH
-from backend_state import vision_engine, search_engine, inference_cache, history_store, multimodal_classifier, multimodal_available
+import backend_state
 from models import PredictRequest, BatchPredictRequest
 from utils.image import decode_base64_image
 from services.image_analyzer import ImageFeatureAnalyzer
@@ -51,10 +51,10 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
         timing["preprocess_ms"] = int((time.time() - start_time) * 1000)
         logger.info("图片解码成功，尺寸: %s (预处理耗时=%dms)", image.size, timing["preprocess_ms"])
 
-        if inference_cache:
+        if backend_state.inference_cache:
             try:
-                cache_key = inference_cache._make_key(image_data)
-                cached_result = inference_cache.get(cache_key)
+                cache_key = backend_state.inference_cache._make_key(image_data)
+                cached_result = backend_state.inference_cache.get(cache_key)
                 if cached_result:
                     total_ms = int((time.time() - start_time) * 1000)
                     req_id = uuid.uuid4().hex[:12]
@@ -91,7 +91,7 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
             },
         )
 
-    if not vision_engine or not vision_engine.is_loaded:
+    if not backend_state.vision_engine or not backend_state.vision_engine.is_loaded:
         logger.error("模型未就绪")
         return JSONResponse(
             status_code=503,
@@ -104,7 +104,7 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
 
     try:
         inference_start = time.time()
-        result = vision_engine.predict(image)
+        result = backend_state.vision_engine.predict(image)
         timing["inference_ms"] = int((time.time() - inference_start) * 1000)
 
         postprocess_start = time.time()
@@ -115,7 +115,7 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
         # 40类专用模型：直接使用YOLO检测结果（无需特征分析）
         # COCO/通用模型：使用混合策略（YOLO + 特征分析）
 
-        if vision_engine.is_pt_model and vision_engine.num_classes >= 40:
+        if backend_state.vision_engine.is_pt_model and backend_state.vision_engine.num_classes >= 40:
             # 40类专用垃圾分类模型 - 直接使用结果
             logger.info("🎯 使用40类专用模型结果 (ID=%s, 名称=%s, 置信度=%.1f%%)",
                        result.get("original_class_id"),
@@ -224,7 +224,7 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
                 not result.get("is_demo_mode") and
                 original_class_id is not None and
                 original_class_id in HIGH_CONFIDENCE_CONTAINER_CLASSES and
-                vision_engine.num_classes == 80 and
+                backend_state.vision_engine.num_classes == 80 and
                 result.get("confidence", 0) > 0.6
             )
 
@@ -286,8 +286,8 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
                 "🚀 即将支持：浏览器本地 AI 推理（ONNX WASM），无需网络即可获得专业级识别精度"
             )
 
-        if history_store:
-            history_store.add({
+        if backend_state.history_store:
+            backend_state.history_store.add({
                 "category": class_info.get("category", ""),
                 "category_id": class_info.get("category_id", -1),
                 "label_cn": class_info.get("label_cn", ""),
@@ -297,9 +297,9 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
                 "is_demo_mode": result.get("is_demo_mode", False),
             })
 
-        if inference_cache and 'cache_key' in locals():
+        if backend_state.inference_cache and 'cache_key' in locals():
             try:
-                inference_cache.set(cache_key, response_data["result"])
+                backend_state.inference_cache.set(cache_key, response_data["result"])
             except Exception as e:
                 logger.warning("缓存写入异常（不影响主流程）: %s", e)
 
@@ -347,7 +347,7 @@ async def predict_multimodal(request: PredictRequest) -> JSONResponse:
     start_time = time.time()
     req_id = uuid.uuid4().hex[:12]
 
-    if not multimodal_available or not multimodal_classifier:
+    if not backend_state.multimodal_available or not backend_state.multimodal_classifier:
         return JSONResponse(
             status_code=503,
             content={
@@ -373,7 +373,7 @@ async def predict_multimodal(request: PredictRequest) -> JSONResponse:
         })
 
     try:
-        result = multimodal_classifier.predict(image)
+        result = backend_state.multimodal_classifier.predict(image)
 
         final = result.final_prediction
         fusion_details = result.fusion_details
@@ -458,7 +458,7 @@ async def batch_predict_waste(request: BatchPredictRequest) -> JSONResponse:
             },
         )
 
-    if not vision_engine or not vision_engine.is_loaded:
+    if not backend_state.vision_engine or not backend_state.vision_engine.is_loaded:
         return JSONResponse(
             status_code=503,
             content={
@@ -482,10 +482,10 @@ async def batch_predict_waste(request: BatchPredictRequest) -> JSONResponse:
         # ===== 批量识别中的单张图片缓存检查 =====
         current_cache_key = None
         cached_item = None
-        if inference_cache:
+        if backend_state.inference_cache:
             try:
-                current_cache_key = inference_cache._make_key(image_data)
-                cached_result = inference_cache.get(current_cache_key)
+                current_cache_key = backend_state.inference_cache._make_key(image_data)
+                cached_result = backend_state.inference_cache.get(current_cache_key)
                 if cached_result:
                     # 缓存命中：直接使用缓存结果，跳过模型推理
                     logger.info("批量识别-第%d张 缓存命中: %s", idx + 1, current_cache_key[:20])
@@ -505,8 +505,8 @@ async def batch_predict_waste(request: BatchPredictRequest) -> JSONResponse:
                     results.append(cached_item)
 
                     # 写入历史记录（缓存命中的图片也记录）
-                    if history_store:
-                        history_store.add({
+                    if backend_state.history_store:
+                        backend_state.history_store.add({
                             "category": cached_item["category"],
                             "category_id": cached_item["category_id"],
                             "label_cn": cached_item["label_cn"],
@@ -521,13 +521,13 @@ async def batch_predict_waste(request: BatchPredictRequest) -> JSONResponse:
 
         try:
             img_start = time.time()
-            result = vision_engine.predict(image)
+            result = backend_state.vision_engine.predict(image)
             img_ms = int((time.time() - img_start) * 1000)
 
             class_index = result.get("class_index", 2)
 
             # 40类映射
-            if vision_engine.is_pt_model and vision_engine.num_classes >= 40:
+            if backend_state.vision_engine.is_pt_model and backend_state.vision_engine.num_classes >= 40:
                 original_class_id = result.get("original_class_id", -1)
                 if original_class_id in GARBAGE_40CLASSES:
                     mapping = GARBAGE_40CLASSES[original_class_id]
@@ -558,15 +558,15 @@ async def batch_predict_waste(request: BatchPredictRequest) -> JSONResponse:
             results.append(item)
 
             # ===== 推理结果写入缓存（批量识别） =====
-            if inference_cache and current_cache_key:
+            if backend_state.inference_cache and current_cache_key:
                 try:
-                    inference_cache.set(current_cache_key, item)
+                    backend_state.inference_cache.set(current_cache_key, item)
                 except Exception as e:
                     logger.warning("批量识别-第%d张 缓存写入异常（不影响主流程）: %s", idx + 1, e)
 
             # 写入历史
-            if history_store:
-                history_store.add({
+            if backend_state.history_store:
+                backend_state.history_store.add({
                     "category": item["category"],
                     "category_id": item["category_id"],
                     "label_cn": item["label_cn"],
@@ -599,9 +599,9 @@ async def health_check() -> JSONResponse:
     """健康检查接口（含多模态融合系统状态）"""
     # 获取多模态融合系统信息
     multimodal_status = None
-    if multimodal_available and multimodal_classifier:
+    if backend_state.multimodal_available and backend_state.multimodal_classifier:
         try:
-            system_info = multimodal_classifier.get_system_info()
+            system_info = backend_state.multimodal_classifier.get_system_info()
             multimodal_status = {
                 "available": True,
                 "architecture": system_info.get("architecture", "unknown"),
@@ -615,15 +615,15 @@ async def health_check() -> JSONResponse:
     else:
         multimodal_status = {
             "available": False,
-            "reason": "模块未加载" if not multimodal_available else "分类器未初始化",
+            "reason": "模块未加载" if not backend_state.multimodal_available else "分类器未初始化",
         }
 
     return JSONResponse(
         content={
             "status": "healthy",
-            "model_loaded": vision_engine.is_loaded if vision_engine else False,
-            "model_type": "专用垃圾分类模型" if (vision_engine and vision_engine.is_waste_model) else "智能演示模式（图像特征分析）",
-            "vocab_loaded": len(search_engine.vocab) > 0 if search_engine else False,
+            "model_loaded": backend_state.vision_engine.is_loaded if backend_state.vision_engine else False,
+            "model_type": "专用垃圾分类模型" if (backend_state.vision_engine and backend_state.vision_engine.is_waste_model) else "智能演示模式（图像特征分析）",
+            "vocab_loaded": len(backend_state.search_engine.vocab) > 0 if backend_state.search_engine else False,
             "uptime_info": "running",
             "multimodal_fusion": multimodal_status,
         }

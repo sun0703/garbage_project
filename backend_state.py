@@ -10,5 +10,6 @@ history_store = None
 feedback_store = None
 inference_cache = None
 multimodal_classifier = None
+multimodal_available = False
 disposal_steps_data: dict = {}
 rate_limiter = None

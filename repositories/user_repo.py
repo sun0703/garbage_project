@@ -21,7 +21,6 @@ class UserRepository:
         avatar: str = "",
         oauth_provider: str = "",
         oauth_id: str = "",
-        role: str = "visitor",
     ) -> Optional[str]:
         """创建普通用户，返回 user_id；失败返回 None
 
@@ -32,7 +31,6 @@ class UserRepository:
             avatar:       头像 URL
             oauth_provider: OAuth 提供商
             oauth_id:      OAuth 用户 ID
-            role:          角色
 
         Returns:
             成功返回 user_id(str)，失败返回 None
@@ -42,10 +40,10 @@ class UserRepository:
             now = time.time()
             db.conn.execute(
                 "INSERT INTO users (id, username, password_hash, nickname, avatar, "
-                "points, checkin_count, quiz_correct, quiz_total, oauth_provider, oauth_id, role, created_at, last_login) "
-                "VALUES (?,?,?,?,?,0,0,0,0,?,?,?,?,?)",
+                "points, checkin_count, quiz_correct, quiz_total, oauth_provider, oauth_id, created_at, last_login) "
+                "VALUES (?,?,?,?,?,0,0,0,0,?,?,?,?)",
                 (user_id, username, password_hash, nickname, avatar,
-                 oauth_provider, oauth_id, role, now, now),
+                 oauth_provider, oauth_id, now, now),
             )
             db.conn.commit()
             logger.info("用户创建成功: %s", username)
@@ -68,7 +66,7 @@ class UserRepository:
             c = db.conn.cursor()
             c.execute(
                 "SELECT id, username, nickname, avatar, points, checkin_count, "
-                "quiz_correct, quiz_total, role, oauth_provider, oauth_id, "
+                "quiz_correct, quiz_total, oauth_provider, oauth_id, "
                 "created_at, last_login FROM users WHERE id = ?",
                 (user_id,),
             )

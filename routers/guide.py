@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from constants import BASE_DIR
 from utils.json_loader import load_json_data
 from utils.response import success_response, error_response
-from backend_state import search_engine
+import backend_state
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ async def get_guide_category(category_id: int) -> JSONResponse:
     try:
         for cat in data.get("categories", []):
             if cat.get("id") == category_id:
-                items_in_category = search_engine.get_items_by_category(category_id) if search_engine else []
+                items_in_category = backend_state.search_engine.get_items_by_category(category_id) if backend_state.search_engine else []
                 cat["vocab_items"] = [
                     {"label": item["label"], "aliases": item.get("aliases", []), "guidance": item.get("guidance", "")}
                     for item in items_in_category
@@ -104,10 +104,10 @@ async def get_confusing_pair(pair_id: int) -> JSONResponse:
 @router.get("/api/guide/item/{keyword}")
 async def get_guide_item(keyword: str) -> JSONResponse:
     """获取物品详情（含处理步骤+相关物品+易错对比）"""
-    if not search_engine:
+    if not backend_state.search_engine:
         return JSONResponse(status_code=503, content={"success": False})
 
-    results = search_engine.search(keyword, top_k=1)
+    results = backend_state.search_engine.search(keyword, top_k=1)
     if not results:
         return JSONResponse(
             status_code=404,
@@ -131,7 +131,7 @@ async def get_guide_item(keyword: str) -> JSONResponse:
 
     same_category = [
         {"label": i["label"], "guidance": i.get("guidance", "")}
-        for i in search_engine.vocab
+        for i in backend_state.search_engine.vocab
         if i.get("category_id") == item.get("category_id") and i["label"] != item["label"]
     ][:6]
 

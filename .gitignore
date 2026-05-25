@@ -1,12 +1,14 @@
-# Byte-compiled / optimized / DLL files
+# ============================================
+# Python 编译产物
+# ============================================
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
 *.so
 
-# Distribution / packaging
+# ============================================
+# 打包与分发
+# ============================================
 .Python
 build/
 develop-eggs/
@@ -14,12 +16,6 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
@@ -28,11 +24,15 @@ wheels/
 *.manifest
 *.spec
 
-# Installer logs
+# ============================================
+# 安装器日志
+# ============================================
 pip-log.txt
 pip-delete-this-directory.txt
 
-# Unit test / coverage reports
+# ============================================
+# 测试与覆盖率
+# ============================================
 htmlcov/
 .tox/
 .nox/
@@ -45,78 +45,51 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 
-# Translations
+# ============================================
+# 国际化翻译文件
+# ============================================
 *.mo
 *.pot
 
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-target/
-
-# Jupyter Notebook
+# ============================================
+# Notebook 与 IPython
+# ============================================
 .ipynb_checkpoints
-
-# IPython
 profile_default/
 ipython_config.py
 
-# pyenv
+# ============================================
+# Python 版本与环境管理
+# ============================================
 .python-version
-
-# pipenv
 Pipfile.lock
-
-# PEP 582
 __pypackages__/
 
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
+# ============================================
+# 虚拟环境
+# ============================================
 .env
 .venv
 env/
 venv/
 ENV/
-env.bak/venv.bak/
 
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
+# ============================================
+# Sphinx 文档构建
+# ============================================
 /site
 
-# mypy
+# ============================================
+# 类型检查
+# ============================================
 .mypy_cache/
 .dmypy.json
 dmypy.json
+.ruff_cache/
 
-# Pyre type checker
-.pyre/
-
-# AI/ML 模型文件（通常很大，不适合放入 Git）
+# ============================================
+# AI/ML 模型文件（大文件，不适合 Git）
+# ============================================
 *.pt
 *.pth
 *.h5
@@ -127,37 +100,65 @@ dmypy.json
 *.ckpt
 models/
 
-# 训练图片数据集（大文件，不适合放入 Git）
+# ML 序列化与实验产出
+*.pkl
+*.joblib
+saved_models/
+checkpoints/
+runs/
+wandb/
+mlruns/
+
+# ============================================
+# 训练数据集（大文件，不适合 Git）
+# ============================================
 模型训练/datasets/rubbish/images/
 
-# 数据集文件（大文件）
+# ============================================
+# 数据目录（运行时生成数据 vs 配置文件）
+# ============================================
 data/raw/
-data/processed/*.csv
-data/processed/*.json
-!data/waste.json  # 保留配置数据
+data/processed/
+!data/processed/.gitkeep
+!data/waste.json
+data/history.json
+data/feedback.json
+data/app.db*
 
-# 运行时生成的数据文件（不应纳入版本控制）
-data/history.json      # 识别历史记录（动态生成）
-data/feedback.json     # 用户反馈数据（动态生成）
-data/app.db*           # SQLite 数据库文件（运行时生成）
-
+# ============================================
 # 日志文件
+# ============================================
 logs/
 *.log
 
+# ============================================
 # IDE 配置
+# ============================================
 .idea/
 .vscode/
 *.swp
 *.swo
 *~
 
-# OS 文件
+# ============================================
+# OS 系统文件
+# ============================================
 .DS_Store
 Thumbs.db
 
+# ============================================
 # 临时文件
+# ============================================
 tmp/
 temp/
 *.tmp
-node_modules/          # npm 依赖包
+
+# ============================================
+# 前端依赖
+# ============================================
+node_modules/
+
+# ============================================
+# Docker 构建上下文
+# ============================================
+.docker/

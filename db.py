@@ -156,6 +156,36 @@ class Database:
         self.conn.commit()
         logger.info("数据库表初始化完成")
 
+    def migrate(self):
+        """数据库版本迁移——检测并补充旧数据库中缺失的字段（幂等操作）"""
+        c = self.conn.cursor()
+
+        expected_columns = {
+            "users": {
+                "oauth_provider": "TEXT DEFAULT ''",
+                "oauth_id": "TEXT DEFAULT ''",
+                "updated_at": "REAL DEFAULT 0",
+            },
+            "activities": {
+                "creator_id": "TEXT DEFAULT ''",
+                "updated_at": "REAL DEFAULT 0",
+            },
+        }
+
+        for table, columns in expected_columns.items():
+            c.execute(f"PRAGMA table_info({table})")
+            existing = {row[1] for row in c.fetchall()}
+            for col_name, col_def in columns.items():
+                if col_name not in existing:
+                    try:
+                        c.execute(f"ALTER TABLE {table} ADD COLUMN {col_name} {col_def}")
+                        logger.info("数据库迁移: %s.%s 字段已添加", table, col_name)
+                    except Exception as e:
+                        logger.warning("数据库迁移跳过 [%s.%s]: %s", table, col_name, e)
+
+        self.conn.commit()
+        logger.info("数据库迁移检查完成")
+
     def add_indexes(self):
         """创建高频查询字段的索引（幂等操作，重复执行安全）"""
         c = self.conn.cursor()

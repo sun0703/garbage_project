@@ -37,3 +37,10 @@ max-line-length = 127
 
 [tool.pylint.basic]
 good-names = ["i", "e", "f", "_", "id"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short --strict-markers"

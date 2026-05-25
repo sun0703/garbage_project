@@ -2131,6 +2131,7 @@ def startup_event() -> None:
 
     db.connect()
     db.init_tables()
+    db.migrate()
     db.add_indexes()
     db.seed_disposal_points()
     db.seed_quiz_questions()

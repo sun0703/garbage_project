@@ -52,6 +52,16 @@ except ImportError as e:
     MultiModalFusionClassifier = None
     logger.warning("多模态融合模块不可用 (%s)，将使用单模型模式", e)
 
+# 尝试导入最优双层架构 (v2.0)
+_OPTIMAL_DUAL_LAYER_AVAILABLE = False
+OptimalDualLayerFusion = None
+try:
+    from app.optimal_dual_layer import OptimalDualLayerFusion, create_optimal_classifier
+    _OPTIMAL_DUAL_LAYER_AVAILABLE = True
+    logger.info("✅ 最优双层架构模块加载成功 (V2 + Main 双层融合)")
+except ImportError as e:
+    logger.info("ℹ️ 最优双层架构不可用，将使用标准架构: %s", e)
+
 # ==================== 服务层导入 ====================
 from services.rate_limiter import RateLimiter
 from services.vision_engine import VisionEngine
@@ -180,15 +190,34 @@ def startup_event() -> None:
 
     set_search_engine(backend_state.search_engine)
 
-    if _MULTIMODAL_AVAILABLE and MultiModalFusionClassifier is not None:
-        backend_state.multimodal_available = True
+    # ========== 初始化多模态融合分类器 ==========
+    # 优先级: 最优双层架构 (V2+Main) > 标准三层架构 > 单模型
+
+    optimal_init_success = False
+    if _OPTIMAL_DUAL_LAYER_AVAILABLE:
+        # 尝试创建最优双层架构
+        try:
+            optimal_classifier = create_optimal_classifier(auto_mode=True)
+            if optimal_classifier is not None:
+                backend_state.multimodal_classifier = optimal_classifier
+                backend_state.multimodal_available = True
+                backend_state.architecture_mode = "optimal_dual_layer_v2"
+                optimal_init_success = True
+                logger.info("🎯 最优双层架构初始化完成 (V2粗分类 + Main精细)")
+        except Exception as e:
+            logger.warning("⚠️ 最优双层架构初始化失败: %s", e)
+
+    # 如果最优架构不可用或失败，使用标准架构
+    if not optimal_init_success and not backend_state.multimodal_available and _MULTIMODAL_AVAILABLE and MultiModalFusionClassifier is not None:
         try:
             backend_state.multimodal_classifier = MultiModalFusionClassifier(
                 yolo_model_path=str(BASE_DIR / "models" / "garbage_yolov8m_best.pt"),
                 enable_sahi=True,
                 sahi_slice_size=(320, 320),
             )
-            logger.info("✅ 多模态融合分类器初始化完成")
+            backend_state.multimodal_available = True
+            backend_state.architecture_mode = "standard_triple_layer"
+            logger.info("✅ 标准三层架构初始化完成")
         except Exception as e:
             logger.warning("⚠️ 多模态融合分类器初始化失败: %s", e)
             backend_state.multimodal_classifier = None

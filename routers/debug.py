@@ -17,6 +17,9 @@ from utils.image import decode_base64_image
 from services.image_analyzer import ImageFeatureAnalyzer
 from services.garbage_utils import _get_class_info
 
+import datetime
+from app import backend_state
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -25,8 +28,6 @@ router = APIRouter()
 @router.get("/api/debug/health")
 async def health_check() -> JSONResponse:
     """健康检查接口 - 返回系统状态"""
-    import datetime
-    from app import backend_state
 
     status = {
         "status": "healthy",

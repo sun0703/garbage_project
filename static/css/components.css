@@ -227,6 +227,8 @@
   min-height: 220px;                   /* 最小高度要求 */
   border: 2px dashed var(--border);
   border-radius: var(--radius-lg);
+  position: relative;                  /* 为伪元素定位提供参考 */
+
   background:
     linear-gradient(135deg, rgba(45, 155, 94, 0.02) 0%, rgba(78, 205, 196, 0.02) 100%),
     rgba(255, 255, 255, 0.6);
@@ -238,6 +240,8 @@
   gap: 12px;
   padding: 36px 24px;
   cursor: pointer;
+  user-select: none;                   /* 防止选中文本 */
+  -webkit-tap-highlight-color: transparent; /* 移除移动端点击高亮 */
 
   transition:
     border-color var(--transition),
@@ -346,6 +350,16 @@
 .upload-area.drag-active .upload-area__icon-wrap svg {
   color: #fff;
   transform: scale(1.1);
+}
+
+/* 点击反馈状态 - 短暂的高亮效果 */
+.upload-area.clicked {
+  border-color: var(--primary);
+  background:
+    linear-gradient(135deg, rgba(61, 185, 116, 0.12) 0%, rgba(78, 205, 196, 0.08) 100%),
+    rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 0 3px rgba(61, 185, 116, 0.15);
+  transform: scale(0.98);
 }
 
 /* 已有图片状态 - 隐藏提示文字，显示图片预览 */

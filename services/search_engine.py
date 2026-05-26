@@ -245,7 +245,14 @@ class SearchEngine:
 
         raw_results = fuzz_process.extract(query, all_searchable, limit=top_k * 2)
 
+        # 设置相似度阈值：低于此分数的结果视为无意义匹配
+        SIMILARITY_THRESHOLD = 50
+
         for match_text, score in raw_results:
+            # 过滤低质量匹配：相似度低于阈值的不返回
+            if score < SIMILARITY_THRESHOLD:
+                continue
+
             # 如果匹配到的是别名，映射回主标签
             if match_text in self._alias_to_label:
                 main_label = self._alias_to_label[match_text]

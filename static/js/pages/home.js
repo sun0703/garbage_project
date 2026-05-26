@@ -208,11 +208,27 @@ export class HomePage {
         const self = this;
 
         /* ---- 点击上传区域触发文件选择 ---- */
-        this._boundHandlers.uploadClick = () => {
-            this.fileInput?.click();
+        this._boundHandlers.uploadClick = (e) => {
+            console.log('[HomePage] 上传区域被点击', { hasFileInput: !!this.fileInput, eventTarget: e.target });
+
+            if (!this.fileInput) {
+                console.error('[HomePage] fileInput 元素不存在！');
+                return;
+            }
+
+            // 添加视觉反馈
+            this.uploadArea?.classList.add('clicked');
+            setTimeout(() => this.uploadArea?.classList.remove('clicked'), 200);
+
+            // 触发文件选择
+            this.fileInput.click();
+            console.log('[HomePage] 已调用 fileInput.click()');
         };
         if (this.uploadArea) {
             this.uploadArea.addEventListener('click', this._boundHandlers.uploadClick);
+            console.log('[HomePage] 已绑定上传区域点击事件');
+        } else {
+            console.error('[HomePage] uploadArea 元素不存在！');
         }
 
         /* ---- 文件选择变化处理 ---- */

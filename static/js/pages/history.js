@@ -157,8 +157,8 @@ export class HistoryPage {
      */
     async _loadRecords() {
         try {
-            /* 通过后端 API 获取历史记录（大页数一次拉取） */
-            const response = await api.getHistory(1, 200);
+            /* 通过后端 API 获取历史记录（大页数一次拉取，page_size限制在50以内） */
+            const response = await api.getHistory(1, 50);
             this._records = (response && response.length !== undefined)
                 ? response  // api.request 已提取 data 字段，直接是数组
                 : [];

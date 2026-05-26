@@ -304,9 +304,9 @@ export class PreviewPage {
         try {
             const selectedImage = store.getState('selectedImage');
 
-            /* 【防御性校验】参数有效性检查 - 防止无效数据导致 FileReader 异常 */
-            if (!selectedImage || !(selectedImage instanceof Blob)) {
-                console.warn('[PreviewPage] selectedImage 无效或非 Blob 类型，取消识别');
+            /* 【防御性校验】参数有效性检查 - 支持Base64字符串和Blob对象两种格式 */
+            if (!selectedImage) {
+                console.warn('[PreviewPage] selectedImage 为空，取消识别');
                 showToast('图片数据无效，请重新上传', 'error');
                 this._updateState(RecognizeState.ERROR);
                 this._recognizing = false;
@@ -314,12 +314,32 @@ export class PreviewPage {
                 return;
             }
 
-            /* ---- 阶段1：压缩图片 ---- */
-            this._updateState(RecognizeState.COMPRESSING);
-            setLoadingText('压缩中...');
-            showLoading('压缩中...');
+            /* 兼容处理：如果是Blob对象则先转换为Base64 */
+            let base64Data;
+            if (selectedImage instanceof Blob) {
+                console.log('[PreviewPage] 检测到Blob格式，正在转换为Base64...');
+                base64Data = await ImageProcessor.toBase64(selectedImage);
+            } else if (typeof selectedImage === 'string' && selectedImage.startsWith('data:')) {
+                /* 已经是Base64 DataURL格式，直接使用 */
+                base64Data = selectedImage;
+            } else if (typeof selectedImage === 'string') {
+                /* 纯Base64字符串，补充data前缀 */
+                base64Data = selectedImage.startsWith('data:') ? selectedImage : `data:image/jpeg;base64,${selectedImage}`;
+            } else {
+                console.warn('[PreviewPage] selectedImage 格式不支持:', typeof selectedImage);
+                showToast('图片数据格式异常，请重新上传', 'error');
+                this._updateState(RecognizeState.ERROR);
+                this._recognizing = false;
+                if (this.startBtn) this.startBtn.disabled = false;
+                return;
+            }
 
-            const base64Data = await ImageProcessor.toBase64(selectedImage);
+            /* ---- 阶段1：图片数据已准备好（Base64格式） ---- */
+            this._updateState(RecognizeState.COMPRESSING);
+            setLoadingText('准备识别...');
+
+            /* 如果已经是base64字符串，无需再次压缩；如果是Blob则已在上面转换 */
+            console.log('[PreviewPage] 图片数据就绪，长度:', base64Data.length);
 
             /* ---- 阶段2：上传并识别 ---- */
             this._updateState(RecognizeState.UPLOADING);

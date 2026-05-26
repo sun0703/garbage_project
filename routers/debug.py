@@ -22,6 +22,25 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+@router.get("/api/debug/health")
+async def health_check() -> JSONResponse:
+    """健康检查接口 - 返回系统状态"""
+    import datetime
+    from app import backend_state
+
+    status = {
+        "status": "healthy",
+        "timestamp": datetime.datetime.now().isoformat(),
+        "services": {
+            "vision_engine": backend_state.vision_engine is not None,
+            "search_engine": backend_state.search_engine is not None,
+            "database": hasattr(backend_state, 'db') and backend_state.db is not None,
+        },
+        "version": "1.0.0"
+    }
+    return JSONResponse(content={"success": True, **status})
+
+
 @router.post("/api/debug/analyze")
 async def debug_analyze_image(request: PredictRequest) -> JSONResponse:
     """调试接口：分析图片的详细特征"""

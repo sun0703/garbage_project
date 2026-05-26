@@ -360,11 +360,15 @@ export class SearchPage {
      */
     _renderResults(results) {
         if (!this.resultsContainer) return;
-
         /* 隐藏搜索历史区域 */
         if (this._historyArea) {
             this._historyArea.style.display = 'none';
         }
+
+        /* 检查结果相似度，判断是否为低质量匹配 */
+        const avgSimilarity = results.reduce((sum, item) => sum + (Number(item.similarity_score) || 0), 0) / results.length;
+        const maxSimilarity = Math.max(...results.map(item => Number(item.similarity_score) || 0));
+        const isLowQualityMatch = maxSimilarity < 50; // 最高相似度低于50%视为低质量匹配
 
         /* 构建结果列表 HTML（所有动态内容均经过转义） */
         const listHTML = results.map((item, index) => `
@@ -387,11 +391,32 @@ export class SearchPage {
             </div>
         `).join('');
 
+        /* 构建低质量匹配提示 */
+        const lowQualityHint = isLowQualityMatch ? `
+            <div class="search-low-quality-hint" style="
+                padding: 12px;
+                margin: 12px 0;
+                background: #fff3cd;
+                border: 1px solid #ffc107;
+                border-radius: 8px;
+                color: #856404;
+                font-size: 14px;
+            ">
+                💡 未找到精确匹配项，以上为模糊推荐结果。建议尝试：
+                <ul style="margin: 8px 0 0 20px; padding: 0;">
+                    <li>使用更具体的关键词（如"塑料瓶"而非"塑料"）</li>
+                    <li>检查输入是否有错别字</li>
+                    <li>使用拼音首字母搜索（如"suliaoping"）</li>
+                </ul>
+            </div>
+        ` : '';
+
         this.resultsContainer.innerHTML = `
             <div class="search-results-header">
-                <span class="results-count">找到 ${results.length} 条相关结果</span>
+                <span class="results-count">找到 ${results.length} 条${isLowQualityMatch ? '模糊' : '相关'}结果</span>
                 <span class="results-query">"${escapeHtml(this._currentQuery)}"</span>
             </div>
+            ${lowQualityHint}
             <div class="search-results-list">
                 ${listHTML}
             </div>

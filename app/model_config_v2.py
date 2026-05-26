@@ -262,9 +262,9 @@ def get_optimal_architecture_config() -> Dict:
                 "triple_with_lightweight": "~350ms",
             },
             "memory_usage_mb": {
-                "layer1": ~90,  # V2模型较大
-                "layer2": ~84,
-                "total": ~174,
+                "layer1": 90,  # V2模型较大(约)
+                "layer2": 84,
+                "total": 174,
             },
         },
     }

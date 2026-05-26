@@ -13,3 +13,4 @@ multimodal_classifier = None
 multimodal_available = False
 disposal_steps_data: dict = {}
 rate_limiter = None
+architecture_mode = None

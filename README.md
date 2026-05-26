@@ -11,7 +11,7 @@
 - **图像缓存**: 基于 LRU + TTL 的推理结果缓存,感知哈希去重,避免重复推理
 - **降级处理**: 当模型不可用时,自动降级到基于 12 维图像特征(颜色/纹理/形状/金属光泽)的启发式分类
 - **前端 SPA**: 原生 JavaScript 模块化架构,Hash 路由 + 发布订阅状态管理
-- **限流保护**: IP 级滑动窗口限流,路径分级限流(预测接口 15 次/分钟,搜索 30 次/分钟)
+- **限流保护**: IP 级滑动窗口限流,路径分级限流(预测接口 20 次/分钟,搜索 30 次/分钟)
 - **用户系统**: 注册/登录/注销、OAuth 第三方登录(微信 + GitHub)、Session 管理
 
 ---
@@ -25,7 +25,7 @@
 | **图像处理** | Pillow + OpenCV + imagehash | 图像预处理、特征提取 |
 | **搜索引擎** | FuzzyWuzzy + pypinyin | 模糊匹配、拼音首字母索引 |
 | **数据库** | SQLite (WAL 模式) | 本地文件数据库,支持事务和索引 |
-| **配置管理** | pydantic-settings + python-dotenv | 环境变量 + .env 文件加载 |
+| **配置管理** | python-dotenv | 环境变量 + .env 文件加载 |
 | **前端** | 原生 JavaScript SPA | Hash 路由 + 发布订阅状态管理 |
 | **数据格式** | JSON | 词库/指南/步骤/易混淆对 |
 | **测试** | pytest + httpx | API 集成测试 |
@@ -93,7 +93,7 @@
 | 文件 | 功能 | 说明 |
 |------|------|------|
 | `main.py` | FastAPI 应用入口 | 中间件注册、路由注册、启动事件 |
-| `config.py` | 配置管理 | pydantic-settings、环境变量加载 |
+| `config.py` | 配置管理 | python-dotenv、环境变量加载 |
 | `constants.py` | 全局常量 | 路径、配置项、类别映射 |
 | `backend_state.py` | 后端状态管理 | 全局单例注入、依赖注入 |
 | `models.py` | Pydantic 模型定义 | 请求/响应数据结构 |
@@ -293,12 +293,14 @@ Fusion: 加权投票 + 置信度校准 → 最终决策
 ├── app/                          # 核心应用层
 │   ├── __init__.py               # app 包初始化
 │   ├── main.py                   # FastAPI 应用入口(中间件/启动事件/路由注册)
-│   ├── config.py                 # 应用配置管理(pydantic-settings)
+│   ├── config.py                 # 应用配置管理(python-dotenv)
 │   ├── constants.py              # 全局常量定义(路径/配置项)
 │   ├── backend_state.py          # 后端状态管理(全局单例注入)
 │   ├── db.py                     # SQLite 数据库管理(连接/迁移/种子数据)
-│   ├── models.py                 # 数据表模型定义
-│   └── multimodal_fusion.py      # 多模态融合分类器(YOLO + SAHI + 级联)
+│   ├── models.py                 # Pydantic 请求/响应模型定义
+│   ├── multimodal_fusion.py      # 多模态融合分类器(YOLO + SAHI + 级联)
+│   ├── model_config_v2.py        # 模型配置 v2
+│   └── optimal_dual_layer.py     # 最优双层架构融合
 │
 ├── services/                     # 服务逻辑层
 │   ├── __init__.py
@@ -341,7 +343,7 @@ Fusion: 加权投票 + 置信度校准 → 最终决策
 │   ├── json_loader.py            # JSON 文件缓存加载器
 │   └── image.py                  # 图像处理(Base64 编解码/尺寸校验)
 │
-├── models/                       # 模型目录
+├── models/                       # 模型目录（模型文件需自行下载放置于此）
 │   └── garbage_yolov8m_best.pt   # 40 类垃圾分类 YOLOv8m 模型
 │
 ├── data/                         # 数据目录
@@ -404,23 +406,8 @@ Fusion: 加权投票 + 置信度校准 → 最终决策
 │   └── e2e/
 │       └── package.json          # Playwright E2E 测试依赖(可选)
 │
-├── 模型训练/                      # 模型训练资源
-│   ├── diagnose_model.py         # 模型诊断工具
-│   ├── deep_diagnose.py          # 深度模型诊断
-│   └── datasets/rubbish/         # 训练数据集
-│       ├── data.yaml             # 数据集配置文件
-│       ├── images/               # 训练图片
-│       ├── labels/               # YOLO 标注文件
-│       └── README.md             # 数据集说明
-│
 ├── 项目文档/                      # 项目文档
-│   ├── 需求文档.md
-│   ├── 设计架构文档.md
-│   ├── MVP实现计划.md
-│   ├── 阶段一任务清单.md
-│   ├── 阶段一API接口契约.md
-│   ├── 模型下载说明.md
-│   └── CI-CD配置说明.md
+│   └── MVP实现计划.md
 │
 ├── .github/                      # GitHub 配置
 │   ├── workflows/
@@ -433,7 +420,6 @@ Fusion: 加权投票 + 置信度校准 → 最终决策
 ├── .gitignore                    # Git 忽略规则
 ├── pyproject.toml                # Python 项目配置
 ├── requirements.txt              # Python 依赖
-└── package.json                  # Node.js 依赖(可选,E2E 测试用)
 ```
 
 ---
@@ -576,10 +562,8 @@ pip install -r requirements.txt
 
 将训练好的 YOLOv8 模型放入 `models/` 目录:
 
-- `models/garbage_yolov8m_best.pt` — 40 类垃圾分类专用模型(必需)
-- `models/yolov8n.pt` — YOLOv8n 预训练权重(自动降级备用,可选)
-
-模型下载说明详见 [模型下载说明.md](项目文档/模型下载说明.md)。
+- `models/garbage_yolov8m_best.pt` — 40 类垃圾分类专用模型（需自行下载放置于此）
+- `models/yolov8n.pt` — YOLOv8n 预训练权重（自动降级备用，需自行下载）
 
 ### 启动服务
 
@@ -632,7 +616,7 @@ docker-compose up --build
 
 - **滑动窗口算法**: IP 级限流,精确控制请求频率
 - **路径分级限流**:
-  - `/api/predict`: 15 次/分钟(计算密集型)
+  - `/api/predict`: 20 次/分钟(计算密集型)
   - `/api/batch_predict`: 10 次/分钟
   - `/api/search`: 30 次/分钟
   - `/api/auth/`: 10 次/分钟(防暴力破解)
@@ -699,16 +683,6 @@ python -m pytest tests/test_api.py -v
 python -m pytest tests/ --cov=app --cov=services --cov=routers --cov=utils --cov-report=html
 ```
 
-### 模型诊断
-
-```bash
-# 基础模型诊断
-python 模型训练/diagnose_model.py
-
-# 深度诊断
-python 模型训练/deep_diagnose.py
-```
-
 ### Playwright E2E 测试
 
 ```bash
@@ -725,8 +699,7 @@ npx playwright test
 |------|------|------|
 | fastapi | >=0.100.0 | Web 框架 |
 | uvicorn | >=0.23.0 | ASGI 服务器 |
-| pydantic-settings | >=2.0.0 | 配置管理 |
-| python-dotenv | >=1.0.0 | .env 文件加载 |
+| python-dotenv | >=1.0.0 | 配置管理 |
 | Pillow | >=10.0.0 | 图像处理 |
 | python-multipart | >=0.0.6 | 文件上传 |
 | fuzzywuzzy | >=0.18.0 | 模糊搜索 |

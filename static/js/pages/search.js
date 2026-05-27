@@ -381,7 +381,7 @@ export class SearchPage {
                     <div class="search-item-icon">${escapeHtml(item.bin_icon || '')}</div>
                     <div class="search-item-info">
                         <div class="search-item-label">${escapeHtml(item.match_label || item.label || '未知')}</div>
-                        <div class="search-item-category">${escapeHtml(item.category || '未知类别')}</div>
+                        <div class="search-item-category">${escapeHtml(item.category_name || item.category || '未知类别')}</div>
                     </div>
                 </div>
                 <div class="search-score">

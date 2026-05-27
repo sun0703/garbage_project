@@ -7,6 +7,17 @@
     "confidence": 0.25,
     "guidance": "请投入蓝色可回收物桶",
     "is_demo_mode": false,
+    "id": "7b6dc1a28f",
+    "created_at": "2026-05-27T17:59:44Z"
+  },
+  {
+    "category": "可回收物",
+    "category_id": 1,
+    "label_cn": "化妆品瓶",
+    "bin_color": "#007bff",
+    "confidence": 0.25,
+    "guidance": "请投入蓝色可回收物桶",
+    "is_demo_mode": false,
     "id": "a3109b15c4",
     "created_at": "2026-05-26T12:01:03Z"
   }

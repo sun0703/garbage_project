@@ -74,8 +74,15 @@ async def get_points_history(request: Request, page: int = Query(1, ge=1), page_
         c = db.conn.cursor()
         offset = (page - 1) * page_size
 
-        c.execute("SELECT COUNT(*) as count FROM checkins WHERE user_id = ?", (user["id"],))
-        total_checkins = c.fetchone()["count"]
+        # 统计两个表的联合总记录数（与下方UNION ALL查询保持一致）
+        c.execute("""
+            SELECT COUNT(*) as count FROM (
+                SELECT id FROM checkins WHERE user_id = ?
+                UNION ALL
+                SELECT id FROM quiz_records WHERE user_id = ? AND is_correct = 1
+            ) AS combined
+        """, (user["id"], user["id"]))
+        total_count = c.fetchone()["count"]
 
         c.execute("""
             SELECT 'checkin' as type, id, points_earned as points, category as reason, created_at
@@ -96,13 +103,13 @@ async def get_points_history(request: Request, page: int = Query(1, ge=1), page_
             item["created_at_iso"] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(item["created_at"]))
             history.append(item)
 
-        total_pages = (total_checkins + page_size - 1) // page_size
+        total_pages = (total_count + page_size - 1) // page_size
 
         return JSONResponse(content={
             "success": True,
             "history": history,
             "pagination": {
-                "total": total_checkins,
+                "total": total_count,
                 "page": page,
                 "page_size": page_size,
                 "total_pages": total_pages,

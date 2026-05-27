@@ -208,7 +208,8 @@ class ApiClient {
         const init = {
             method,
             headers,
-            signal: controller.signal
+            signal: controller.signal,
+            credentials: 'include'
         };
 
         /* 仅在有body且非GET/HEAD时才添加请求体 */

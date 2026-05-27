@@ -6,6 +6,9 @@
 import hashlib
 import json
 import logging
+import os
+import secrets
+import string
 import time
 import uuid
 from pathlib import Path
@@ -69,6 +72,18 @@ class DisposalPointUpdateRequest(BaseModel):
 
 class ModelSwitchRequest(BaseModel):
     model_id: str
+
+
+class ActivityUpdateRequest(BaseModel):
+    """活动更新请求模型"""
+    title: Optional[str] = None
+    description: Optional[str] = None
+    cover_image: Optional[str] = None
+    location: Optional[str] = None
+    start_time: Optional[float] = None
+    end_time: Optional[float] = None
+    max_participants: Optional[int] = None
+    status: Optional[str] = None
 
 
 def _hash_admin_password(password: str) -> str:
@@ -158,13 +173,32 @@ def _init_admin_tables():
         logger.error("初始化管理员表失败: %s", e)
 
 
+def _generate_strong_password(length=16):
+    """生成强随机密码，包含大小写字母、数字和特殊字符"""
+    alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+    password = ''.join(secrets.choice(alphabet) for _ in range(length))
+    return password
+
+
 def _seed_default_admin():
-    """创建默认管理员账户"""
+    """创建默认管理员账户（密码从环境变量读取或自动生成强密码）"""
     try:
         c = db.conn.cursor()
         c.execute("SELECT username FROM admin_users WHERE username = ?", ("admin",))
         if not c.fetchone():
-            password_hash = _hash_admin_password("admin123")
+            # 优先从环境变量读取密码，否则生成随机强密码
+            default_password = os.environ.get("ADMIN_DEFAULT_PASSWORD")
+            if not default_password:
+                default_password = _generate_strong_password()
+                logger.warning(
+                    "未设置环境变量 ADMIN_DEFAULT_PASSWORD，已自动生成默认管理员密码: %s "
+                    "请登录后立即修改密码",
+                    default_password
+                )
+            else:
+                logger.info("使用环境变量配置的默认管理员密码")
+
+            password_hash = _hash_admin_password(default_password)
             now = time.time()
             db.conn.execute("""
                 INSERT INTO admin_users (username, password_hash, display_name, created_at)
@@ -615,6 +649,39 @@ async def delete_badcase(request: Request, badcase_id: str):
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
 
     try:
+        feedback_file = Path(__file__).parent.parent / "data" / "feedback.json"
+
+        # 文件不存在时直接返回成功（幂等操作）
+        if not feedback_file.exists():
+            return JSONResponse(content={"success": True, "message": "Badcase已删除"})
+
+        with open(feedback_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        # 兼容两种数据格式：列表或字典
+        badcases = data if isinstance(data, list) else data.get("badcases", [])
+
+        original_count = len(badcases)
+        # 过滤掉指定ID的badcase记录
+        badcases = [item for item in badcases if str(item.get("id", "")) != str(badcase_id)]
+
+        # 验证是否实际删除了记录
+        if len(badcases) == original_count:
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "error": {"code": "E404", "message": "未找到指定的Badcase记录"}}
+            )
+
+        # 保存更新后的数据
+        if isinstance(data, list):
+            updated_data = badcases
+        else:
+            updated_data = data
+            updated_data["badcases"] = badcases
+
+        with open(feedback_file, "w", encoding="utf-8") as f:
+            json.dump(updated_data, f, ensure_ascii=False, indent=2)
+
         return JSONResponse(content={"success": True, "message": "Badcase已删除"})
     except Exception as e:
         logger.error("删除Badcase失败: %s", e)
@@ -658,7 +725,7 @@ async def get_activity_signups(request: Request, activity_id: str):
 
 
 @router.put("/activities/{activity_id}")
-async def admin_update_activity(request: Request, activity_id: str, req):
+async def admin_update_activity(request: Request, activity_id: str, req: ActivityUpdateRequest):
     """更新活动"""
     admin = _require_admin(request)
     if not admin:
@@ -671,17 +738,20 @@ async def admin_update_activity(request: Request, activity_id: str, req):
         if not activity:
             return JSONResponse(status_code=404, content={"success": False, "error": {"code": "E404", "message": "活动不存在"}})
 
-        ActivityRepository.update_activity(
-            activity_id=activity_id,
-            title=req.get("title", activity["title"]),
-            description=req.get("description", activity.get("description", "")),
-            cover_image=req.get("cover_image", activity.get("cover_image", "")),
-            location=req.get("location", activity.get("location", "")),
-            start_time=req.get("start_time", activity["start_time"]),
-            end_time=req.get("end_time", activity["end_time"]),
-            max_participants=req.get("max_participants", activity["max_participants"]),
-            status=req.get("status", activity.get("status", "open")),
-        )
+        # 使用Pydantic模型提供的字段，未传的字段保持原值
+        update_data = {
+            "activity_id": activity_id,
+            "title": req.title if req.title is not None else activity["title"],
+            "description": req.description if req.description is not None else activity.get("description", ""),
+            "cover_image": req.cover_image if req.cover_image is not None else activity.get("cover_image", ""),
+            "location": req.location if req.location is not None else activity.get("location", ""),
+            "start_time": req.start_time if req.start_time is not None else activity["start_time"],
+            "end_time": req.end_time if req.end_time is not None else activity["end_time"],
+            "max_participants": req.max_participants if req.max_participants is not None else activity["max_participants"],
+            "status": req.status if req.status is not None else activity.get("status", "open"),
+        }
+
+        ActivityRepository.update_activity(**update_data)
 
         return JSONResponse(content={"success": True, "message": "活动已更新"})
     except Exception as e:

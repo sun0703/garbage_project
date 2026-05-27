@@ -122,8 +122,8 @@ function initGlobalComponents() {
     /* 导航栏：使用实例化模式 new NavBar(options).render('#navBar') */
     if (NavBarClass) {
         try {
-            navBarInstance = new NavBarClass({ title: APP_CONFIG.appName });
-            navBarInstance.render('#navBar');
+            navBarInstance = new NavBarClass({ container: '#navBar', title: APP_CONFIG.appName });
+            navBarInstance.init();
             if (APP_CONFIG.logLevel !== 'silent') {
                 console.info('[App] 导航栏已渲染 -> #navBar');
             }
@@ -132,11 +132,11 @@ function initGlobalComponents() {
         }
     }
 
-    /* 标签栏：使用实例化模式 new TabBar(options).render('#tabBar') */
+    /* 标签栏：使用标准 init() 模式，传入 container 自动挂载 */
     if (TabBarClass) {
         try {
-            tabBarInstance = new TabBarClass({ activeIndex: 0 });
-            tabBarInstance.render('#tabBar');
+            tabBarInstance = new TabBarClass({ container: '#tabBar', activeIndex: 0 });
+            tabBarInstance.init();
             if (APP_CONFIG.logLevel !== 'silent') {
                 console.info('[App] 标签栏已渲染 -> #tabBar');
             }

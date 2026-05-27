@@ -160,6 +160,9 @@ export class CommunityPage {
                 if (statusEl) statusEl.textContent = `打卡成功！+${data.checkin.points_earned} 积分`;
                 if (btn) { btn.textContent = '已打卡'; btn.classList.add('btn-disabled'); }
                 this._loadUserData();
+                if (data.new_achievements && data.new_achievements.length) {
+                    data.new_achievements.forEach(a => this._showAchievementToast(a));
+                }
             } else {
                 showToast(data.error?.message || '打卡失败', 'error');
                 if (btn) btn.disabled = false;
@@ -254,6 +257,9 @@ export class CommunityPage {
                     `;
                 }
                 this._loadUserData();
+                if (data.new_achievements && data.new_achievements.length) {
+                    data.new_achievements.forEach(a => this._showAchievementToast(a));
+                }
             }
         } catch (e) {
             showToast('提交答案失败', 'error');
@@ -367,6 +373,33 @@ export class CommunityPage {
         } catch (e) {
             listEl.innerHTML = '<p class="no-data">加载活动失败</p>';
         }
+    }
+
+    _showAchievementToast(achievement) {
+        let container = document.getElementById('achvToastGlobal');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'achvToastGlobal';
+            document.body.appendChild(container);
+        }
+        const el = document.createElement('div');
+        el.className = 'achv-toast';
+        el.innerHTML = `<span class="achv-toast__icon">${escapeHtml(achievement.icon || '')}</span><div class="achv-toast__content"><div class="achv-toast__title">🎉 成就解锁!</div><div class="achv-toast__name">${escapeHtml(achievement.name || '')}</div>${achievement.points_reward > 0 ? `<div class="achv-toast__reward">+${achievement.points_reward} 积分奖励</div>` : ''}</div>`;
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'achv-toast__close';
+        closeBtn.textContent = '✕';
+        closeBtn.addEventListener('click', () => {
+            el.classList.add('exiting');
+            setTimeout(() => el.remove(), 260);
+        });
+        el.appendChild(closeBtn);
+        container.appendChild(el);
+        setTimeout(() => {
+            if (el.parentElement) {
+                el.classList.add('exiting');
+                setTimeout(() => { if (el.parentElement) el.remove(); }, 260);
+            }
+        }, 4000);
     }
 
     _showLoginModal() {

@@ -11,6 +11,7 @@ import { store } from '../store.js';
 import { api } from '../api.js';
 import { ImageProcessor } from '../utils/image.js';
 import { showToast, showLoading, hideLoading } from '../utils/ui.js';
+import { escapeHtml } from '../utils/escape.js';
 import { VoiceButton } from '../components/voice-btn.js';
 import { SearchSuggest } from '../components/search-suggest.js';
 
@@ -40,6 +41,27 @@ export class HomePage {
     /** 搜索联想下拉组件实例 */
     _suggest = null;
 
+    /** 开始识别按钮 */
+    predictBtn = null;
+
+    /** 加载遮罩层 */
+    loadingOverlayEl = null;
+
+    /** 加载提示文字 */
+    loadingTextEl = null;
+
+    /** 错误消息元素 */
+    errorMsgEl = null;
+
+    /** 内联识别结果区域 */
+    resultSection = null;
+
+    /** 内联搜索结果区域 */
+    searchResultSection = null;
+
+    /** 当前选中的图片Base64数据 */
+    _selectedImage = null;
+
     /**
      * 初始化首页视图
      * 渲染上传区域、搜索框、绑定交互事件
@@ -57,6 +79,12 @@ export class HomePage {
         this._cacheDOM();
         /* 绑定所有交互事件 */
         this._bindEvents();
+        /* 加载环保成就 */
+        this._loadAchievements();
+        /* 检查登录状态 */
+        this._checkLoginStatus();
+
+        document.body.setAttribute('data-home-active', '');
 
         console.log('[HomePage] 首页初始化完成');
     }
@@ -66,6 +94,8 @@ export class HomePage {
      * 移除所有事件监听、清空容器内容、释放 DOM 引用
      */
     destroy() {
+        document.body.removeAttribute('data-home-active');
+
         // 移除拖拽事件
         if (this.uploadArea) {
             this.uploadArea.removeEventListener('click', this._boundHandlers.uploadClick);
@@ -83,6 +113,23 @@ export class HomePage {
         // 移除搜索回车事件
         if (this.searchInput) {
             this.searchInput.removeEventListener('keydown', this._boundHandlers.keydown);
+        }
+
+        // 移除识别按钮事件
+        if (this.predictBtn) {
+            this.predictBtn.removeEventListener('click', this._boundHandlers.predictClick);
+        }
+
+        // 移除重置按钮事件
+        const resetBtn = document.getElementById('homeResetBtn');
+        if (resetBtn) {
+            resetBtn.removeEventListener('click', this._boundHandlers.resetClick);
+        }
+
+        // 移除登录链接事件
+        const loginLink = document.getElementById('homeLoginLink');
+        if (loginLink) {
+            loginLink.removeEventListener('click', this._boundHandlers.loginLink);
         }
 
         // 销毁搜索联想组件
@@ -109,8 +156,15 @@ export class HomePage {
         this.fileInput = null;
         this.uploadArea = null;
         this.previewImg = null;
+        this.predictBtn = null;
         this.searchInput = null;
         this.voiceBtn = null;
+        this.loadingOverlayEl = null;
+        this.loadingTextEl = null;
+        this.errorMsgEl = null;
+        this.resultSection = null;
+        this.searchResultSection = null;
+        this._selectedImage = null;
         this._boundHandlers = {};
 
         console.log('[HomePage] 首页已销毁');
@@ -134,6 +188,7 @@ export class HomePage {
                 </div>
                 <h1 class="home-header__title">校园垃圾分类AI助手</h1>
                 <p class="home-header__subtitle">拍照识别 · 语音搜索 · 智能分类</p>
+                <p style="margin-top:6px;"><a href="javascript:void(0)" id="homeLoginLink" style="color:#2D9B5E;font-size:13px;font-weight:500;text-decoration:none;">登录 / 注册</a> <span id="homeLoginStatus" style="font-size:12px;color:#95A0AA;"></span></p>
             </div>
 
             <!-- 主操作卡片 -->
@@ -157,6 +212,13 @@ export class HomePage {
                        accept="image/*"
                        capture="environment">
 
+                <div class="loading-overlay hidden" id="homeLoadingOverlay">
+                    <div class="spinner"></div>
+                    <div class="loading-text" id="homeLoadingText">正在识别中...</div>
+                </div>
+
+                <div class="error-msg hidden" id="homeErrorMsg"></div>
+
                 <!-- 分割线 -->
                 <div class="divider"><span>或</span></div>
 
@@ -173,6 +235,45 @@ export class HomePage {
                             <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
                         </svg>
                     </button>
+                </div>
+
+                <div class="btn-group">
+                    <button class="btn btn-primary" id="homePredictBtn" disabled>开始识别</button>
+                    <button class="btn btn-secondary" id="homeResetBtn">
+                        <svg viewBox="0 0 24 24" style="width:17px;height:17px;stroke:currentColor;stroke-width:2;fill:none"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                        重置
+                    </button>
+                </div>
+            </div>
+
+            <div class="card result-section hidden" id="homeResultSection">
+                <div class="result-header">
+                    <span class="category-badge" id="homeCategoryBadge">可回收物</span>
+                    <div class="item-name" id="homeItemName">塑料瓶</div>
+                    <div class="confidence-row">
+                        <span>置信度</span>
+                        <div class="confidence-bar">
+                            <div class="confidence-fill high" id="homeConfidenceFill" style="width: 0%"></div>
+                        </div>
+                        <span id="homeConfidenceText">92%</span>
+                    </div>
+                </div>
+                <div class="guidance-box">
+                    <div class="guidance-label">投放指引</div>
+                    <div class="guidance-text" id="homeGuidanceText"></div>
+                </div>
+                <div class="inference-info" id="homeInferenceInfo"></div>
+            </div>
+
+            <div class="card result-section hidden" id="homeSearchResultSection">
+                <div class="guidance-label" style="margin-bottom:10px;">搜索结果</div>
+                <div class="search-results" id="homeSearchResults"></div>
+            </div>
+
+            <div class="card" id="homeAchievementsCard">
+                <div class="guidance-label">🏆 环保成就</div>
+                <div class="achievements-grid" id="homeAchievementsGrid">
+                    <p class="loading-text" style="text-align:center;padding:12px;">加载中...</p>
                 </div>
             </div>
 
@@ -193,8 +294,14 @@ export class HomePage {
         this.fileInput = document.getElementById('homeFileInput');
         this.uploadArea = document.getElementById('homeUploadArea');
         this.previewImg = document.getElementById('homePreviewImg');
+        this.predictBtn = document.getElementById('homePredictBtn');
         this.searchInput = document.getElementById('homeSearchInput');
         this.voiceBtn = document.getElementById('homeVoiceBtn');
+        this.loadingOverlayEl = document.getElementById('homeLoadingOverlay');
+        this.loadingTextEl = document.getElementById('homeLoadingText');
+        this.errorMsgEl = document.getElementById('homeErrorMsg');
+        this.resultSection = document.getElementById('homeResultSection');
+        this.searchResultSection = document.getElementById('homeSearchResultSection');
     }
 
     // ==================== 私有方法：事件绑定 ====================
@@ -335,6 +442,40 @@ export class HomePage {
                 },
             });
         }
+
+        /* ---- 开始识别按钮 ---- */
+        this._boundHandlers.predictClick = () => {
+            if (this._selectedImage) {
+                store.setState('selectedImage', this._selectedImage);
+                window.location.hash = '#/preview';
+            }
+        };
+        if (this.predictBtn) {
+            this.predictBtn.addEventListener('click', this._boundHandlers.predictClick);
+        }
+
+        /* ---- 重置按钮 ---- */
+        this._boundHandlers.resetClick = () => {
+            this._selectedImage = null;
+            if (this.fileInput) this.fileInput.value = '';
+            if (this.previewImg) { this.previewImg.src = ''; this.previewImg.style.display = ''; }
+            if (this.uploadArea) this.uploadArea.classList.remove('has-image');
+            if (this.predictBtn) this.predictBtn.disabled = true;
+            this._hideError();
+            this._hideResults();
+            this._hideLoading();
+        };
+        const resetBtn = document.getElementById('homeResetBtn');
+        if (resetBtn) {
+            resetBtn.addEventListener('click', this._boundHandlers.resetClick);
+        }
+
+        /* ---- 登录链接 ---- */
+        this._boundHandlers.loginLink = () => this._showLoginModal();
+        const loginLink = document.getElementById('homeLoginLink');
+        if (loginLink) {
+            loginLink.addEventListener('click', this._boundHandlers.loginLink);
+        }
     }
 
     // ==================== 私有方法：文件处理核心逻辑 ====================
@@ -426,11 +567,15 @@ export class HomePage {
 
             /* 第四步：转换为 Base64 并存入 store */
             const base64 = await ImageProcessor.toBase64(compressedBlob);
+            this._selectedImage = base64;
             store.setState('selectedImage', base64);
             store.setState('selectedFileName', file.name);
 
             /* 释放 ObjectURL 避免内存泄漏（base64 已存储，不再需要 blob URL） */
             URL.revokeObjectURL(objectUrl);
+
+            /* 启用识别按钮 */
+            if (this.predictBtn) this.predictBtn.disabled = false;
 
             hideLoading();
 
@@ -444,5 +589,325 @@ export class HomePage {
             console.error('[HomePage] 图片处理失败:', error);
             showToast('图片处理失败，请重试或更换图片', 'error');
         }
+    }
+
+    // ==================== 私有方法：加载遮罩与错误提示 ====================
+
+    /**
+     * 显示内联加载遮罩
+     * @param {string} [text] - 加载提示文字
+     * @private
+     */
+    _showLoading(text) {
+        if (text && this.loadingTextEl) this.loadingTextEl.textContent = text;
+        if (this.loadingOverlayEl) this.loadingOverlayEl.classList.remove('hidden');
+    }
+
+    /**
+     * 隐藏内联加载遮罩
+     * @private
+     */
+    _hideLoading() {
+        if (this.loadingOverlayEl) this.loadingOverlayEl.classList.add('hidden');
+    }
+
+    /**
+     * 显示内联错误消息
+     * @param {string} msg - 错误提示文本
+     * @private
+     */
+    _showError(msg) {
+        if (this.errorMsgEl) {
+            this.errorMsgEl.textContent = msg;
+            this.errorMsgEl.classList.remove('hidden');
+        }
+    }
+
+    /**
+     * 隐藏内联错误消息
+     * @private
+     */
+    _hideError() {
+        if (this.errorMsgEl) {
+            this.errorMsgEl.classList.add('hidden');
+            this.errorMsgEl.textContent = '';
+        }
+    }
+
+    /**
+     * 隐藏所有结果区域（识别结果 + 搜索结果）
+     * @private
+     */
+    _hideResults() {
+        if (this.resultSection) this.resultSection.classList.add('hidden');
+        if (this.searchResultSection) this.searchResultSection.classList.add('hidden');
+    }
+
+    // ==================== 私有方法：成就系统 ====================
+
+    /**
+     * 加载用户环保成就列表
+     * 调用 api.getAchievements() 获取成就数据并渲染
+     * @private
+     */
+    async _loadAchievements() {
+        try {
+            const d = await api.getAchievements();
+            const achievements = d.achievements || d.data || d;
+            if (achievements && achievements.length > 0) {
+                this._renderAchievements(achievements);
+                return;
+            }
+        } catch (_) {}
+        const grid = document.getElementById('homeAchievementsGrid');
+        if (grid) grid.innerHTML = '<p style="color:#95A0AA;font-size:13px;text-align:center;padding:12px;">登录后解锁环保成就</p>';
+    }
+
+    /**
+     * 渲染成就徽章网格
+     * @param {Array<Object>} list - 成就列表
+     * @private
+     */
+    _renderAchievements(list) {
+        const grid = document.getElementById('homeAchievementsGrid');
+        if (!grid) return;
+        grid.innerHTML = list.map(a => `
+            <div class="achievement-badge-card ${a.unlocked ? 'achievement-badge-card--unlocked' : 'achievement-badge-card--locked'}">
+                <span class="achievement-badge-card__lock-icon">${a.unlocked ? '' : '🔒'}</span>
+                <span class="achievement-badge-card__icon">${escapeHtml(a.icon)}</span>
+                <span class="achievement-badge-card__name">${escapeHtml(a.name)}</span>
+            </div>
+        `).join('');
+    }
+
+    /**
+     * 显示成就解锁通知 Toast
+     * @param {Object} ach - 成就对象
+     * @param {string} ach.icon - 成就图标
+     * @param {string} ach.name - 成就名称
+     * @param {number} [ach.points_reward] - 积分奖励
+     * @private
+     */
+    _showAchievementToast(ach) {
+        const container = document.getElementById('achvToastGlobal');
+        if (!container) return;
+        const toast = document.createElement('div');
+        toast.className = 'achv-toast';
+        toast.innerHTML = `
+            <span class="achv-toast__icon">${escapeHtml(ach.icon)}</span>
+            <div class="achv-toast__content">
+                <div class="achv-toast__title">🎉 成就解锁!</div>
+                <div class="achv-toast__name">${escapeHtml(ach.name)}</div>
+                ${ach.points_reward > 0 ? `<div class="achv-toast__reward">+${ach.points_reward} 积分奖励</div>` : ''}
+            </div>
+            <button class="achv-toast__close" onclick="this.parentElement.classList.add('exiting');setTimeout(()=>this.parentElement.remove(),260)">✕</button>
+        `;
+        container.appendChild(toast);
+        setTimeout(() => {
+            if (toast.parentElement) {
+                toast.classList.add('exiting');
+                setTimeout(() => { if (toast.parentElement) toast.remove(); }, 260);
+            }
+        }, 4000);
+    }
+
+    /**
+     * 处理API响应中的新成就通知
+     * 检查 responseData.new_achievements 并逐个弹出 Toast
+     *
+     * @static
+     * @param {Object} responseData - API响应数据
+     * @param {Array<Object>} [responseData.new_achievements] - 新解锁的成就列表
+     */
+    static processAchievements(responseData) {
+        const list = responseData.new_achievements;
+        if (list && list.length > 0) {
+            const instance = new HomePage();
+            list.forEach(a => instance._showAchievementToast(a));
+            setTimeout(() => instance._loadAchievements(), 500);
+        }
+    }
+
+    // ==================== 私有方法：登录状态与登录弹窗 ====================
+
+    /**
+     * 检查用户登录状态
+     * 调用 api.getMe() 获取当前用户信息并更新 UI
+     * @private
+     */
+    async _checkLoginStatus() {
+        try {
+            const d = await api.getMe();
+            const user = d.user || d;
+            if (user && (user.nickname || user.username)) {
+                const loginLink = document.getElementById('homeLoginLink');
+                const loginStatus = document.getElementById('homeLoginStatus');
+                if (loginLink) {
+                    loginLink.textContent = user.nickname || user.username;
+                    loginLink.style.color = '#1A1A2E';
+                    loginLink.style.fontWeight = '600';
+                }
+                if (loginStatus) loginStatus.textContent = '已登录';
+            }
+        } catch (_) {}
+    }
+
+    /**
+     * 显示登录/注册模态弹窗
+     * 包含登录和注册两个 Tab，支持表单切换与提交
+     * @private
+     */
+    _showLoginModal() {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.innerHTML = `
+            <div class="modal-card">
+                <div class="modal-tabs">
+                    <button class="modal-tab active" data-tab="login">登录</button>
+                    <button class="modal-tab" data-tab="register">注册</button>
+                </div>
+                <div id="loginForm" class="modal-form">
+                    <div class="form-group"><label>用户名</label><input type="text" id="loginUsername" class="form-input" placeholder="请输入用户名" autocomplete="username"></div>
+                    <div class="form-group"><label>密码</label><input type="password" id="loginPassword" class="form-input" placeholder="请输入密码" autocomplete="current-password"></div>
+                    <button class="btn btn-primary btn-block" id="submitLogin">登录</button>
+                    <p class="form-error" id="loginError" style="display:none"></p>
+                </div>
+                <div id="registerForm" class="modal-form" style="display:none">
+                    <div class="form-group"><label>用户名</label><input type="text" id="regUsername" class="form-input" placeholder="3-20个字符" autocomplete="username"></div>
+                    <div class="form-group"><label>密码</label><input type="password" id="regPassword" class="form-input" placeholder="6-32个字符" autocomplete="new-password"></div>
+                    <div class="form-group"><label>昵称</label><input type="text" id="regNickname" class="form-input" placeholder="选填" autocomplete="nickname"></div>
+                    <button class="btn btn-primary btn-block" id="submitRegister">注册</button>
+                    <p class="form-error" id="regError" style="display:none"></p>
+                </div>
+                <button class="modal-close" id="closeModal">&times;</button>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+        requestAnimationFrame(() => overlay.classList.add('visible'));
+
+        overlay.querySelectorAll('.modal-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                overlay.querySelectorAll('.modal-tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                const isLogin = tab.dataset.tab === 'login';
+                document.getElementById('loginForm').style.display = isLogin ? 'block' : 'none';
+                document.getElementById('registerForm').style.display = isLogin ? 'none' : 'block';
+            });
+        });
+
+        document.getElementById('closeModal').addEventListener('click', () => overlay.remove());
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+        document.getElementById('submitLogin').addEventListener('click', async () => {
+            const u = document.getElementById('loginUsername').value.trim();
+            const p = document.getElementById('loginPassword').value;
+            const err = document.getElementById('loginError');
+            err.style.display = 'none';
+
+            if (!u || !p) { err.textContent = '请填写用户名和密码'; err.style.display = 'block'; return; }
+            if (u.length < 3) { err.textContent = '用户名至少需要3个字符'; err.style.display = 'block'; return; }
+
+            try {
+                const d = await api.login(u, p);
+                const user = d.user || d;
+                if (user) { overlay.remove(); this._checkLoginStatus(); this._loadAchievements(); }
+                else { err.textContent = '登录失败，请检查用户名和密码'; err.style.display = 'block'; }
+            } catch (e) { err.textContent = e.message || '网络错误，请稍后重试'; err.style.display = 'block'; }
+        });
+
+        document.getElementById('submitRegister').addEventListener('click', async () => {
+            const un = document.getElementById('regUsername').value.trim();
+            const pw = document.getElementById('regPassword').value;
+            const nn = document.getElementById('regNickname').value.trim();
+            const err = document.getElementById('regError');
+            err.style.display = 'none';
+
+            if (!un || !pw || !nn) { err.textContent = '请填写所有字段'; err.style.display = 'block'; return; }
+            if (un.length < 3) { err.textContent = '用户名至少需要3个字符'; err.style.display = 'block'; return; }
+            if (pw.length < 6) { err.textContent = '密码至少需要6个字符'; err.style.display = 'block'; return; }
+            if (nn.length < 1) { err.textContent = '昵称不能为空'; err.style.display = 'block'; return; }
+
+            try {
+                const d = await api.register(un, pw, nn);
+                const user = d.user || d;
+                if (user) { overlay.remove(); this._checkLoginStatus(); this._loadAchievements(); }
+                else { err.textContent = '注册失败，请稍后重试'; err.style.display = 'block'; }
+            } catch (e) { err.textContent = e.message || '网络错误，请稍后重试'; err.style.display = 'block'; }
+        });
+    }
+
+    // ==================== 私有方法：内联结果渲染 ====================
+
+    /**
+     * 渲染内联识别结果
+     * 填充分类徽章、物品名称、置信度条、投放指引等信息
+     *
+     * @param {Object} result - 识别结果对象
+     * @param {string} result.category - 垃圾分类名称
+     * @param {string} result.label_cn - 物品中文名称
+     * @param {number} result.confidence - 置信度（0~1）
+     * @param {string} [result.bin_color] - 分类颜色
+     * @param {string} [result.guidance] - 投放指引
+     * @param {number} [result.inference_time_ms] - 推理耗时
+     * @private
+     */
+    _renderInlineResult(result) {
+        if (!this.resultSection) return;
+
+        const badge = document.getElementById('homeCategoryBadge');
+        const itemName = document.getElementById('homeItemName');
+        const confFill = document.getElementById('homeConfidenceFill');
+        const confText = document.getElementById('homeConfidenceText');
+        const guidance = document.getElementById('homeGuidanceText');
+        const inference = document.getElementById('homeInferenceInfo');
+
+        if (badge) {
+            badge.textContent = result.category || '';
+            if (result.bin_color) badge.style.backgroundColor = result.bin_color;
+        }
+        if (itemName) itemName.textContent = result.label_cn || '';
+
+        if (confFill) {
+            const pct = Math.round((result.confidence || 0) * 100);
+            confFill.style.width = pct + '%';
+            confFill.className = 'confidence-fill' + (pct >= 80 ? ' high' : pct >= 50 ? ' medium' : ' low');
+        }
+        if (confText) confText.textContent = Math.round((result.confidence || 0) * 100) + '%';
+
+        if (guidance) guidance.textContent = result.guidance || '';
+        if (inference) inference.textContent = result.inference_time_ms ? `推理耗时: ${result.inference_time_ms}ms` : '';
+
+        this.resultSection.classList.remove('hidden');
+    }
+
+    /**
+     * 渲染内联搜索结果列表
+     * 将搜索匹配结果以卡片形式展示在首页
+     *
+     * @param {Array<Object>} results - 搜索结果数组
+     * @param {string} results[].label - 物品名称
+     * @param {string} results[].category - 所属分类
+     * @param {string} [results[].bin_color] - 分类颜色
+     * @param {number} [results[].similarity_score] - 相似度百分比
+     * @private
+     */
+    _renderInlineSearchResult(results) {
+        if (!this.searchResultSection) return;
+        const container = document.getElementById('homeSearchResults');
+        if (!container) return;
+
+        if (!results || results.length === 0) {
+            container.innerHTML = '<p style="color:#95A0AA;text-align:center;padding:12px;">未找到相关结果</p>';
+        } else {
+            container.innerHTML = results.map(r => `
+                <div class="search-result-item">
+                    <span class="category-badge" style="background:${r.bin_color || '#4CAF50'}">${escapeHtml(r.category || '')}</span>
+                    <span class="item-name">${escapeHtml(r.label || '')}</span>
+                    <span class="similarity">${r.similarity_score || 0}%</span>
+                </div>
+            `).join('');
+        }
+
+        this.searchResultSection.classList.remove('hidden');
     }
 }

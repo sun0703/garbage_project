@@ -18,6 +18,7 @@
 import { Router } from './router.js';
 import { store, Store, DEFAULT_STATE } from './store.js';
 import { api, ApiClient, ApiError } from './api.js';
+import { config } from './config.js';
 
 /*
  * 全局UI组件导入（安全加载模式）
@@ -59,13 +60,17 @@ async function loadPage(name, path) {
 }
 
 // ==================== 应用配置 ====================
-
+/**
+ * 应用运行时配置（从config.js集中导入）
+ * 所有可调参数均来自外部配置，便于多环境部署
+ * @see config.js
+ */
 const APP_CONFIG = Object.freeze({
-    apiBaseURL: '',
-    showErrorAlert: true,
-    logLevel: 'info',
-    exposeDebugAPI: true,
-    appName: '校园垃圾分类AI助手'
+    apiBaseURL: config.api.baseURL,
+    showErrorAlert: config.debug.showErrorAlert,
+    logLevel: config.debug.logLevel,
+    exposeDebugAPI: config.debug.exposeDebugAPI,
+    appName: config.app.name,
 });
 
 // ==================== 全局实例创建 ====================
@@ -197,7 +202,7 @@ function createPageHandler(pageName, modulePath) {
 
         /* 同步TabBar激活状态 */
         if (tabBarInstance && typeof tabBarInstance.setActiveTab === 'function') {
-            const tabIndex = { home: 0, search: 1, map: 2, community: 3, profile: 4 }[pageName];
+            const tabIndex = config.tabIndexMap[pageName];
             if (tabIndex !== undefined) {
                 tabBarInstance.setActiveTab(tabIndex);
             }
@@ -245,7 +250,16 @@ function registerAllRoutes(router) {
         .register('/community', createPageHandler('community', './pages/community.js'))
 
         /* 个人中心页 */
-        .register('/profile', createPageHandler('profile', './pages/profile.js'));
+        .register('/profile', createPageHandler('profile', './pages/profile.js'))
+
+        /* 偏好设置页 */
+        .register('/settings', createPageHandler('settings', './pages/settings.js'))
+
+        /* 数据统计页 */
+        .register('/stats', createPageHandler('stats', './pages/stats.js'))
+
+        /* 管理后台 */
+        .register('/admin', createPageHandler('admin', './pages/admin-shell.js'));
 
     if (APP_CONFIG.logLevel !== 'silent') {
         console.log(`[App] 已注册 ${router.getRouteCount()} 条路由规则`);
@@ -299,7 +313,7 @@ function bootstrap() {
     document.documentElement.classList.add('app-ready');
 
     if (APP_CONFIG.logLevel !== 'silent') {
-        console.info(`[App] ${APP_CONFIG.appName} 初始化完成 (v1.1.0)`);
+        console.info(`[App] ${APP_CONFIG.appName} 初始化完成 (v${config.app.version})`);
     }
 }
 

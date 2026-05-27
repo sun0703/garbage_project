@@ -1,72 +1,77 @@
 /**
  * 顶部导航栏组件 - NavBar
- * 
+ *
  * 功能说明：
  * - 固定顶部显示，带毛玻璃效果
  * - 左侧回收图标 + 标题文字
  * - 右侧可选历史入口按钮
  * - 支持动态修改标题（如识别结果页显示物品名）
  * - 点击Logo区域返回首页
- * 
+ *
+ * 继承自 BaseComponent，遵循标准化生命周期：
+ * constructor → init() → render() → bindEvents() → afterInit()
+ *
  * @class NavBar
+ * @extends BaseComponent
  * @example
  * import { NavBar } from './nav-bar.js';
- * const navBar = new NavBar();
+ *
+ * // 新标准用法（推荐）
+ * const navBar = new NavBar({
+ *   container: '#navBar',
+ *   props: {
+ *     title: '校园垃圾分类',
+ *     showHistoryBtn: true,
+ *     onHistoryClick: () => console.log('history')
+ *   }
+ * });
+ * navBar.init();
+ *
+ * // 向后兼容用法（仍支持）
+ * const navBar = new NavBar({ title: '校园垃圾分类' });
  * navBar.render('#navBar');
- * navBar.set_title('塑料瓶 - 识别结果');
  */
 
 import { escapeHtml } from '../utils/escape.js';
+import { BaseComponent } from './BaseComponent.js';
 
-export class NavBar {
-    /**
-     * 构造函数 - 初始化导航栏配置
-     * @param {Object} [options={}] - 配置选项
-     * @param {string} [options.title='校园垃圾分类'] - 默认标题文字
-     * @param {boolean} [options.showHistoryBtn=true] - 是否显示历史按钮
-     * @param {Function} [options.onHistoryClick] - 历史按钮点击回调
-     */
-    constructor(options = {}) {
-        /** @type {string} 当前标题 */
-        this._title = options.title || '校园垃圾分类';
-        
-        /** @type {boolean} 是否显示历史按钮 */
-        this._showHistoryBtn = options.showHistoryBtn !== false;
-        
-        /** @type {Function|null} 历史按钮点击回调 */
-        this._onHistoryClick = options.onHistoryClick || null;
-        
-        /** @type {HTMLElement|null} 组件根元素引用 */
-        this._element = null;
-        
-        /** @type {HTMLElement|null} 标题元素引用 */
-        this._titleElement = null;
-    }
+export class NavBar extends BaseComponent {
+  /**
+   * 构造函数 - 初始化导航栏配置
+   * @param {Object} [options={}] - 配置选项
+   * @param {HTMLElement|string} [options.container] - 挂载容器（用于init()方法）
+   * @param {string} [options.title='校园垃圾分类'] - 默认标题文字
+   * @param {boolean} [options.showHistoryBtn=true] - 是否显示历史按钮
+   * @param {Function} [options.onHistoryClick] - 历史按钮点击回调
+   */
+  constructor(options = {}) {
+    super({
+      container: options.container,
+      props: {
+        title: options.title || '校园垃圾分类',
+        showHistoryBtn: options.showHistoryBtn !== false,
+        onHistoryClick: options.onHistoryClick || null
+      },
+      state: {}
+    });
 
-    /**
-     * 渲染导航栏到指定容器
-     * @param {string|HTMLElement} containerSelector - 容器选择器或DOM元素
-     * @returns {HTMLElement} 导航栏根元素引用
-     */
-    render(containerSelector) {
-        // 获取容器元素
-        const container = typeof containerSelector === 'string'
-            ? document.querySelector(containerSelector)
-            : containerSelector;
+    this._titleElement = null;
+  }
 
-        if (!container) {
-            console.error('[NavBar] 渲染失败：未找到容器', containerSelector);
-            return null;
-        }
+  /**
+   * 渲染导航栏的DOM结构
+   * 实现BaseComponent的抽象方法
+   *
+   * @returns {HTMLElement} 导航栏根元素引用
+   */
+  render() {
+    const navEl = document.createElement('nav');
+    navEl.className = 'nav-bar';
+    navEl.setAttribute('role', 'navigation');
+    navEl.setAttribute('aria-label', '主导航');
 
-        // 创建导航栏根元素
-        const navEl = document.createElement('nav');
-        navEl.className = 'nav-bar';
-        navEl.setAttribute('role', 'navigation');
-        navEl.setAttribute('aria-label', '主导航');
-
-        /* ========== 导航栏内部结构 ========== */
-        navEl.innerHTML = `
+    /* ========== 导航栏内部结构 ========== */
+    navEl.innerHTML = `
             <!-- 左侧：Logo + 标题区域 -->
             <div class="nav-bar__left" id="navLogoArea">
                 <!-- 回收图标 SVG -->
@@ -76,12 +81,12 @@ export class NavBar {
                     </svg>
                 </div>
                 <!-- 标题文字 -->
-                <span class="nav-bar__title" id="navTitle">${escapeHtml(this._title)}</span>
+                <span class="nav-bar__title" id="navTitle">${escapeHtml(this.props.title)}</span>
             </div>
 
             <!-- 右侧：操作按钮区域 -->
             <div class="nav-bar__right">
-                ${this._showHistoryBtn ? `
+                ${this.props.showHistoryBtn ? `
                 <!-- 历史记录入口按钮 -->
                 <button class="nav-bar__btn" id="navHistoryBtn" aria-label="查看历史记录" title="历史记录">
                     <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -92,120 +97,138 @@ export class NavBar {
             </div>
         `;
 
-        // 将导航栏插入容器
-        container.appendChild(navEl);
+    return navEl;
+  }
 
-        // 缓存DOM引用
-        this._element = navEl;
-        this._titleElement = navEl.querySelector('#navTitle');
+  /**
+   * 绑定导航栏的所有事件监听器
+   * 实现BaseComponent的可选重写方法
+   *
+   * @returns {void}
+   */
+  bindEvents() {
+    if (!this.el) return;
 
-        // 绑定事件：点击Logo返回首页
-        const logoArea = navEl.querySelector('#navLogoArea');
-        logoArea.addEventListener('click', () => this._handleLogoClick());
-        logoArea.style.cursor = 'pointer';
-
-        // 绑定事件：历史按钮点击
-        if (this._showHistoryBtn) {
-            const historyBtn = navEl.querySelector('#navHistoryBtn');
-            historyBtn.addEventListener('click', () => this._handleHistoryClick());
-        }
-
-        return navEl;
+    const logoArea = this.el.querySelector('#navLogoArea');
+    if (logoArea) {
+      logoArea.style.cursor = 'pointer';
+      this._bindEvent(logoArea, 'click', () => this._handleLogoClick());
     }
 
-    /**
-     * 动态修改导航栏标题
-     * 常用于识别结果页显示当前物品名称
-     * @param {string} newTitle - 新的标题文字
-     * @returns {void}
-     */
-    set_title(newTitle) {
-        this._title = newTitle || '校园垃圾分类';
-        
-        if (this._titleElement) {
-            this._titleElement.textContent = this._title;
-            
-            // 添加标题切换动画效果
-            this._titleElement.style.animation = 'none';
-            // 触发重排以重启动画
-            void this._titleElement.offsetHeight;
-            this._titleElement.style.animation = 'navTitleFade 0.3s ease';
-        }
+    if (this.props.showHistoryBtn) {
+      const historyBtn = this.el.querySelector('#navHistoryBtn');
+      if (historyBtn) {
+        this._bindEvent(historyBtn, 'click', () => this._handleHistoryClick());
+      }
+    }
+  }
+
+  /**
+   * 初始化后钩子
+   * 缓存DOM引用以便后续操作
+   *
+   * @returns {void}
+   */
+  afterInit() {
+    if (this.el) {
+      this._titleElement = this.el.querySelector('#navTitle');
+    }
+  }
+
+  /**
+   * 向后兼容的渲染方法
+   * 支持旧的调用方式：navBar.render('#container')
+   *
+   * @param {string|HTMLElement} containerSelector - 容器选择器或DOM元素
+   * @returns {HTMLElement|null} 导航栏根元素引用
+   */
+  renderToContainer(containerSelector) {
+    const container = typeof containerSelector === 'string'
+      ? document.querySelector(containerSelector)
+      : containerSelector;
+
+    if (!container) {
+      console.error('[NavBar] 渲染失败：未找到容器', containerSelector);
+      return null;
     }
 
-    /**
-     * 获取当前标题
-     * @returns {string} 当前标题文字
-     */
-    get_title() {
-        return this._title;
+    this.options.container = container;
+    return this.init().el;
+  }
+
+  /**
+   * 动态修改导航栏标题
+   * 常用于识别结果页显示当前物品名称
+   * @param {string} newTitle - 新的标题文字
+   * @returns {void}
+   */
+  set_title(newTitle) {
+    this.props.title = newTitle || '校园垃圾分类';
+
+    if (this._titleElement) {
+      this._titleElement.textContent = this.props.title;
+
+      this._titleElement.style.animation = 'none';
+      void this._titleElement.offsetHeight;
+      this._titleElement.style.animation = 'navTitleFade 0.3s ease';
+    }
+  }
+
+  /**
+   * 获取当前标题
+   * @returns {string} 当前标题文字
+   */
+  get_title() {
+    return this.props.title;
+  }
+
+  /**
+   * 显示或隐藏历史按钮
+   * @param {boolean} visible - 是否显示
+   * @returns {void}
+   */
+  set_history_visible(visible) {
+    if (this.el) {
+      const btn = this.el.querySelector('#navHistoryBtn');
+      if (btn) {
+        btn.style.display = visible ? '' : 'none';
+      }
+    }
+  }
+
+  /**
+   * 处理Logo点击事件 - 导航到首页
+   * @private
+   * @returns {void}
+   */
+  _handleLogoClick() {
+    window.location.hash = '#/home';
+
+    this.el.dispatchEvent(new CustomEvent('nav:home', {
+      bubbles: true,
+      detail: { source: 'logo' }
+    }));
+  }
+
+  /**
+   * 处理历史按钮点击事件
+   * @private
+   * @returns {void}
+   */
+  _handleHistoryClick() {
+    if (typeof this.props.onHistoryClick === 'function') {
+      this.props.onHistoryClick();
+    } else {
+      window.location.hash = '#/history';
     }
 
-    /**
-     * 显示或隐藏历史按钮
-     * @param {boolean} visible - 是否显示
-     * @returns {void}
-     */
-    set_history_visible(visible) {
-        if (this._element) {
-            const btn = this._element.querySelector('#navHistoryBtn');
-            if (btn) {
-                btn.style.display = visible ? '' : 'none';
-            }
-        }
-    }
-
-    /**
-     * 处理Logo点击事件 - 导航到首页
-     * @private
-     * @returns {void}
-     */
-    _handleLogoClick() {
-        // 使用Hash路由跳转到首页
-        window.location.hash = '#/home';
-        
-        // 同时触发自定义事件，便于外部监听
-        this._element.dispatchEvent(new CustomEvent('nav:home', {
-            bubbles: true,
-            detail: { source: 'logo' }
-        }));
-    }
-
-    /**
-     * 处理历史按钮点击事件
-     * @private
-     * @returns {void}
-     */
-    _handleHistoryClick() {
-        // 如果有外部回调则调用
-        if (typeof this._onHistoryClick === 'function') {
-            this._onHistoryClick();
-        } else {
-            // 默认行为：跳转到历史页面
-            window.location.hash = '#/history';
-        }
-
-        // 触发自定义事件
-        this._element.dispatchEvent(new CustomEvent('nav:history', {
-            bubbles: true
-        }));
-    }
-
-    /**
-     * 销毁组件 - 移除DOM和事件绑定
-     * @returns {void}
-     */
-    destroy() {
-        if (this._element && this._element.parentNode) {
-            this._element.parentNode.removeChild(this._element);
-        }
-        this._element = null;
-        this._titleElement = null;
-    }
+    this.el.dispatchEvent(new CustomEvent('nav:history', {
+      bubbles: true
+    }));
+  }
 }
 
 /* ========== 组件内联样式 ========== */
-// 通过JavaScript注入组件专用样式，确保独立可用性
 const NAV_BAR_STYLES = `
 /* ======== NavBar 顶部导航栏样式 ======== */
 .nav-bar {
@@ -216,33 +239,27 @@ const NAV_BAR_STYLES = `
     height: 56px;
     z-index: 100;
     
-    /* 毛玻璃背景效果 */
     background: rgba(255, 255, 255, 0.82);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     
-    /* 底部边框分隔线 */
     border-bottom: 1px solid rgba(45, 155, 94, 0.10);
     
-    /* 弹性布局：左右分布 */
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 0 16px;
     
-    /* 平滑过渡动画 */
     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* 左侧区域：Logo + 标题 */
 .nav-bar__left {
     display: flex;
     align-items: center;
     gap: 10px;
-    min-width: 0; /* 允许文本截断 */
+    min-width: 0;
 }
 
-/* Logo图标容器 */
 .nav-bar__logo {
     width: 34px;
     height: 34px;
@@ -266,7 +283,6 @@ const NAV_BAR_STYLES = `
     fill: white;
 }
 
-/* 标题文字 */
 .nav-bar__title {
     font-size: 17px;
     font-weight: 700;
@@ -278,13 +294,11 @@ const NAV_BAR_STYLES = `
     max-width: 220px;
 }
 
-/* 标题切换动画 */
 @keyframes navTitleFade {
     0% { opacity: 0.5; transform: translateX(-4px); }
     100% { opacity: 1; transform: translateX(0); }
 }
 
-/* 右侧操作区 */
 .nav-bar__right {
     display: flex;
     align-items: center;
@@ -292,7 +306,6 @@ const NAV_BAR_STYLES = `
     flex-shrink: 0;
 }
 
-/* 通用按钮样式 */
 .nav-bar__btn {
     width: 36px;
     height: 36px;
@@ -323,7 +336,6 @@ const NAV_BAR_STYLES = `
     fill: currentColor;
 }
 
-/* 安全区域适配（刘海屏等） */
 @supports (padding-top: env(safe-area-inset-top)) {
     .nav-bar {
         padding-top: env(safe-area-inset-top);
@@ -332,7 +344,6 @@ const NAV_BAR_STYLES = `
 }
 `;
 
-// 自动注入样式到文档（避免重复注入）
 if (!document.getElementById('nav-bar-styles')) {
     const styleSheet = document.createElement('style');
     styleSheet.id = 'nav-bar-styles';

@@ -3,9 +3,24 @@
  * @description 封装校园垃圾分类后端所有RESTful接口的调用逻辑，
  *              包含统一请求/响应拦截、超时控制、错误码映射、
  *              降级分析等能力。基于原生Fetch API + AbortController实现。
+ *
+ * ## 模块元信息
+ * - **API版本**: v1 (RESTful JSON)
+ * - **BaseURL**: 通过构造函数配置，同源部署默认为空字符串
+ * - **认证方式**: Cookie-based Session（登录后自动携带）
+ * - **默认超时**: 30000ms（30秒），各接口可单独覆盖
+ * - **内容类型**: application/json（统一JSON请求/响应）
+ *
+ * ## 错误体系
+ * 所有异常统一包装为 {@link ApiError}，包含三层错误分类：
+ * 1. **网络层** (code: NETWORK/TIMEOUT/UNKNOWN) - 连接失败、超时、未知异常
+ * 2. **HTTP层** (code: HTTP_4xx/HTTP_5xx) - 服务端返回非2xx状态码
+ * 3. **业务层** (code: E001~E006) - 后端定义的业务错误码，见 ERROR_CODE_MAP
+ *
  * @module api
  * @author Frontend Architect
  * @version 1.0.0
+ * @see {@link module:config} 全局配置（config.api.baseURL / config.api.timeout）
  */
 
 // ==================== 常量定义 ====================
@@ -130,23 +145,49 @@ class ApiClient {
      *
      * @public
      * @async
-     * @param {'GET'|'POST'|'PUT'|'DELETE'|'PATCH'} method - HTTP请求方法
+     * @param {'GET'|'POST'|'PUT'|'DELETE'|'PATCH'} method - HTTP请求方法（大写）
      * @param {string} path - 接口路径（不含baseURL前缀），如 '/api/predict'
-     * @param {Object} [options={}] - 请求选项
-     * @param {Object} [options.body] - 请求体对象（POST/PUT/PATCH时使用）
+     * @param {Object} [options={}] - 请求选项对象
+     * @param {Object} [options.body] - 请求体对象（POST/PUT/PATCH时使用，自动JSON序列化）
      * @param {Object} [options.headers] - 额外请求头（合并到默认头中）
-     * @param {number} [options.timeout] - 本次请求自定义超时时间（毫秒）
-     * @returns {Promise<*>} 成功时resolve响应体中的data部分
-     * @throws {ApiError} 任何异常均包装为ApiError抛出
+     * @param {number} [options.timeout] - 本次请求自定义超时时间（毫秒），覆盖实例默认值
+     * @returns {Promise<*>} 成功时resolve响应体中的data部分；兼容 data/result/裸数据格式
+     *
+     * @throws {ApiError} 网络连接失败（code: 'NETWORK', statusCode: 0）
+     *                  触发条件：DNS解析失败、服务器未启动、CORS拦截、网络断开等
+     * @throws {ApiError} 请求超时（code: 'TIMEOUT', statusCode: 0）
+     *                  触发条件：在指定timeout时间内未收到响应
+     * @throws {ApiError} 请求被中断（code: 包含 'abort' 的消息, statusCode: 0）
+     *                  触发条件：外部调用 AbortController.abort() 或页面导航取消
+     * @throws {ApiError} 未授权（code: 'UNAUTH', statusCode: 401）
+     *                  触发条件：Session过期或未登录时访问需认证接口
+     * @throws {ApiError} 业务逻辑错误（code: 'E001'~'E006', statusCode: 400~500）
+     *                  触发条件：后端返回预定义业务错误码，见 ERROR_CODE_MAP
+     * @throws {ApiError} HTTP协议错误（code: 'HTTP_xxx', statusCode: 对应HTTP状态码）
+     *                  触发条件：服务端返回4xx/5xx但无匹配的业务错误码
+     * @throws {ApiError} 未知异常（code: 'UNKNOWN', statusCode: 0）
+     *                  触发条件：非TypeError/AbortError的不可预期异常
      *
      * @example
-     * // POST请求示例
-     * const data = await api.request('POST', '/api/predict', {
-     *     body: { image: base64String }
+     * // 示例1：POST请求 - AI图片识别
+     * const result = await api.request('POST', '/api/predict', {
+     *     body: { image: base64ImageData },
+     *     timeout: 45000  // 识别接口较慢，给予更长超时
      * });
+     * console.log(result.category);  // '可回收物'
      *
-     * // GET请求示例
-     * const categories = await api.request('GET', '/api/categories');
+     * @example
+     * // 示例2：GET请求 - 搜索垃圾分类信息
+     * const results = await api.request('GET', '/api/search?query=塑料瓶');
+     * results.forEach(item => console.log(item.label));
+     *
+     * @example
+     * // 示例3：带自定义请求头的PUT请求
+     * await api.request('PUT', '/api/auth/settings', {
+     *     body: { theme: 'dark', language: 'zh-CN' },
+     *     headers: { 'X-Custom-Header': 'value' },
+     *     timeout: 5000
+     * });
      */
     async request(method, path, options = {}) {
         /* ---------- 第一步：构建请求参数 ---------- */
@@ -234,27 +275,63 @@ class ApiClient {
      * 处理HTTP层面错误（4xx/5xx状态码）
      * 从响应体中提取业务错误码，匹配预定义映射表生成友好提示
      *
+     * ## 错误码映射表（ERROR_CODE_MAP）
+     * | 错误码  | HTTP状态码 | 含义                     | 用户提示                          |
+     * |---------|-----------|--------------------------|-----------------------------------|
+     * | E001    | 400       | 图片格式无效             | 请上传JPG/PNG格式的图片           |
+     * | E002    | 503       | AI模型未就绪             | 请稍后重试或联系管理员            |
+     * | E003    | 500       | AI推理过程出错           | 请稍后重试                        |
+     * | E004    | 404       | 请求的资源不存在         | （通用提示）                      |
+     * | E005    | 429       | 操作过于频繁（限流）     | 请稍后再试                        |
+     * | E006    | 500       | 服务器繁忙               | 请稍后重试                        |
+     * | (其他)  | 对应状态码 | 未注册的业务错误码       | 优先使用服务端消息，否则按范围生成 |
+     *
+     * ## 特殊处理
+     * - **401 UNAUTH**: 不输出 console.error（避免浏览器红色[error]噪音），
+     *   仅抛出ApiError供调用方静默处理（如跳转登录页）
+     *
      * @private
      * @param {Response} response - Fetch Response对象
      * @param {Object} responseData - 已解析的JSON响应体
-     * @throws {ApiError} 总是抛出包装后的ApiError
+     * @throws {ApiError} 总是抛出包装后的ApiError，不会正常返回
      * @returns {never}
      */
     _handleHttpError(response, responseData) {
         const status = response.status;
 
         /* ---------- 401 未授权特殊处理 ---------- */
-        /* 401 是预期的业务行为（用户未登录），不应视为异常错误。
-         * 浏览器会对 Failed to load resource 始终显示红色 [error]，
-         * 此处仅抛出带有 UNAUTH 标识的 ApiError，供调用方静默处理，
-         * 不额外输出 console.error 避免双重噪音。 */
         if (status === 401) {
-            throw new ApiError(
-                'UNAUTH',
-                '未授权，请先登录',
-                401,
-                response
-            );
+            const serverMsg = responseData?.error?.message || '';
+            const serverCode = responseData?.error?.code || 'UNAUTH';
+
+            if (serverMsg && serverMsg !== 'Unauthorized') {
+                throw new ApiError(serverCode, serverMsg, status, response);
+            }
+
+            throw new ApiError('UNAUTH', '未授权，请先登录', status, response);
+        }
+
+        /* ---------- 422 验证错误特殊处理（FastAPI格式）---------- */
+        if (status === 422) {
+            const detail = responseData?.detail;
+            if (Array.isArray(detail) && detail.length > 0) {
+                const firstError = detail[0];
+                const field = Array.isArray(firstError.loc)
+                    ? firstError.loc[firstError.loc.length - 1]
+                    : '字段';
+                const msg = firstError.msg || '参数格式错误';
+                throw new ApiError(
+                    'VALIDATION_ERROR',
+                    `${field}: ${msg}`,
+                    status,
+                    response
+                );
+            }
+
+            const fallbackMsg = responseData?.detail
+                ? JSON.stringify(responseData.detail)
+                : '请求参数有误，请检查输入后重试';
+            throw new ApiError('VALIDATION_ERROR', fallbackMsg, status, response);
         }
 
         /* 尝试从响应体中提取业务错误码 */
@@ -432,7 +509,7 @@ class ApiClient {
             throw new ApiError('E005', '单次最多上传5张图片', 429);
         }
 
-        return this.request('POST', '/api/batch-predict', {
+        return this.request('POST', '/api/batch_predict', {
             body: { images },
             timeout: 120_000 // 批量识别需要更长时间
         });
@@ -508,22 +585,92 @@ class ApiClient {
         return this.request('DELETE', '/api/history');
     }
 
+    /**
+     * 用户注册接口 - 创建新账户
+     *
+     * @public
+     * @async
+     * @param {string} username - 用户名（3-20位字母数字组合）
+     * @param {string} password - 用户密码（6位以上）
+     * @param {string} [nickname=''] - 可选昵称，留空则默认使用用户名
+     * @returns {Promise<Object>} 注册结果：{ user_id, username, nickname, token }
+     *
+     * @throws {ApiError} 用户名已存在（E005/409）、参数格式错误（400）等
+     *
+     * @example
+     * const result = await api.register('zhangsan', 'password123', '张三');
+     * console.log(result.user_id);  // 'usr_xxxxx'
+     */
     async register(username, password, nickname = '') {
         return this.request('POST', '/api/auth/register', {
             body: { username, password, nickname }
         });
     }
 
+    /**
+     * 用户登录接口 - 账号密码认证并获取会话
+     *
+     * 登录成功后服务端通过 Set-Cookie 设置 Session ID，
+     * 后续请求浏览器自动携带，无需手动管理Token。
+     *
+     * @public
+     * @async
+     * @param {string} username - 用户名
+     * @param {string} password - 密码（明文传输，HTTPS加密保护）
+     * @param {boolean} [remember=false] - 是否记住登录状态（延长Cookie有效期）
+     * @returns {Promise<Object>} 登录结果：{ user_id, username, nickname, role }
+     *
+     * @throws {ApiError} 密码错误（401）、账号不存在（404）、账号被禁用（403）等
+     *
+     * @example
+     * const user = await api.login('zhangsan', 'password123', true);
+     * console.log(`欢迎回来, ${user.nickname}`);
+     */
     async login(username, password, remember = false) {
         return this.request('POST', '/api/auth/login', {
             body: { username, password, remember }
         });
     }
 
+    /**
+     * 用户登出接口 - 销毁当前会话
+     *
+     * @public
+     * @async
+     * @returns {Promise<Object>} { success: true, message: '已登出' }
+     */
     async logout() {
         return this.request('POST', '/api/auth/logout');
     }
 
+    /**
+     * 获取当前登录用户信息
+     *
+     * 用于检测登录状态和获取用户基本资料。
+     * 若未登录则服务端返回 401，触发 UNAUTH 错误。
+     *
+     * @public
+     * @async
+     * @returns {Promise<Object>} 当前用户信息对象：
+     *   @property {string} user_id - 用户唯一标识
+     *   @property {string} username - 用户名
+     *   @property {string} nickname - 显示昵称
+     *   @property {string} role - 角色类型（'user' | 'admin'）
+     *   @property {number} points - 当前积分
+     *   @property {string} avatar_url - 头像URL（可选）
+     *
+     * @throws {ApiError} 未登录（UNAUTH/401）、网络错误等
+     *
+     * @example
+     * try {
+     *     const me = await api.getMe();
+     *     console.log(`当前用户: ${me.nickname} (积分: ${me.points})`);
+     * } catch (err) {
+     *     if (err.code === 'UNAUTH') {
+     *         window.location.hash = '#/profile'; // 跳转登录页
+     *     }
+     * }
+     */
     async getMe() {
         return this.request('GET', '/api/auth/me');
     }
@@ -598,6 +745,124 @@ class ApiClient {
 
     async cancelActivitySignup(activityId) {
         return this.request('POST', `/api/activities/${activityId}/cancel`);
+    }
+
+    // ==================== 成就与积分API方法 ====================
+
+    async getAchievements() {
+        return this.request('GET', '/api/achievements');
+    }
+
+    async getPointsHistory(page = 1, pageSize = 20) {
+        return this.request('GET', `/api/points/history?page=${page}&page_size=${pageSize}`);
+    }
+
+    // ==================== 数据统计API方法 ====================
+
+    async getStatsSummary() {
+        return this.request('GET', '/api/stats/summary');
+    }
+
+    async getLeaderboard(type = 'points', limit = 10) {
+        return this.request('GET', `/api/stats/leaderboard?type=${type}&limit=${limit}`);
+    }
+
+    async updateUserSettings(settings) {
+        return this.request('PUT', '/api/auth/settings', { body: settings });
+    }
+
+    // ==================== 管理后台API方法 ====================
+
+    async adminLogin(username, password) {
+        return this.request('POST', '/api/admin/login', { body: { username, password } });
+    }
+
+    async adminCheck() {
+        return this.request('GET', '/api/admin/check');
+    }
+
+    async adminGetDashboard() {
+        return this.request('GET', '/api/admin/stats/dashboard');
+    }
+
+    async adminGetUsers(page = 1, search = '', role = '') {
+        return this.request('GET', `/api/admin/users?page=${page}&search=${encodeURIComponent(search)}&role=${role}`);
+    }
+
+    async adminGetUser(userId) {
+        return this.request('GET', `/api/admin/users/${userId}`);
+    }
+
+    async adminUpdateUserStatus(userId, status) {
+        return this.request('PUT', `/api/admin/users/${userId}/status`, { body: { status } });
+    }
+
+    async adminUpdateUserRole(userId, role) {
+        return this.request('PUT', `/api/admin/users/${userId}/role`, { body: { role } });
+    }
+
+    async adminGetVocabulary() {
+        return this.request('GET', '/api/admin/content/vocabulary');
+    }
+
+    async adminUpdateVocabulary(items) {
+        return this.request('PUT', '/api/admin/content/vocabulary', { body: { items } });
+    }
+
+    async adminGetCategories() {
+        return this.request('GET', '/api/admin/content/categories');
+    }
+
+    async adminUpdateCategories(data) {
+        return this.request('PUT', '/api/admin/content/categories', { body: data });
+    }
+
+    async adminGetPoints() {
+        return this.request('GET', '/api/admin/points');
+    }
+
+    async adminCreatePoint(data) {
+        return this.request('POST', '/api/admin/points', { body: data });
+    }
+
+    async adminUpdatePoint(id, data) {
+        return this.request('PUT', `/api/admin/points/${id}`, { body: data });
+    }
+
+    async adminDeletePoint(id) {
+        return this.request('DELETE', `/api/admin/points/${id}`);
+    }
+
+    async adminGetModels() {
+        return this.request('GET', '/api/admin/models');
+    }
+
+    async adminSwitchModel(modelId) {
+        return this.request('PUT', `/api/admin/models/${modelId}/switch`, { body: { model_id: modelId } });
+    }
+
+    async adminGetBadcases() {
+        return this.request('GET', '/api/admin/models/badcases');
+    }
+
+    async adminGetBadcasesByModel(modelId) {
+        return this.request('GET', `/api/admin/models/${modelId}/badcases`);
+    }
+
+    async adminDeleteBadcase(badcaseId) {
+        return this.request('DELETE', `/api/admin/models/badcases/${badcaseId}`);
+    }
+
+    async adminUpdateActivity(id, data) {
+        return this.request('PUT', `/api/admin/activities/${id}`, { body: data });
+    }
+
+    async adminDeleteActivity(id) {
+        return this.request('DELETE', `/api/admin/activities/${id}`);
+    }
+
+    async adminGetActivitySignups(id) {
+        return this.request('GET', `/api/admin/activities/${id}/signups`);
     }
 }
 

@@ -8,6 +8,7 @@
     <title>校园垃圾分类AI助手</title>
     <link rel="stylesheet" href="/static/css/main.css">
     <link rel="stylesheet" href="/static/css/components.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" integrity="sha384-vsrfeLOOY6KuIYKDlmVH5UiBmgIdB1oEf7p01YgWHuqmOHfZr374+odEv96n9tNC" crossorigin="anonymous"></script>
 </head>
 <body>
 
@@ -208,6 +209,30 @@
             </div>
         </section>
 
+        <section id="page-settings" class="page">
+            <div class="page__content container">
+            </div>
+        </section>
+
+        <section id="page-stats" class="page">
+            <div class="page__content container">
+            </div>
+        </section>
+
+        <!-- ===== 页面视图：管理后台 ===== -->
+        <section id="page-admin" class="page">
+            <div class="admin-layout" id="adminLayout">
+                <aside class="admin-sidebar" id="adminSidebar">
+                    <div class="admin-sidebar__brand">&#x2699;&#xFE0F; 管理后台</div>
+                    <nav class="admin-nav" id="adminNav"></nav>
+                    <div class="admin-sidebar__user" id="adminSidebarUser"></div>
+                </aside>
+                <main class="admin-main" id="adminMain">
+                    <div class="admin-page-content" id="adminPageContent"></div>
+                </main>
+            </div>
+        </section>
+
     </main>
 
     <!-- 底部Tab栏（由TabBar组件渲染） -->
@@ -231,6 +256,7 @@
     </div>
 
     <div id="toast" class="toast hidden" role="alert" aria-live="polite"></div>
+    <div class="achv-toast-container" id="achvToastGlobal"></div>
 
     <!-- ES Module 应用入口 -->
     <script type="module" src="/static/js/app.js"></script>

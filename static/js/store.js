@@ -3,9 +3,24 @@
  * @description 管理校园垃圾分类SPA的所有共享状态，包括当前页面、
  *              选中图片、识别结果、搜索结果、历史记录等核心数据。
  *              采用细粒度订阅机制，仅触发对应key的回调，避免无效渲染。
+ *
+ * ## 架构设计
+ * - **单一数据源**: 所有状态集中管理，避免组件间props drilling
+ * - **细粒度订阅**: 按key维度订阅变更，减少不必要的回调触发
+ * - **不可变更新**: setState通过浅拷贝保证引用变化，便于依赖追踪
+ * - **线程安全**: JavaScript单线程特性天然保证读写一致性
+ *
+ * ## 推荐API vs 废弃API
+ * | 操作     | 推荐方法（当前标准）    | 废弃方法（兼容保留）  |
+ * |----------|------------------------|----------------------|
+ * | 读取状态 | `getState(key)`        | ~~`get(key)`~~       |
+ * | 写入状态 | `setState(key, value)` | ~~`set(key, value)`~~ |
+ * | 删除状态 | `setState(key, null)`  | ~~`remove(key)`~~    |
+ *
  * @module store
  * @author Frontend Architect
  * @version 1.0.0
+ * @see {@link module:config} 全局配置模块
  */
 
 // ==================== 默认状态初始值 ====================
@@ -24,7 +39,12 @@ const DEFAULT_STATE = Object.freeze({
     error: null,
     isDemoMode: false,
     currentUser: null,
-    currentItemKeyword: ''
+    currentItemKeyword: '',
+    achievements: [],            /* 用户成就列表 */
+    pointsHistory: [],           /* 积分变动历史 */
+    statsSummary: null,          /* 数据统计概览 */
+    leaderboard: [],             /* 排行榜数据 */
+    adminDashboard: null         /* 管理后台仪表盘数据 */
 });
 
 // ==================== Store 类定义 ====================
@@ -183,9 +203,62 @@ class Store {
         return value;
     }
 
-    /** @deprecated 为兼容页面调用的 short-hand 别名 */
+    /**
+     * @deprecated 自 v1.0.0 起废弃，请使用 {@link Store#getState} 替代
+     *
+     * 为兼容旧页面代码保留的 short-hand 别名方法。
+     * 该方法仅是对 getState() 的直接代理，无任何额外逻辑。
+     *
+     * @public
+     * @param {string} key - 状态字段名
+     * @returns {*} 该字段的当前值
+     *
+     * @example
+     * // 废弃写法（不推荐）
+     * const page = store.get('currentPage');
+     *
+     * // 推荐替换为
+     * const page = store.getState('currentPage');
+     */
     get(key) { return this.getState(key); }
+
+    /**
+     * @deprecated 自 v1.0.0 起废弃，请使用 {@link Store#setState} 替代
+     *
+     * 为兼容旧页面代码保留的 short-hand 别名方法。
+     * 该方法仅是对 setState() 的直接代理，无任何额外逻辑。
+     *
+     * @public
+     * @param {string} key - 要更新的状态字段名
+     * @param {*} value - 新值
+     * @returns {*} 返回设置的新值
+     *
+     * @example
+     * // 废弃写法（不推荐）
+     * store.set('isLoading', true);
+     *
+     * // 推荐替换为
+     * store.setState('isLoading', true);
+     */
     set(key, value) { return this.setState(key, value); }
+
+    /**
+     * @deprecated 自 v1.0.0 起废弃，请使用 {@link Store#setState} 配合 null 值替代
+     *
+     * 为兼容旧页面代码保留的 short-hand 别名方法。
+     * 等效于 setState(key, null)，将指定状态字段重置为null。
+     *
+     * @public
+     * @param {string} key - 要清除的状态字段名
+     * @returns {*} 返回 null（设置后的值）
+     *
+     * @example
+     * // 废弃写法（不推荐）
+     * store.remove('predictResult');
+     *
+     * // 推荐替换为
+     * store.setState('predictResult', null);
+     */
     remove(key) { return this.setState(key, null); }
 
     /**

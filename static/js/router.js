@@ -3,9 +3,25 @@
  * @description 实现SPA单页应用的路由分发系统，通过监听hashchange事件
  *              实现页面视图切换，支持路径参数(:id)和查询参数(?q=xxx)。
  *              采用RegExp匹配机制，按注册顺序优先匹配首个命中规则。
+ *
+ * ## 核心机制
+ * - **路由存储**: 使用 Map<RegExp, RouteInfo> 保证插入顺序，实现先注册优先语义
+ * - **参数捕获**: 通过 :param 占位符语法，编译为正则捕获组
+ * - **视图切换**: CSS类名方案（移除所有.page的active → 添加目标active）
+ * - **事件驱动**: hashchange事件触发 → 解析path/query → 匹配路由 → 执行handler
+ *
+ * ## 生命周期
+ * 1. `new Router()` → 构造函数自动注册内置兜底路由
+ * 2. `router.clearRoutes()` → 可选：清除内置路由，由app.js接管完整生命周期
+ * 3. `router.register(path, handler)` → 注册自定义路由处理器
+ * 4. `router.start()` → 绑定hashchange监听，执行首屏渲染
+ * 5. `router.navigate(path)` → 编程式导航（或用户点击改变hash）
+ * 6. `router.stop()` → 移除监听（卸载/测试清理）
+ *
  * @module router
  * @author Frontend Architect
  * @version 1.0.0
+ * @see {@link module:store} 状态管理模块（路由切换时同步currentPage）
  */
 
 // ==================== 常量定义 ====================
@@ -28,6 +44,9 @@ const PAGE_ID_MAP = Object.freeze({
     map:       'page-map',        // 投放点地图页
     community: 'page-community',  // 社区活动页
     profile:   'page-profile',    // 个人中心页
+    settings:  'page-settings',  // 偏好设置页
+    stats:     'page-stats',     // 数据统计页
+    admin:     'page-admin',     // 管理后台页
 });
 
 /** 默认首页路由路径 */
@@ -211,79 +230,117 @@ class Router {
     /**
      * 从完整hash中提取纯路径部分（去掉#前缀和查询字符串）
      *
+     * 解析流程：
+     * 1. 移除开头的 '#' 字符
+     * 2. 定位 '?' 分隔符，截取其左侧部分（排除查询参数）
+     * 3. 规范化结果：确保以 '/' 开头（处理空hash或无前缀情况）
+     *
      * @private
-     * @param {string} hash - 完整hash如 '#/home?q=x'
-     * @returns {string} 纯路径如 '/home'
+     * @param {string} hash - 完整hash如 '#/home?q=x' 或 '#/item/123'
+     * @returns {string} 纯路径如 '/home' 或 '/item/123'，始终以 '/' 开头
+     *
+     * @example
+     * this._extractPath('#/home')           // '/home'
+     * this._extractPath('#/search?q=塑料瓶') // '/search'
+     * this._extractPath('#')                // '/'
+     * this._extractPath('')                 // '/'
      */
     _extractPath(hash) {
-        /* 移除#号前缀 */
+        /* 步骤1：移除#号前缀 */
         let path = hash.replace(/^#/, '');
-        /* 移除查询字符串部分 */
+        /* 步骤2：移除查询字符串部分（?及之后的所有内容） */
         const qIndex = path.indexOf('?');
         if (qIndex !== -1) {
             path = path.slice(0, qIndex);
         }
-        /* 确保以/开头 */
+        /* 步骤3：确保规范化路径始终以/开头，防止空字符串导致匹配异常 */
         return path.startsWith('/') ? path : `/${path}`;
     }
 
     /**
      * 执行视图切换 - 核心渲染逻辑
      *
+     * 采用CSS类名方案实现SPA页面切换，无需重新加载页面。
      * 切换流程：
-     * 1. 查找DOM中所有 .page 元素
-     * 2. 全部移除 active 类（隐藏当前页）
-     * 3. 为目标页面的 .page 元素添加 active 类（显示新页面）
-     * 4. 若目标页面不存在则给出警告但不阻断执行
+     * 1. 通过 PAGE_ID_MAP 查找目标页面对应的DOM元素ID
+     * 2. 遍历所有 .page 元素，移除其 active 类（隐藏当前可见页面）
+     * 3. 为目标页面的DOM元素添加 active 类（显示新页面）
+     * 4. 触发自定义 DOM 事件 'router:pagechange'，允许其他模块响应
+     *
+     * 容错设计：
+     * - 目标 pageKey 未在 PAGE_ID_MAP 中注册时输出警告并提前返回
+     * - 目标DOM元素尚未挂载（懒加载场景）时输出警告但不抛异常
      *
      * @private
-     * @param {string} pageKey - 目标页面标识（对应PAGE_ID_MAP的key）
-     * @param {Object} [extraData={}] - 额外数据传递给页面（如搜索关键词）
+     * @param {string} pageKey - 目标页面标识（对应PAGE_ID_MAP的key），如 'home'、'result'
+     * @param {Object} [extraData={}] - 额外数据传递给页面事件（如搜索关键词、路由参数）
      * @returns {void}
+     *
+     * @example
+     * // 基础用法：切换到首页
+     * this._switchPage('home');
+     *
+     * // 带额外数据：切换到物品详情页并传递关键词
+     * this._switchPage('item', { keyword: '塑料瓶', query: {} });
      */
     _switchPage(pageKey, extraData = {}) {
-        /* 获取目标页面的DOM ID */
+        /* 步骤1：通过映射表获取目标页面的DOM ID */
         const targetId = PAGE_ID_MAP[pageKey];
         if (!targetId) {
             console.warn(`[Router] 未知的页面标识: "${pageKey}"，请检查PAGE_ID_MAP`);
             return;
         }
 
-        /* 查找所有页面容器 */
+        /* 步骤2：查找DOM中所有.page容器元素 */
         const allPages = document.querySelectorAll('.page');
 
-        /* 第一步：移除所有页面的active状态 */
+        /* 步骤3：批量移除所有页面的active状态（CSS display:none） */
         for (const page of allPages) {
             page.classList.remove('active');
         }
 
-        /* 第二步：激活目标页面 */
+        /* 步骤4：激活目标页面（CSS display:block） */
         const targetEl = document.getElementById(targetId);
         if (targetEl) {
             targetEl.classList.add('active');
 
-            /* 触发自定义事件，允许其他模块响应页面切换 */
+            /* 步骤5：派发自定义事件，允许统计埋点、标题更新等外部模块响应 */
             this._dispatchPageEvent(pageKey, extraData);
         } else {
-            /* 目标DOM尚未挂载时仅警告，不抛异常（可能懒加载场景） */
+            /* 目标DOM尚未挂载时仅警告，不抛异常（可能为懒加载/动态渲染场景） */
             console.warn(
                 `[Router] 目标页面DOM元素未找到: id="${targetId}"，` +
                 `请确保HTML中存在 <div class="page" id="${targetId}">`
             );
         }
 
-        /* 更新当前路径缓存 */
+        /* 更新内部路径缓存，供getCurrentPath()查询 */
         this._currentPath = pageKey;
     }
 
     /**
      * 派发页面切换的自定义DOM事件
-     * 其他模块可通过监听 'router:pagechange' 事件做出响应
+     *
+     * 使用 CustomEvent API 在 document 上派发 'router:pagechange' 事件，
+     * 其他模块可通过 addEventListener('router:pagechange', handler) 做出响应，
+     * 典型用途包括：页面标题更新、统计埋点上报、权限校验等。
+     *
+     * 事件对象结构（event.detail）：
+     * - page: string - 新页面标识
+     * - path: string - 当前路由路径缓存
+     * - timestamp: number - 切换发生的时间戳（Date.now()）
+     * - ...extraData - 调用方传入的额外数据（如搜索关键词）
      *
      * @private
-     * @param {string} pageKey - 新页面标识
-     * @param {Object} extraData - 附带数据
+     * @param {string} pageKey - 新页面标识（如 'home'、'item'）
+     * @param {Object} extraData - 附带数据，会合并到 event.detail 中
      * @returns {void}
+     *
+     * @example
+     * // 外部模块监听示例：
+     * document.addEventListener('router:pagechange', (e) => {
+     *     console.log(`页面切换到: ${e.detail.page}`, e.detail);
+     * });
      */
     _dispatchPageEvent(pageKey, extraData) {
         const event = new CustomEvent('router:pagechange', {
@@ -326,32 +383,49 @@ class Router {
     }
 
     /**
-     * hashchange事件处理器 - 由addEventListener触发
-     * 解析新的hash并分派给对应的路由处理器
+     * hashchange事件处理器 - 路由系统的核心调度函数
+     *
+     * 由 window.addEventListener('hashchange', ...) 触发，
+     * 也被 start() 首次调用和 navigate() 强制刷新时直接调用。
+     *
+     * 处理流程（管道模式）：
+     * 1. **读取**: 获取当前 window.location.hash，空hash时使用默认重定向路径
+     * 2. **解析**: 调用 _extractPath() 提取纯路径 + _parseQuery() 提取查询参数
+     * 3. **规范化**: 根路径 '/' 或空字符串统一重定向到 DEFAULT_ROUTE
+     * 4. **匹配**: 遍历路由表（Map有序遍历），用 RegExp.exec() 查找首个命中规则
+     * 5. **派发**: 匹配成功则调用 handler(params, query)；失败则回退到默认首页
+     *
+     * 错误处理：
+     * - handler 执行异常时捕获并输出 console.error，不阻断后续路由
+     * - 无匹配路由时输出警告并自动 navigate 到 ROOT_REDIRECT
      *
      * @private
      * @returns {void}
      */
     _onHashChange() {
+        /* 步骤1：获取当前hash，空hash时回退到根重定向目标 */
         const hash = window.location.hash || `#${ROOT_REDIRECT}`;
+
+        /* 步骤2：分别提取路径和查询参数 */
         const path = this._extractPath(hash);
         const query = this._parseQuery(hash);
 
-        /* 根路径特殊处理：#/ 和 # 重定向到默认首页 */
+        /* 步骤3：根路径特殊处理 —— #/ 和 # 统一重定向到默认首页 */
         const actualPath = (path === '/' || path === '') ? ROOT_REDIRECT : path;
 
-        /* 在路由表中查找匹配项 */
+        /* 步骤4：在路由表中按注册顺序查找第一个匹配项（先注册优先） */
         const matched = this._matchRoute(actualPath);
 
         if (matched) {
             try {
-                /* 调用路由处理器，传入路径参数和查询参数 */
+                /* 步骤5a：匹配成功 → 调用路由处理器，传入路径参数和查询参数对象 */
                 matched.handler(matched.params, query);
             } catch (err) {
+                /* 单个路由处理器异常不应影响整个路由系统运行 */
                 console.error(`[Router] 路由处理器执行错误 (path="${actualPath}"):`, err);
             }
         } else {
-            /* 未匹配任何路由：回退到404处理或默认首页 */
+            /* 步骤5b：无任何路由匹配 → 回退到404处理（当前策略为跳转首页） */
             console.warn(`[Router] 未注册的路由: "${actualPath}"，将跳转到首页`);
             this.navigate(ROOT_REDIRECT);
         }
@@ -373,6 +447,9 @@ class Router {
      *   @param {Object} handler.params - 路径参数对象（来自 :param 捕获）
      *   @param {Object} handler.query - 查询参数对象（来自 ?key=value）
      * @returns {this} 支持链式调用
+     *
+     * @throws {TypeError} 当 path 不是非空字符串时抛出
+     * @throws {TypeError} 当 handler 不是函数时抛出
      *
      * @example
      * // 静态路由
@@ -440,6 +517,8 @@ class Router {
      * @param {string} path - 目标路径（不含#前缀），如 '/home'、'/search?q=xxx'
      * @returns {void}
      *
+     * @throws 该方法本身不抛异常，但触发的路由处理器可能抛出异常（由_onHashChange捕获）
+     *
      * @example
      * // 基础导航
      * router.navigate('/result');
@@ -470,6 +549,8 @@ class Router {
      * @public
      * @returns {void}
      *
+     * @throws 该方法本身不抛异常，但首次执行 _onHashChange() 时可能因路由处理器异常输出错误日志
+     *
      * @example
      * // 在app.js中调用
      * const router = new Router();
@@ -492,6 +573,8 @@ class Router {
      *
      * @public
      * @returns {void}
+     *
+     * @throws 该方法不会抛异常；若路由器未启动（_boundHandler为null），则静默跳过
      */
     stop() {
         if (this._boundHandler) {

@@ -268,6 +268,9 @@ from routers.auth import router as auth_router
 from routers.map import router as map_router
 from routers.quiz import router as quiz_router
 from routers.activities import router as activities_router
+from routers.stats import router as stats_router
+from routers.achievements import router as achievements_router
+from routers.admin import router as admin_router
 
 app.include_router(predict_router)
 app.include_router(search_router)
@@ -280,6 +283,9 @@ app.include_router(auth_router)
 app.include_router(map_router)
 app.include_router(quiz_router)
 app.include_router(activities_router)
+app.include_router(stats_router)
+app.include_router(achievements_router)
+app.include_router(admin_router)
 
 
 # ==================== 程序入口 ====================

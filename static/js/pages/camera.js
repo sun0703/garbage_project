@@ -11,6 +11,7 @@ import { store } from '../store.js';
 import { api, ApiError } from '../api.js';
 import { ImageProcessor } from '../utils/image.js';
 import { showToast, showLoading, hideLoading, setLoadingText, showModal } from '../utils/ui.js';
+import { escapeHtml } from '../utils/escape.js';
 
 // ==================== 状态机枚举 ====================
 
@@ -382,6 +383,11 @@ export class PreviewPage {
 
             showToast('识别完成', 'success');
 
+            /* 检查是否有新成就解锁 */
+            if (result.new_achievements && result.new_achievements.length) {
+                result.new_achievements.forEach(a => this._showAchievementToast(a));
+            }
+
             /* 延迟跳转到结果展示页 */
             setTimeout(() => {
                 window.location.hash = '#/result';
@@ -410,6 +416,52 @@ export class PreviewPage {
             if (this.startBtn) this.startBtn.disabled = false;
             this._recognizing = false;
         }
+    }
+
+    /**
+     * 显示成就解锁 Toast 通知
+     * 在全局成就容器中创建通知元素，4秒后自动消失
+     *
+     * @param {Object} achievement - 成就对象
+     * @param {string} achievement.icon - 成就图标
+     * @param {string} achievement.name - 成就名称
+     * @param {number} [achievement.points_reward=0] - 积分奖励
+     * @private
+     */
+    _showAchievementToast(achievement) {
+        const container = document.getElementById('achvToastGlobal');
+        if (!container) return;
+
+        const el = document.createElement('div');
+        el.className = 'achv-toast';
+
+        const rewardHtml = achievement.points_reward > 0
+            ? `<div class="achv-toast__reward">+${achievement.points_reward} 积分奖励</div>`
+            : '';
+
+        el.innerHTML = `
+            <span class="achv-toast__icon">${escapeHtml(achievement.icon)}</span>
+            <div class="achv-toast__content">
+                <div class="achv-toast__title">🎉 成就解锁!</div>
+                <div class="achv-toast__name">${escapeHtml(achievement.name)}</div>
+                ${rewardHtml}
+            </div>
+            <button class="achv-toast__close">✕</button>
+        `;
+
+        el.querySelector('.achv-toast__close').addEventListener('click', () => {
+            el.classList.add('exiting');
+            setTimeout(() => { if (el.parentElement) el.remove(); }, 260);
+        });
+
+        container.appendChild(el);
+
+        setTimeout(() => {
+            if (el.parentElement) {
+                el.classList.add('exiting');
+                setTimeout(() => { if (el.parentElement) el.remove(); }, 260);
+            }
+        }, 4000);
     }
 
     /**

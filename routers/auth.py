@@ -12,6 +12,7 @@ import uuid
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 
+from pydantic import BaseModel
 from repositories.user_repo import UserRepository
 from repositories.session_repo import SessionRepository
 from app.models import RegisterRequest, LoginRequest
@@ -19,6 +20,11 @@ from app.models import RegisterRequest, LoginRequest
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["用户认证"])
+
+
+class UserSettingsRequest(BaseModel):
+    nickname: str = ""
+    avatar: str = ""
 
 # ==================== 会话常量 ====================
 SESSION_COOKIE_NAME = "session_id"
@@ -402,3 +408,37 @@ async def get_current_user(request: Request):
     if not user:
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "未登录"}})
     return JSONResponse(content={"success": True, "user": user})
+
+
+@router.put("/settings")
+async def update_user_settings(request: Request, req: UserSettingsRequest):
+    """更新用户设置"""
+    user = _get_current_user(request)
+    if not user:
+        return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
+
+    try:
+        from app.db import db
+        now = time.time()
+        updates = []
+        params = []
+
+        if req.nickname:
+            updates.append("nickname = ?")
+            params.append(req.nickname)
+        if req.avatar:
+            updates.append("avatar = ?")
+            params.append(req.avatar)
+
+        if updates:
+            updates.append("updated_at = ?")
+            params.append(now)
+            params.append(user["id"])
+            db.conn.execute(f"UPDATE users SET {', '.join(updates)} WHERE id = ?", params)
+            db.conn.commit()
+
+        updated_user = UserRepository.get_user_by_id(user["id"])
+        return JSONResponse(content={"success": True, "user": updated_user})
+    except Exception as e:
+        logger.error("更新用户设置失败: %s", e)
+        return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "更新设置失败"}})

@@ -1,9 +1,4 @@
-"""
-调试分析路由模块
-
-提供图片特征分析调试接口，返回详细的图像特征、分类结果和阈值信息。
-用于开发调试阶段验证图像分析算法的准确性。
-"""
+"""调试接口，开发阶段用"""
 
 import logging
 
@@ -27,8 +22,7 @@ router = APIRouter()
 
 @router.get("/api/debug/health")
 async def health_check() -> JSONResponse:
-    """健康检查接口 - 返回系统状态"""
-
+    # 简单健康检查
     status = {
         "status": "healthy",
         "timestamp": datetime.datetime.now().isoformat(),
@@ -44,19 +38,19 @@ async def health_check() -> JSONResponse:
 
 @router.post("/api/debug/analyze")
 async def debug_analyze_image(request: PredictRequest) -> JSONResponse:
-    """调试接口：分析图片的详细特征"""
+    """分析图片特征，调试用"""
 
     try:
         image, image_data = decode_base64_image(request.image)
 
         # 分析特征
         features = ImageFeatureAnalyzer.analyze(image)
-        
-        # 添加额外调试信息
+
+        # 额外的调试信息
         img_array = np.array(image)
         gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY) if len(img_array.shape) == 3 else img_array
         
-        # 基于特征运行分类（降级模式）
+        # 降级模式分类
         smart_class_index, reasoning, item_type = ImageFeatureAnalyzer.classify_by_features(features)
         confidence = ImageFeatureAnalyzer.calculate_confidence(features, smart_class_index)
         class_info = _get_class_info(smart_class_index, is_demo_mode=True,

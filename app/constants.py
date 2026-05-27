@@ -1,7 +1,4 @@
-"""
-垃圾分类识别系统 — 全局配置常量
-模型路径、类别映射、关键词等
-"""
+"""全局常量：路径、类别映射、关键词等"""
 
 from pathlib import Path
 import numpy as np

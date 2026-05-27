@@ -1,15 +1,4 @@
-"""
-Prometheus 监控指标模块
-
-暴露应用运行指标供 Prometheus 采集，配合 Grafana 进行可视化监控。
-指标端点：GET /api/metrics
-
-指标分类：
-  - HTTP 请求：请求总数、延迟分布、错误率
-  - AI 推理：推理次数、推理延迟、缓存命中率
-  - 业务：识别次数、搜索次数、打卡次数、答题次数
-  - 系统：数据库连接状态、Redis 连接状态
-"""
+"""Prometheus监控指标"""
 
 import time
 import logging
@@ -19,8 +8,7 @@ from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTEN
 
 logger = logging.getLogger(__name__)
 
-# ==================== HTTP 请求指标 ====================
-# 请求总数（按方法和路径分类）
+# HTTP 请求指标
 http_requests_total = Counter(
     "ecosort_http_requests_total",
     "HTTP 请求总数",
@@ -35,8 +23,7 @@ http_request_duration_seconds = Histogram(
     buckets=[0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
 )
 
-# ==================== AI 推理指标 ====================
-# 推理请求总数
+# AI 推理指标
 inference_requests_total = Counter(
     "ecosort_inference_requests_total",
     "AI 推理请求总数",
@@ -58,8 +45,7 @@ cache_operations_total = Counter(
     ["operation"]  # operation: hit, miss, set, evict
 )
 
-# ==================== 业务指标 ====================
-# 识别分类分布
+# 业务指标
 predictions_by_category_total = Counter(
     "ecosort_predictions_by_category_total",
     "按类别的识别次数",
@@ -85,8 +71,7 @@ quiz_answers_total = Counter(
     ["result"]  # result: correct, wrong
 )
 
-# ==================== 系统指标 ====================
-# 当前在线用户数（近似值，基于活跃 Session）
+# 系统指标
 active_users_gauge = Gauge(
     "ecosort_active_users",
     "当前活跃用户数"

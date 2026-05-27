@@ -126,13 +126,7 @@ export class PreviewPage {
         console.log('[PreviewPage] 预览页已销毁');
     }
 
-    // ==================== 私有方法：渲染 ====================
-
-    /**
-     * 渲染预览确认页 HTML 结构
-     * 包含大尺寸预览图区域 + 操作按钮组
-     * @private
-     */
+    /* ---- 渲染 ---- */
     _render() {
         this.container.innerHTML = `
             <!-- 页面导航栏 -->
@@ -184,27 +178,14 @@ export class PreviewPage {
         `;
     }
 
-    // ==================== 私有方法：DOM 缓存 ====================
-
-    /**
-     * 缓存高频 DOM 元素引用
-     * @private
-     */
+    /* ---- DOM缓存 ---- */
     _cacheDOM() {
         this.previewImg = document.getElementById('previewImg');
         this.startBtn = document.getElementById('startRecognizeBtn');
         this.reselectBtn = document.getElementById('reselectBtn');
     }
 
-    // ==================== 私有方法：预览展示 ====================
-
-    /**
-     * 在预览区域显示选中的图片 (F-1.2.3)
-     * 支持两种数据格式：base64 字符串或 Blob URL
-     *
-     * @param {string} imageData - base64 编码图片数据或 Blob URL
-     * @private
-     */
+    /* ---- 预览展示 ---- */
     _showPreview(imageData) {
         if (!this.previewImg) return;
 
@@ -226,14 +207,7 @@ export class PreviewPage {
         }
     }
 
-    /**
-     * 将 Base64 字符串转换为 Blob 对象
-     * 用于创建可释放的 Object URL
-     *
-     * @param {string} base64 - Base64 编码的图片字符串（含 data URI 前缀）
-     * @returns {Blob} 图片 Blob 对象
-     * @private
-     */
+    // base64转Blob，用来创建可释放的ObjectURL
     _base64ToBlob(base64) {
         const arr = base64.split(',');
         const mimeMatch = arr[0].match(/:(.*?);/);
@@ -247,15 +221,10 @@ export class PreviewPage {
         return new Blob([u8arr], { type: mime });
     }
 
-    // ==================== 私有方法：事件绑定 ====================
-
-    /**
-     * 绑定全部交互事件
-     * @private
-     */
+    /* ---- 事件绑定 ---- */
     _bindEvents() {
         /* 开始识别按钮 — 触发完整识别流水线 */
-        this._boundHandlers.start = () => this._handleRecognize();
+        this._boundHandlers.start = () => this._startRecognize();
         if (this.startBtn) {
             this.startBtn.addEventListener('click', this._boundHandlers.start);
         }
@@ -279,21 +248,7 @@ export class PreviewPage {
         }
     }
 
-    // ==================== 私有方法：识别核心流水线 ====================
-
-    /**
-     * 执行完整的 AI 识别流程
-     *
-     * 状态机流转 (F-1.2.4)：
-     *   IDLE → COMPRESSING → UPLOADING → RECOGNIZING → IDLE(成功)/ERROR(失败)
-     *
-     * 包含功能点：
-     *   - F-1.2.4 上传状态反馈（状态机驱动 UI 更新）
-     *   - F-1.4.1 网络异常检测（ApiError 友好提示）
-     *   - F-1.4.2 自动降级（E2002/E002 错误码调用 analyzeFallback）
-     *
-     * @private
-     */
+    /* ---- 识别核心流水线 ---- */
     async _handleRecognize() {
         /* 防止重复提交 */
         if (this._recognizing) return;
@@ -418,16 +373,7 @@ export class PreviewPage {
         }
     }
 
-    /**
-     * 显示成就解锁 Toast 通知
-     * 在全局成就容器中创建通知元素，4秒后自动消失
-     *
-     * @param {Object} achievement - 成就对象
-     * @param {string} achievement.icon - 成就图标
-     * @param {string} achievement.name - 成就名称
-     * @param {number} [achievement.points_reward=0] - 积分奖励
-     * @private
-     */
+    // 成就解锁弹窗
     _showAchievementToast(achievement) {
         const container = document.getElementById('achvToastGlobal');
         if (!container) return;
@@ -464,13 +410,7 @@ export class PreviewPage {
         }, 4000);
     }
 
-    /**
-     * 更新当前识别状态（状态机驱动）
-     * 可扩展用于日志记录或状态面板展示
-     *
-     * @param {string} newState - 新状态值（RecognizeState 枚举）
-     * @private
-     */
+    // 更新识别状态
     _updateState(newState) {
         const oldState = this._state;
         this._state = newState;

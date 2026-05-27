@@ -1,7 +1,4 @@
-"""
-预测相关路由模块
-图像识别、多模态融合预测、批量预测、健康检查等接口
-"""
+"""预测识别接口"""
 
 import logging
 import time
@@ -26,7 +23,7 @@ router = APIRouter(tags=["预测识别"])
 
 @router.get("/", response_class=HTMLResponse)
 async def root() -> HTMLResponse:
-    """根路径：返回前端页面"""
+    """返回前端页面"""
     html_path = Path(INDEX_HTML_PATH)
     if html_path.exists():
         return HTMLResponse(content=html_path.read_text(encoding="utf-8"))
@@ -35,10 +32,7 @@ async def root() -> HTMLResponse:
 
 @router.post("/api/predict")
 async def predict_waste(request: PredictRequest) -> JSONResponse:
-    """图像分类识别接口
-
-    支持智能演示模式、图像特征分析、分阶段耗时记录。
-    """
+    """图像分类识别"""
     start_time = time.time()
     timing = {"preprocess_ms": 0, "inference_ms": 0, "postprocess_ms": 0}
 
@@ -55,6 +49,7 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
                     total_ms = int((time.time() - start_time) * 1000)
                     req_id = uuid.uuid4().hex[:12]
                     logger.info("缓存命中: %s (响应时间=%dms)", cache_key[:20], total_ms)
+                    # 缓存命中直接返回，省去推理开销
                     return JSONResponse(content={
                         "success": True,
                         "result": cached_result,
@@ -107,7 +102,7 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
         inference_ms = int((time.time() - start_time) * 1000)
         req_id = uuid.uuid4().hex[:12]
 
-        # 40类专用模型直接使用YOLO结果；COCO/通用模型使用混合策略
+        # 40类专用模型直接用YOLO结果；通用模型走混合策略
         if backend_state.vision_engine.is_pt_model and backend_state.vision_engine.num_classes >= 40:
             original_class_id = result.get("original_class_id", -1)
 
@@ -116,7 +111,7 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
                 category_4class = class_mapping["category"]
                 class_name_cn = class_mapping["name_cn"]
 
-                # 置信度校准
+                # 置信度校准，原始值有时候偏高
                 raw_confidence = result.get("confidence", 0.0)
                 adjusted_confidence = _calibrate_confidence_40class(
                     raw_confidence,
@@ -135,7 +130,7 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
                            original_class_id, class_name_cn, category_4class,
                            raw_confidence * 100, adjusted_confidence * 100)
             else:
-                # YOLO未检测到有效目标，降级到特征分析模式
+                # YOLO没识别出来，降级到特征分析
                 logger.warning("YOLO未检测到有效目标 (ID=%d, 置信度=%.1f%%), 降级到特征分析模式",
                                original_class_id, result.get("confidence", 0) * 100)
 
@@ -160,11 +155,12 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
                            smart_class_index, item_type, demo_confidence * 100, reasoning)
 
         else:
-            # 旧版COCO/ONNX模型 - 混合策略
+            # 旧版COCO/ONNX模型，走混合策略
             original_class_id = result.get("original_class_id")
 
             HIGH_CONFIDENCE_CONTAINER_CLASSES = {39, 40, 41, 45}
 
+            # 只有高置信度的容器类才信YOLO，其余走特征分析
             use_yolo_result = (
                 not result.get("is_demo_mode") and
                 original_class_id is not None and
@@ -218,6 +214,7 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
         }
 
         if result.get("is_demo_mode"):
+            # 演示模式给个提示，免得用户以为准确率很高
             response_data["demo_notice"] = (
                 "当前为智能演示模式（基于图像特征分析），识别准确度低于专用AI模型，仅供参考。"
                 "建议拍摄清晰正面照片以提高识别准确性。"
@@ -238,6 +235,7 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
             try:
                 backend_state.inference_cache.set(cache_key, response_data["result"])
             except Exception as e:
+                # 缓存写入失败不影响主流程
                 logger.warning("缓存写入异常（不影响主流程）: %s", e)
 
         timing["postprocess_ms"] = int((time.time() - postprocess_start) * 1000)
@@ -272,10 +270,7 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
 
 @router.post("/api/predict/multimodal")
 async def predict_multimodal(request: PredictRequest) -> JSONResponse:
-    """多模态融合预测接口（YOLO + SAHI + 双层级联）
-
-    返回各模型独立结果和融合后的最终结果，多模型投票降低误判率。
-    """
+    """多模态融合预测（YOLO + SAHI + 双层级联）"""
     start_time = time.time()
     req_id = uuid.uuid4().hex[:12]
 
@@ -369,7 +364,7 @@ async def predict_multimodal(request: PredictRequest) -> JSONResponse:
 
 @router.post("/api/batch_predict")
 async def batch_predict_waste(request: BatchPredictRequest) -> JSONResponse:
-    """批量图像分类识别，单次最多5张图片"""
+    """批量识别，最多5张"""
     start_time = time.time()
     req_id = uuid.uuid4().hex[:12]
 
@@ -510,7 +505,7 @@ async def batch_predict_waste(request: BatchPredictRequest) -> JSONResponse:
 
 @router.post("/api/share/text")
 async def generate_share_text(request: Request) -> JSONResponse:
-    """生成识别结果的文字分享内容"""
+    # 生成分享文案
     try:
         body = await request.json()
         category = body.get("category", "未知")
@@ -546,10 +541,7 @@ async def generate_share_text(request: Request) -> JSONResponse:
 
 @router.get("/api/health")
 async def health_check() -> JSONResponse:
-    """健康检查接口
-
-    检查项：AI模型、数据库、Redis、多模态融合系统、推理缓存
-    """
+    """健康检查"""
     multimodal_status = None
     if backend_state.multimodal_available and backend_state.multimodal_classifier:
         try:
@@ -578,7 +570,7 @@ async def health_check() -> JSONResponse:
     except Exception as e:
         db_status = f"error: {str(e)[:50]}"
 
-    # Redis 连接检查（可选）
+    # Redis检查，没配就跳过
     redis_status = "not_configured"
     try:
         from app.config import settings
@@ -592,7 +584,7 @@ async def health_check() -> JSONResponse:
     except Exception as e:
         redis_status = f"error: {str(e)[:50]}"
 
-    # 推理缓存状态
+    # 推理缓存
     cache_stats = {}
     if backend_state.inference_cache:
         cache_stats = backend_state.inference_cache.stats()

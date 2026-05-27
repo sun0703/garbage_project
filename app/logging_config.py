@@ -1,12 +1,4 @@
-"""
-结构化 JSON 日志模块
-
-支持两种日志格式：
-  - text: 传统文本格式（开发环境默认）
-  - json: 结构化 JSON 格式（生产环境推荐，便于 ELK 采集）
-
-通过环境变量 LOG_FORMAT=json 启用 JSON 日志。
-"""
+"""日志配置，支持text和json两种格式"""
 
 import json
 import logging

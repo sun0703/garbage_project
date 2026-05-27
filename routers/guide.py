@@ -1,8 +1,4 @@
-"""
-分类指南路由模块
-
-提供校园垃圾分类标准、易混淆物品对比和物品详情查询接口。
-"""
+"""分类指南接口"""
 
 import logging
 
@@ -21,7 +17,7 @@ router = APIRouter()
 
 @router.get("/api/guide/standard")
 async def get_guide_standard() -> JSONResponse:
-    """获取完整的校园垃圾分类标准数据"""
+    """获取校园垃圾分类标准"""
     data = load_json_data(BASE_DIR / "data" / "guide_standard.json")
     if data is None:
         return error_response("E004", "分类标准数据文件不存在", 404)
@@ -39,7 +35,7 @@ async def get_guide_standard() -> JSONResponse:
 
 @router.get("/api/guide/category/{category_id}")
 async def get_guide_category(category_id: int) -> JSONResponse:
-    """获取单个类别的详细分类标准"""
+    """获取单个类别详情"""
     if category_id not in (0, 1, 2, 3):
         return error_response("E001", "类别ID必须为0-3", 400)
 
@@ -65,7 +61,7 @@ async def get_guide_category(category_id: int) -> JSONResponse:
 
 @router.get("/api/guide/confusing")
 async def get_confusing_pairs(limit: int = 10, frequency: str = "") -> JSONResponse:
-    """获取易混淆物品对比列表"""
+    """易混淆物品对比"""
     data = load_json_data(BASE_DIR / "data" / "confusing_pairs.json")
     if data is None:
         return error_response("E004", "易混淆数据文件不存在", 404)
@@ -85,7 +81,7 @@ async def get_confusing_pairs(limit: int = 10, frequency: str = "") -> JSONRespo
 
 @router.get("/api/guide/confusing/{pair_id}")
 async def get_confusing_pair(pair_id: int) -> JSONResponse:
-    """获取单个易混淆物品对比详情"""
+    # 单个易混淆对比详情
     data = load_json_data(BASE_DIR / "data" / "confusing_pairs.json")
     if data is None:
         return error_response("E004", "易混淆数据文件不存在", 404)
@@ -103,7 +99,7 @@ async def get_confusing_pair(pair_id: int) -> JSONResponse:
 
 @router.get("/api/guide/item/{keyword}")
 async def get_guide_item(keyword: str) -> JSONResponse:
-    """获取物品详情（含处理步骤+相关物品+易错对比）"""
+    """物品详情，含处理步骤、相关物品、易错对比"""
     if not backend_state.search_engine:
         return JSONResponse(status_code=503, content={"success": False})
 
@@ -116,6 +112,7 @@ async def get_guide_item(keyword: str) -> JSONResponse:
 
     item = results[0]
 
+    # 处理步骤和提示
     disposal_steps = []
     disposal_tips = []
     steps_data = load_json_data(BASE_DIR / "data" / "disposal_steps.json")
@@ -129,6 +126,7 @@ async def get_guide_item(keyword: str) -> JSONResponse:
         except Exception:
             pass
 
+    # 同类物品，最多6个
     same_category = [
         {"label": i["label"], "guidance": i.get("guidance", "")}
         for i in backend_state.search_engine.vocab

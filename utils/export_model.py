@@ -1,13 +1,4 @@
-"""
-YOLOv8n-cls 模型导出工具：PyTorch → ONNX 格式转换脚本
-用途：将Ultralytics训练好的分类模型转换为ONNX格式供ONNX Runtime推理
-
-使用方法：
-    python utils/export_model.py
-
-前置条件：
-    pip install ultralytics onnx torch torchvision
-"""
+"""YOLOv8模型导出工具，pt转onnx"""
 
 import sys
 from pathlib import Path
@@ -17,19 +8,16 @@ def export_yolov8_cls_to_onnx():
     """导出YOLOv8分类模型为ONNX格式"""
     from ultralytics import YOLO
 
-    # 项目根目录
     base_dir = Path(__file__).parent.parent
     models_dir = base_dir / "models"
     output_path = models_dir / "waste_classifier.onnx"
 
-    # 确保输出目录存在
     models_dir.mkdir(parents=True, exist_ok=True)
 
     print("=" * 50)
     print("  YOLOv8n-cls → ONNX 导出工具")
     print("=" * 50)
 
-    # 方式一：使用预训练模型直接导出（适合快速测试）
     print("\n[步骤1] 加载YOLOv8n-cls预训练模型...")
     try:
         model = YOLO("yolov8n-cls.pt")
@@ -39,13 +27,12 @@ def export_yolov8_cls_to_onnx():
         print("  提示: 首次运行会自动从网络下载模型(约6MB)")
         return False
 
-    # 方式二：如果有自己微调过的模型，取消下面注释并修改路径
+    # 如果有自己微调过的模型，取消下面注释
     # custom_model_path = "runs/classify/train/weights/best.pt"
     # if Path(custom_model_path).exists():
     #     model = YOLO(custom_model_path)
     #     print(f"  ✅ 自定义模型加载成功: {custom_model_path}")
 
-    # 执行ONNX导出
     print("\n[步骤2] 导出ONNX格式...")
     try:
         result = model.export(
@@ -58,7 +45,6 @@ def export_yolov8_cls_to_onnx():
         )
         print(f"  ✅ ONNX导出成功: {result}")
 
-        # 将导出的文件移动到models目录
         exported_file = Path(result)
         if exported_file.exists() and str(exported_file) != str(output_path):
             import shutil
@@ -69,7 +55,6 @@ def export_yolov8_cls_to_onnx():
         print(f"  ❌ ONNX导出失败: {e}")
         return False
 
-    # 验证导出结果
     print("\n[步骤3] 验证ONNX模型...")
     try:
         import onnxruntime as ort

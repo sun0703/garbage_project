@@ -1,4 +1,4 @@
-"""知识问答数据访问层 —— 封装 quiz_questions + quiz_records 表的数据库操作"""
+"""知识问答数据访问，quiz_questions + quiz_records 表"""
 
 import uuid
 import time
@@ -11,17 +11,11 @@ logger = logging.getLogger(__name__)
 
 
 class QuizRepository:
-    """问答表静态仓库"""
-
-    # ==================== 题目相关 ====================
+    """问答表仓库"""
 
     @staticmethod
     def get_all_questions() -> List[Dict[str, Any]]:
-        """获取所有题库题目
-
-        Returns:
-            题目列表
-        """
+        """所有题目"""
         try:
             db = get_db()
             return db.fetchall("SELECT * FROM quiz_questions")
@@ -31,14 +25,7 @@ class QuizRepository:
 
     @staticmethod
     def get_question_by_id(question_id: str) -> Optional[Dict[str, Any]]:
-        """根据 ID 获取单个题目
-
-        Args:
-            question_id: 题目 ID
-
-        Returns:
-            题目字典或 None
-        """
+        """按ID查题目"""
         try:
             db = get_db()
             row = db.fetchone(
@@ -50,18 +37,9 @@ class QuizRepository:
             logger.error("获取题目失败 [%s]: %s", question_id, e)
             return None
 
-    # ==================== 答题记录相关 ====================
-
     @staticmethod
     def get_today_answered_question_ids(user_id: str) -> List[str]:
-        """获取用户今日已答题的题目 ID 列表
-
-        Args:
-            user_id: 用户 ID
-
-        Returns:
-            题目 ID 列表
-        """
+        """用户今日已答的题目ID列表"""
         try:
             db = get_db()
             today_start = time.time() - (time.time() % 86400)
@@ -82,18 +60,7 @@ class QuizRepository:
         is_correct: bool,
         points_earned: int = 0,
     ) -> Optional[str]:
-        """创建答题记录
-
-        Args:
-            user_id:      用户 ID
-            question_id:  题目 ID
-            selected:     选择的选项索引
-            is_correct:   是否正确
-            points_earned: 获得积分
-
-        Returns:
-            记录 ID，失败返回 None
-        """
+        """创建答题记录"""
         try:
             db = get_db()
             record_id = uuid.uuid4().hex[:12]

@@ -1,9 +1,4 @@
-"""
-搜索相关路由模块
-
-提供模糊搜索、增强搜索和类别查询接口。
-依赖 search_engine 全局单例（通过 backend_state 获取）。
-"""
+"""搜索接口"""
 
 import time
 import logging
@@ -21,7 +16,7 @@ router = APIRouter()
 
 @router.get("/api/search")
 async def search_waste(query: str = Query(..., min_length=1, max_length=100)) -> JSONResponse:
-    """模糊搜索接口（支持拼音首字母搜索）"""
+    """模糊搜索，支持拼音"""
     if not backend_state.search_engine or not backend_state.search_engine.vocab:
         return JSONResponse(
             status_code=503,
@@ -49,22 +44,7 @@ async def search_enhanced(
     include_pinyin: bool = Query(True, description="是否启用拼音搜索"),
     top_k: int = Query(5, ge=1, le=20, description="返回结果数量")
 ) -> JSONResponse:
-    """
-    增强搜索接口（需求 F-2.2.1 扩展）
-    
-    相比标准 /api/search 接口，增强版提供：
-    - 可控的拼音搜索开关
-    - 搜索建议（基于拼音前缀的候选词）
-    - 更丰富的结果元数据
-    
-    Args:
-        query: 搜索关键词
-        include_pinyin: 是否启用拼音首字母搜索（默认 True）
-        top_k: 返回结果数量上限（默认 5）
-        
-    Returns:
-        JSON 格式的搜索结果和建议列表
-    """
+    """增强搜索，带拼音建议"""
     import re
     
     if not backend_state.search_engine or not backend_state.search_engine.vocab:
@@ -80,18 +60,17 @@ async def search_enhanced(
     query_stripped = query.strip()
     suggestions = []
     
-    # 生成拼音搜索建议（当输入为纯字母时）
+    # 输入纯字母时生成拼音搜索建议
     if include_pinyin and re.match(r'^[a-z]+$', query_stripped.lower()):
-        # 收集所有以查询为前缀的拼音键对应的标签作为建议
         for py_key in backend_state.search_engine._pinyin_index:
             if py_key.startswith(query_stripped.lower()) and py_key != query_stripped.lower():
-                for item in backend_state.search_engine._pinyin_index[py_key][:2]:  # 每个键最多取 2 个建议
+                for item in backend_state.search_engine._pinyin_index[py_key][:2]:
                     suggestion = {
                         "label": item["label"],
                         "pinyin_key": py_key,
                         "category_name": item.get("category_name", ""),
                     }
-                    # 建议去重
+                    # 去重
                     if not any(s["label"] == suggestion["label"] for s in suggestions):
                         suggestions.append(suggestion)
                     if len(suggestions) >= 8:  # 最多 8 条建议
@@ -116,7 +95,7 @@ async def search_enhanced(
 
 @router.get("/api/categories")
 async def get_categories() -> JSONResponse:
-    """获取所有类别信息"""
+    """获取所有类别"""
     if not backend_state.search_engine or not backend_state.search_engine.vocab:
         return JSONResponse(status_code=503, content={"success": False})
 

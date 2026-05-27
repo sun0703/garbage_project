@@ -1,4 +1,4 @@
-"""用户数据访问层 —— 封装 users 表的所有数据库操作"""
+"""用户数据访问，users 表"""
 
 import uuid
 import time
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class UserRepository:
-    """用户表静态仓库 —— 所有方法通过 db.conn 直接操作 sqlite3"""
+    """用户表仓库"""
 
     @staticmethod
     def create_user(
@@ -23,20 +23,7 @@ class UserRepository:
         oauth_id: str = "",
         phone: str = "",
     ) -> Optional[str]:
-        """创建普通用户，返回 user_id；失败返回 None
-
-        Args:
-            username:     用户名
-            password_hash: SHA-256 哈希后的密码
-            nickname:     昵称
-            avatar:       头像 URL
-            oauth_provider: OAuth 提供商
-            oauth_id:      OAuth 用户 ID
-            phone:        手机号
-
-        Returns:
-            成功返回 user_id(str)，失败返回 None
-        """
+        """创建用户，返回user_id"""
         try:
             db = get_db()
             user_id = uuid.uuid4().hex[:12]
@@ -57,14 +44,7 @@ class UserRepository:
 
     @staticmethod
     def get_user_by_id(user_id: str) -> Optional[Dict[str, Any]]:
-        """根据用户 ID 查询用户（不含 password_hash）
-
-        Args:
-            user_id: 用户 ID
-
-        Returns:
-            用户字典或 None
-        """
+        """按ID查用户（不含密码）"""
         try:
             db = get_db()
             row = db.fetchone(
@@ -80,14 +60,7 @@ class UserRepository:
 
     @staticmethod
     def get_user_by_id_with_password(user_id: str) -> Optional[Dict[str, Any]]:
-        """根据用户 ID 查询用户（含 password_hash，仅用于登录校验）
-
-        Args:
-            user_id: 用户 ID
-
-        Returns:
-            用户字典（含 password_hash）或 None
-        """
+        """按ID查用户（含密码，仅登录校验用）"""
         try:
             db = get_db()
             row = db.fetchone("SELECT * FROM users WHERE id = ?", (user_id,))
@@ -98,14 +71,7 @@ class UserRepository:
 
     @staticmethod
     def get_user_by_username(username: str) -> Optional[Dict[str, Any]]:
-        """根据用户名查询用户（含 password_hash）
-
-        Args:
-            username: 用户名
-
-        Returns:
-            用户字典或 None
-        """
+        """按用户名查用户"""
         try:
             db = get_db()
             row = db.fetchone(
@@ -119,14 +85,7 @@ class UserRepository:
 
     @staticmethod
     def check_username_exists(username: str) -> bool:
-        """检查用户名是否已存在
-
-        Args:
-            username: 用户名
-
-        Returns:
-            存在返回 True，否则 False
-        """
+        """用户名是否已存在"""
         try:
             db = get_db()
             return db.fetchone("SELECT id FROM users WHERE username = ?", (username,)) is not None
@@ -136,15 +95,7 @@ class UserRepository:
 
     @staticmethod
     def get_user_by_oauth(provider: str, oauth_id: str) -> Optional[Dict[str, Any]]:
-        """根据 OAuth 提供商和 ID 查询用户
-
-        Args:
-            provider: OAuth 提供商（如 'github'）
-            oauth_id: OAuth 用户唯一标识
-
-        Returns:
-            用户字典或 None
-        """
+        """按OAuth查用户"""
         try:
             db = get_db()
             row = db.fetchone(
@@ -158,14 +109,7 @@ class UserRepository:
 
     @staticmethod
     def update_last_login(user_id: str) -> bool:
-        """更新用户最后登录时间
-
-        Args:
-            user_id: 用户 ID
-
-        Returns:
-            成功返回 True
-        """
+        """更新最后登录时间"""
         try:
             db = get_db()
             db.execute(
@@ -180,15 +124,7 @@ class UserRepository:
 
     @staticmethod
     def update_last_login_and_avatar(user_id: str, avatar: str) -> bool:
-        """更新用户最后登录时间与头像
-
-        Args:
-            user_id: 用户 ID
-            avatar:  头像 URL
-
-        Returns:
-            成功返回 True
-        """
+        """更新登录时间和头像"""
         try:
             db = get_db()
             db.execute(
@@ -203,15 +139,7 @@ class UserRepository:
 
     @staticmethod
     def add_points(user_id: str, points: int) -> bool:
-        """为用户增加积分
-
-        Args:
-            user_id: 用户 ID
-            points:  增加的积分数
-
-        Returns:
-            成功返回 True
-        """
+        """加积分"""
         try:
             db = get_db()
             db.execute(
@@ -226,15 +154,7 @@ class UserRepository:
 
     @staticmethod
     def add_checkin_count(user_id: str, points: int = 5) -> bool:
-        """用户打卡计数 +1，积分增加指定值
-
-        Args:
-            user_id: 用户 ID
-            points:  获得积分（默认5）
-
-        Returns:
-            成功返回 True
-        """
+        """打卡计数+1，积分也加"""
         try:
             db = get_db()
             db.execute(
@@ -249,15 +169,7 @@ class UserRepository:
 
     @staticmethod
     def increment_quiz_correct(user_id: str, points: int = 3) -> bool:
-        """问答答对：正确数 +1、总数 +1、积分增加
-
-        Args:
-            user_id: 用户 ID
-            points:  增加积分数
-
-        Returns:
-            成功返回 True
-        """
+        """答对：正确数+1、总数+1、加积分"""
         try:
             db = get_db()
             db.execute(
@@ -272,14 +184,7 @@ class UserRepository:
 
     @staticmethod
     def increment_quiz_wrong(user_id: str) -> bool:
-        """问答答错：仅总数 +1
-
-        Args:
-            user_id: 用户 ID
-
-        Returns:
-            成功返回 True
-        """
+        """答错：仅总数+1"""
         try:
             db = get_db()
             db.execute(
@@ -294,14 +199,7 @@ class UserRepository:
 
     @staticmethod
     def get_rank_by_points(user_points: int) -> int:
-        """根据积分计算排名（积分高于当前值的用户数 + 1）
-
-        Args:
-            user_points: 当前用户积分
-
-        Returns:
-            排名（从 1 开始）
-        """
+        """根据积分算排名"""
         try:
             db = get_db()
             row = db.fetchone("SELECT COUNT(*) + 1 FROM users WHERE points > ?", (user_points,))
@@ -312,14 +210,7 @@ class UserRepository:
 
     @staticmethod
     def get_user_for_session(user_id: str) -> Optional[Dict[str, Any]]:
-        """会话验证时查询用户简要信息（不含敏感字段）
-
-        Args:
-            user_id: 用户 ID
-
-        Returns:
-            用户字典（id, username, nickname, avatar, points, checkin_count, quiz_correct, quiz_total）或 None
-        """
+        """会话验证时查用户简要信息"""
         try:
             db = get_db()
             row = db.fetchone(
@@ -334,14 +225,7 @@ class UserRepository:
 
     @staticmethod
     def get_user_by_phone(phone: str) -> Optional[Dict[str, Any]]:
-        """根据手机号查询用户
-
-        Args:
-            phone: 手机号
-
-        Returns:
-            用户字典或 None
-        """
+        """按手机号查用户"""
         try:
             db = get_db()
             row = db.fetchone(
@@ -356,14 +240,7 @@ class UserRepository:
 
     @staticmethod
     def check_phone_exists(phone: str) -> bool:
-        """检查手机号是否已注册
-
-        Args:
-            phone: 手机号
-
-        Returns:
-            已注册返回 True，否则 False
-        """
+        """手机号是否已注册"""
         try:
             db = get_db()
             row = db.fetchone("SELECT COUNT(*) FROM users WHERE phone = ? AND phone != ''", (phone,))

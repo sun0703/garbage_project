@@ -1,4 +1,4 @@
-"""打卡数据访问层 —— 封装 checkins 表的所有数据库操作"""
+"""打卡数据访问，checkins 表"""
 
 import uuid
 import time
@@ -11,18 +11,11 @@ logger = logging.getLogger(__name__)
 
 
 class CheckinRepository:
-    """打卡表静态仓库"""
+    """打卡表仓库"""
 
     @staticmethod
     def check_today_exists(user_id: str) -> bool:
-        """检查用户今日是否已打卡
-
-        Args:
-            user_id: 用户 ID
-
-        Returns:
-            已打卡返回 True
-        """
+        """今天是否已打卡"""
         try:
             db = get_db()
             today_start = time.time() - (time.time() % 86400)
@@ -45,20 +38,7 @@ class CheckinRepository:
         points_earned: int = 5,
         photo_hash: str = "",
     ) -> Optional[str]:
-        """创建打卡记录
-
-        Args:
-            user_id:       用户 ID
-            point_id:      投放点 ID
-            lat:           纬度
-            lng:           经度
-            category:      垃圾类别
-            points_earned: 获得积分
-            photo_hash:    拍照哈希
-
-        Returns:
-            打卡记录 ID，失败返回 None
-        """
+        """创建打卡记录"""
         try:
             db = get_db()
             checkin_id = uuid.uuid4().hex[:12]
@@ -76,14 +56,7 @@ class CheckinRepository:
 
     @staticmethod
     def get_today_checkin(user_id: str) -> Optional[Dict[str, Any]]:
-        """获取用户今日打卡记录
-
-        Args:
-            user_id: 用户 ID
-
-        Returns:
-            今日打卡记录字典或 None
-        """
+        """获取今日打卡记录"""
         try:
             db = get_db()
             today_start = time.time() - (time.time() % 86400)
@@ -100,16 +73,7 @@ class CheckinRepository:
     def get_history(
         user_id: str, page: int = 1, page_size: int = 20
     ) -> Tuple[List[Dict[str, Any]], int]:
-        """分页获取用户打卡历史
-
-        Args:
-            user_id:   用户 ID
-            page:      页码
-            page_size: 每页条数
-
-        Returns:
-            (记录列表, 总条数)
-        """
+        """分页获取打卡历史"""
         try:
             db = get_db()
             offset = (page - 1) * page_size
@@ -126,15 +90,7 @@ class CheckinRepository:
 
     @staticmethod
     def get_by_id_and_user(checkin_id: str, user_id: str) -> Optional[Dict[str, Any]]:
-        """根据打卡 ID 和用户 ID 获取打卡记录
-
-        Args:
-            checkin_id: 打卡记录 ID
-            user_id:    用户 ID
-
-        Returns:
-            打卡记录字典或 None
-        """
+        """按ID+用户查打卡记录"""
         try:
             db = get_db()
             row = db.fetchone(
@@ -148,20 +104,12 @@ class CheckinRepository:
 
     @staticmethod
     def get_consecutive_days(user_id: str, lookback_days: int = 30) -> int:
-        """计算用户连续打卡天数（从今天往前逐日检查，遇到断签即停止）
-
-        Args:
-            user_id:       用户 ID
-            lookback_days: 最大回溯天数
-
-        Returns:
-            连续打卡天数
-        """
+        """连续打卡天数，从今天往前数，断签就停"""
         try:
             db = get_db()
             consecutive = 0
             now = time.time()
-            today_start = now - (now % 86400) + 8 * 3600  # UTC+8 当天0点
+            today_start = now - (now % 86400) + 8 * 3600  # UTC+8
 
             for i in range(lookback_days):
                 day_start = today_start - i * 86400
@@ -173,7 +121,7 @@ class CheckinRepository:
                 if row and row["cnt"] > 0:
                     consecutive += 1
                 else:
-                    break  # 遇到断签即停止
+                    break
             return consecutive
         except Exception as e:
             logger.error("计算连续打卡天数失败 [%s]: %s", user_id, e)
@@ -181,14 +129,7 @@ class CheckinRepository:
 
     @staticmethod
     def get_user_stats(user_id: str) -> Tuple[int, int]:
-        """获取用户打卡统计：总打卡次数、总获得积分
-
-        Args:
-            user_id: 用户 ID
-
-        Returns:
-            (总打卡次数, 总获得积分)
-        """
+        """用户打卡统计：(总次数, 总积分)"""
         try:
             db = get_db()
             row = db.fetchone(

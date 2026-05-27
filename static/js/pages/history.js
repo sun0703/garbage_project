@@ -1,19 +1,10 @@
-/**
- * 历史记录页视图（History Page）
- *
- * 职责：展示用户过往的识别历史记录列表；
- *       支持单条删除、一键清空（二次确认）、点击回看详情（复用 ResultCard）；
- *       空状态引导、顶部统计信息。
- * 容器：#page-history
- */
+// 历史记录页 — 列表展示 + 单条删除/一键清空 + 回看详情
 
-// ==================== 模块依赖导入 ====================
 import { store } from '../store.js';
 import { api } from '../api.js';
 import { showToast, confirm, showModal } from '../utils/ui.js';
 import { escapeHtml } from '../utils/escape.js';
 
-// ==================== 页面类定义 ====================
 export class HistoryPage {
     /** 页面根容器 DOM 引用 */
     container = null;
@@ -148,7 +139,7 @@ export class HistoryPage {
         this.statsContainer = document.getElementById('statsCount');
     }
 
-    // ==================== 私有方法：数据加载 ====================
+    /* ---- 数据加载 ---- */
 
     /**
      * 从本地存储加载历史记录 (F-1.5.2)
@@ -179,7 +170,7 @@ export class HistoryPage {
         }
     }
 
-    // ==================== 私有方法：统计更新 ====================
+    /* ---- 统计更新 ---- */
 
     /**
      * 更新顶部统计信息显示

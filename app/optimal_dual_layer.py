@@ -1,14 +1,5 @@
 """
-最优双层架构融合分类器 v2.0
-========================
-
-基于三个模型的最优组合：
-- Layer 1: best v2.pt (78% mAP, 12类→4大类粗分)
-- Layer 2: garbage_yolov8m_best.pt (63% mAP, 40类精细)
-- 智能融合: 类别映射 + 置信度加权 + 一致性验证
-
-作者: AI Assistant
-日期: 2026-05-26
+最优双层架构融合分类器，V2粗分类+主模型精细化+智能融合
 """
 
 import logging
@@ -203,28 +194,28 @@ class OptimalDualLayerFusion:
         results_main = []
         results_sahi = []
 
-        # ========== Layer 1: V2粗分类 ==========
+        # Layer 1: V2粗分类
         if self.v2_loaded:
             logger.info("  [Layer 1/V2] 高精度粗分类中...")
             results_v2 = self._v2_coarse_classify(image)
 
-        # ========== Layer 2: 主模型精细分类 ==========
+        # Layer 2: 主模型精细分类
         if self.main_loaded:
             logger.info("  [Layer 2/Main] 精细分类中...")
             results_main = self.main_detector.detect(image, top_k=5)
 
-        # ========== 可选: SAHI辅助 ==========
+        # 可选: SAHI辅助
         if self.sahi_engine:
             logger.info("  [Layer 2.5/SAHI] 切片增强...")
             results_sahi = self.sahi_engine.detect_with_slicing(image, top_k=3)
 
-        # ========== 双层级联补充 ==========
+        # 双层级联补充
         logger.info("  [Layer 3/Cascade] 级联精细化...")
         cascade_results = self.cascade_classifier.classify(
             image, yolo_results=results_main, top_k=3
         )
 
-        # ========== 智能融合 ==========
+        # 智能融合
         final_result = self._smart_fusion(
             results_v2, results_main, results_sahi, cascade_results
         )
@@ -451,7 +442,7 @@ class OptimalDualLayerFusion:
         )
 
 
-# ==================== 工厂函数 ====================
+# 工厂函数
 def create_optimal_classifier(auto_mode: bool = True) -> Optional[OptimalDualLayerFusion]:
     """
     工厂函数：创建最优双层架构分类器

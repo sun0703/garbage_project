@@ -1,20 +1,5 @@
 """
-最优双层架构模型配置 v2.0
-========================
-
-设计理念：
-- Layer 1 (粗分类): 使用 best v2.pt 高精度模型进行4大类粗分
-- Layer 2 (精细分类): 使用 garbage_yolov8m_best.pt 进行40类细粒度识别
-- Fusion: 智能融合两个模型的优势
-
-优势：
-1. V2模型提供高置信度的4大类判断 (78% mAP)
-2. 主模型提供完整的40类细粒度识别 (63% mAP)
-3. 双模型交叉验证提高准确率
-4. 类别映射保证一致性
-
-作者: AI Assistant
-日期: 2026-05-26
+最优双层架构的模型配置和类别映射
 """
 
 from pathlib import Path
@@ -25,14 +10,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-# ==================== 模型配置 ====================
+# 模型配置
 class ModelConfig:
     """模型配置常量"""
 
     # 项目根目录
     PROJECT_ROOT = Path(__file__).parent.parent
 
-    # ========== Layer 1: 粗分类模型 (best v2.pt) ==========
+    # Layer 1: 粗分类模型 (best v2.pt)
     LAYER1_MODEL_PATH = str(PROJECT_ROOT / "models" / "best v2.pt")
     LAYER1_CONF_THRESHOLD = 0.25  # 较高阈值确保高质量粗分类
     LAYER1_IMG_SIZE = 1280  # 使用模型原生高分辨率
@@ -83,17 +68,17 @@ class ModelConfig:
         10: ("Other", "其他垃圾"),    # trash → 其他垃圾
     }
 
-    # ========== Layer 2: 精细分类模型 (garbage_yolov8m_best.pt) ==========
+    # Layer 2: 精细分类模型 (garbage_yolov8m_best.pt)
     LAYER2_MODEL_PATH = str(PROJECT_ROOT / "models" / "garbage_yolov8m_best.pt")
     LAYER2_CONF_THRESHOLD = 0.15  # 较低阈值捕获更多细节
     LAYER2_IMG_SIZE = 640  # 标准输入尺寸
     LAYER2_DESCRIPTION = "YOLOv8M Fine-Grained Classifier (40 classes)"
 
-    # ========== 备选: 轻量模型 (garbage_datasets.pt) ==========
+    # 备选: 轻量模型 (garbage_datasets.pt)
     LIGHTWEIGHT_MODEL_PATH = str(PROJECT_ROOT / "models" / "garbage_datasets.pt")
     LIGHTWEIGHT_DESCRIPTION = "YOLOv8n Lightweight Model (Mobile/Edge)"
 
-    # ========== 融合策略 ==========
+    # 融合策略
     FUSION_STRATEGY = "hybrid_voting_with_mapping"
 
     # 模型可靠性权重 (根据mAP调整)
@@ -115,7 +100,7 @@ class ModelConfig:
     }
 
 
-# ==================== V2 → 40类 详细映射表 ====================
+# V2 → 40类 详细映射表
 class CategoryMapper:
     """
     双向类别映射器
@@ -195,7 +180,7 @@ class CategoryMapper:
         return expected_v2 == v2_pred
 
 
-# ==================== 架构配置导出 ====================
+# 架构配置导出
 def get_optimal_architecture_config() -> Dict:
     """
     获取最优双层架构的完整配置

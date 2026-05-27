@@ -1,4 +1,4 @@
-"""活动数据访问层 —— 封装 activities + activity_signups 表的数据库操作"""
+"""活动数据访问，activities + activity_signups 表"""
 
 import uuid
 import time
@@ -11,9 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class ActivityRepository:
-    """活动表静态仓库 —— 管理 activities 和 activity_signups 两张表"""
-
-    # ==================== 活动 CRUD ====================
+    """活动表仓库"""
 
     @staticmethod
     def list_activities(
@@ -21,16 +19,7 @@ class ActivityRepository:
         page: int = 1,
         page_size: int = 10,
     ) -> Tuple[List[Dict[str, Any]], int]:
-        """分页获取活动列表
-
-        Args:
-            status:    活动状态过滤，空字符串表示不过滤
-            page:      页码
-            page_size: 每页条数
-
-        Returns:
-            (活动列表, 总条数)
-        """
+        """分页获取活动列表，返回(列表, 总数)"""
         try:
             db = get_db()
             offset = (page - 1) * page_size
@@ -55,14 +44,7 @@ class ActivityRepository:
 
     @staticmethod
     def get_activity_by_id(activity_id: str) -> Optional[Dict[str, Any]]:
-        """根据 ID 获取活动详情
-
-        Args:
-            activity_id: 活动 ID
-
-        Returns:
-            活动字典或 None
-        """
+        """按ID查活动详情"""
         try:
             db = get_db()
             row = db.fetchone("SELECT * FROM activities WHERE id = ?", (activity_id,))
@@ -73,14 +55,7 @@ class ActivityRepository:
 
     @staticmethod
     def get_activity_creator(activity_id: str) -> Optional[str]:
-        """获取活动的创建者 ID
-
-        Args:
-            activity_id: 活动 ID
-
-        Returns:
-            创建者用户 ID 或 None
-        """
+        """获取活动创建者ID"""
         try:
             db = get_db()
             row = db.fetchone("SELECT creator_id FROM activities WHERE id = ?", (activity_id,))
@@ -101,22 +76,7 @@ class ActivityRepository:
         creator_id: str,
         status: str = "draft",
     ) -> Optional[str]:
-        """创建活动
-
-        Args:
-            title:            活动标题
-            description:      活动描述
-            cover_image:      封面图 URL
-            location:         活动地点
-            start_time:       开始时间 (Unix 时间戳)
-            end_time:         结束时间 (Unix 时间戳)
-            max_participants: 最大参与人数
-            creator_id:       创建者用户 ID
-            status:           活动状态
-
-        Returns:
-            活动 ID，失败返回 None
-        """
+        """创建活动，返回活动ID"""
         try:
             db = get_db()
             activity_id = uuid.uuid4().hex[:12]
@@ -147,22 +107,7 @@ class ActivityRepository:
         max_participants: int,
         status: str,
     ) -> bool:
-        """更新活动信息
-
-        Args:
-            activity_id:      活动 ID
-            title:            活动标题
-            description:      活动描述
-            cover_image:      封面图 URL
-            location:         活动地点
-            start_time:       开始时间
-            end_time:         结束时间
-            max_participants: 最大参与人数
-            status:           活动状态
-
-        Returns:
-            成功返回 True
-        """
+        """更新活动信息"""
         try:
             db = get_db()
             db.execute(
@@ -179,14 +124,7 @@ class ActivityRepository:
 
     @staticmethod
     def delete_activity(activity_id: str) -> bool:
-        """删除活动及其所有报名记录
-
-        Args:
-            activity_id: 活动 ID
-
-        Returns:
-            成功返回 True
-        """
+        """删除活动及其报名记录"""
         try:
             db = get_db()
             db.execute("DELETE FROM activity_signups WHERE activity_id = ?", (activity_id,))
@@ -200,14 +138,7 @@ class ActivityRepository:
 
     @staticmethod
     def increment_participants(activity_id: str) -> bool:
-        """报名成功后，活动参与人数 +1
-
-        Args:
-            activity_id: 活动 ID
-
-        Returns:
-            成功返回 True
-        """
+        """参与人数+1"""
         try:
             db = get_db()
             db.execute(
@@ -222,14 +153,7 @@ class ActivityRepository:
 
     @staticmethod
     def decrement_participants(activity_id: str) -> bool:
-        """取消报名后，活动参与人数 -1
-
-        Args:
-            activity_id: 活动 ID
-
-        Returns:
-            成功返回 True
-        """
+        """参与人数-1，不会减到负数"""
         try:
             db = get_db()
             db.execute(
@@ -243,19 +167,11 @@ class ActivityRepository:
             logger.error("减少活动参与人数失败 [%s]: %s", activity_id, e)
             return False
 
-    # ==================== 报名相关 ====================
+    # 报名相关
 
     @staticmethod
     def check_user_signed_up(activity_id: str, user_id: str) -> bool:
-        """检查用户是否已报名指定活动
-
-        Args:
-            activity_id: 活动 ID
-            user_id:     用户 ID
-
-        Returns:
-            已报名返回 True
-        """
+        """检查用户是否已报名"""
         try:
             db = get_db()
             row = db.fetchone(
@@ -269,15 +185,7 @@ class ActivityRepository:
 
     @staticmethod
     def create_signup(activity_id: str, user_id: str) -> Optional[str]:
-        """创建活动报名记录
-
-        Args:
-            activity_id: 活动 ID
-            user_id:     用户 ID
-
-        Returns:
-            报名记录 ID，失败返回 None
-        """
+        """创建报名记录"""
         try:
             db = get_db()
             signup_id = uuid.uuid4().hex[:12]
@@ -294,15 +202,7 @@ class ActivityRepository:
 
     @staticmethod
     def delete_signup(activity_id: str, user_id: str) -> bool:
-        """取消活动报名
-
-        Args:
-            activity_id: 活动 ID
-            user_id:     用户 ID
-
-        Returns:
-            成功返回 True
-        """
+        """取消报名"""
         try:
             db = get_db()
             db.execute(
@@ -315,19 +215,11 @@ class ActivityRepository:
             logger.error("取消报名失败 [%s/%s]: %s", activity_id, user_id, e)
             return False
 
-    # ==================== 签到核销相关 ====================
+    # 签到核销
 
     @staticmethod
     def get_signup_record(activity_id: str, user_id: str) -> Optional[Dict[str, Any]]:
-        """获取用户对指定活动的报名记录（含 status 和 checked_at）
-
-        Args:
-            activity_id: 活动 ID
-            user_id:     用户 ID
-
-        Returns:
-            报名记录字典（id, status, checked_at）或 None
-        """
+        """获取报名记录"""
         try:
             db = get_db()
             row = db.fetchone(
@@ -341,14 +233,7 @@ class ActivityRepository:
 
     @staticmethod
     def get_signup_checkin_time(signup_id: str) -> Optional[str]:
-        """获取报名记录的签到时间
-
-        Args:
-            signup_id: 报名记录 ID
-
-        Returns:
-            签到时间字符串或 None
-        """
+        """获取签到时间"""
         try:
             db = get_db()
             row = db.fetchone("SELECT checked_at FROM activity_signups WHERE id = ?", (signup_id,))
@@ -359,14 +244,7 @@ class ActivityRepository:
 
     @staticmethod
     def mark_checked_in(signup_id: str) -> Optional[str]:
-        """执行签到核销：更新报名状态为 checked_in，记录签到时间
-
-        Args:
-            signup_id: 报名记录 ID
-
-        Returns:
-            签到时间字符串，失败返回 None
-        """
+        """签到核销，返回签到时间"""
         try:
             db = get_db()
             checkin_time = time.strftime("%Y-%m-%dT%H:%M:%SZ")

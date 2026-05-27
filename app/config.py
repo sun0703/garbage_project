@@ -1,7 +1,4 @@
-"""
-应用配置管理模块
-支持从环境变量和 .env 文件读取配置，pydantic-settings 自动加载
-"""
+"""应用配置，从环境变量和.env读取"""
 
 from pathlib import Path
 from typing import Optional
@@ -39,42 +36,42 @@ class Settings:
     def _init_config(self):
         import os
 
-        # ==================== 服务器配置 ====================
+        # -- 服务器 --
         self.host: str = os.getenv("HOST", "0.0.0.0")
         self.port: int = int(os.getenv("PORT", "8001"))
         self.log_level: str = os.getenv("LOG_LEVEL", "info")
         self.reload: bool = os.getenv("RELOAD", "true").lower() == "true"
 
-        # ==================== 数据库配置 ====================
+        # -- 数据库 --
         self.database_path: str = os.getenv("DATABASE_PATH", "data/app.db")
         # PostgreSQL 连接串（生产环境，Docker Compose 自动注入）
         self.database_url: str = os.getenv("DATABASE_URL", "")
 
-        # ==================== Redis 配置 ====================
+        # -- Redis --
         self.redis_url: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
         self.redis_password: str = os.getenv("REDIS_PASSWORD", "")
 
-        # ==================== 监控配置 ====================
+        # -- 监控 --
         self.enable_metrics: bool = os.getenv("ENABLE_METRICS", "true").lower() == "true"
         self.sentry_dsn: str = os.getenv("SENTRY_DSN", "")
         self.log_format: str = os.getenv("LOG_FORMAT", "text")  # text 或 json
 
-        # ==================== 模型配置 ====================
+        # -- 模型 --
         self.model_path: Path = Path(os.getenv("MODEL_PATH", str(BASE_DIR / "models" / "garbage_yolov8m_best.pt")))
         self.use_yolo_pt_model: bool = os.getenv("USE_YOLO_PT_MODEL", "true").lower() == "true"
         self.yolo_input_size: int = int(os.getenv("YOLO_INPUT_SIZE", "640"))
         self.confidence_threshold: float = float(os.getenv("CONFIDENCE_THRESHOLD", "0.25"))
 
-        # ==================== 路径配置 ====================
+        # -- 路径 --
         self.vocab_path: Path = Path(os.getenv("VOCAB_PATH", str(BASE_DIR / "data" / "waste.json")))
         self.static_dir: Path = Path(os.getenv("STATIC_DIR", str(BASE_DIR / "static")))
         self.index_html_path: Path = self.static_dir / "index.html"
 
-        # ==================== 安全配置 ====================
+        # -- 安全 --
         self.secret_key: str = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
         self.cors_origins: list = self._parse_cors(os.getenv("CORS_ORIGINS", "*"))
 
-        # ==================== OAuth 配置 ====================
+        # -- OAuth --
         self.wechat_app_id: str = os.getenv("WECHAT_APP_ID", "")
         self.wechat_app_secret: str = os.getenv("WECHAT_APP_SECRET", "")
         self.wechat_redirect_uri: str = os.getenv("WECHAT_REDIRECT_URI", "")
@@ -82,11 +79,11 @@ class Settings:
         self.github_client_secret: str = os.getenv("GITHUB_CLIENT_SECRET", "")
         self.github_redirect_uri: str = os.getenv("GITHUB_REDIRECT_URI", "")
 
-        # ==================== 缓存配置 ====================
+        # -- 缓存 --
         self.cache_max_items: int = int(os.getenv("CACHE_MAX_ITEMS", "500"))
         self.cache_ttl_hours: int = int(os.getenv("CACHE_TTL_HOURS", "24"))
 
-        # ==================== 历史记录配置 ====================
+        # -- 历史记录 --
         self.history_max_items: int = int(os.getenv("HISTORY_MAX_ITEMS", "200"))
         self.history_backup_path: Optional[Path] = None
         history_path = os.getenv("HISTORY_BACKUP_PATH", str(BASE_DIR / "data" / "history.json"))

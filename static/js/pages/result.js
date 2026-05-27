@@ -1,20 +1,12 @@
-/**
- * 识别结果展示页视图（Result Page）
- *
- * 职责：渲染 AI 识别结果，包含 ResultCard 组件、CategoryTag 组件；
- *       提供操作按钮组（继续识别/分享结果/返回首页）；
- *       自动保存识别记录到本地历史 (F-1.5.1)。
- * 容器：#page-result
- */
+// 识别结果展示页 — ResultCard + 操作按钮
+// 自动保存识别记录到本地历史
 
-// ==================== 模块依赖导入 ====================
 import { store } from '../store.js';
 import { showToast, showModal, confirm } from '../utils/ui.js';
 import { ResultCard } from '../components/result-card.js';
 import { CategoryTag } from '../components/category-tag.js';
 import { storage } from '../utils/storage.js';
 
-// ==================== 页面类定义 ====================
 export class ResultPage {
     /** 页面根容器 DOM 引用 */
     container = null;
@@ -105,13 +97,7 @@ export class ResultPage {
         console.log('[ResultPage] 结果页已销毁');
     }
 
-    // ==================== 私有方法：渲染 ====================
-
-    /**
-     * 渲染结果页面 HTML 骨架
-     * 包含导航栏、结果卡片容器、分类标签容器、操作按钮组
-     * @private
-     */
+    /* ---- 渲染 ---- */
     _render() {
         /* 检测是否为演示模式（从API返回数据中读取） */
         const isDemoMode = this._resultData?.is_demo_mode || false;
@@ -183,13 +169,7 @@ export class ResultPage {
         `;
     }
 
-    // ==================== 私有方法：组件渲染 ====================
-
-    /**
-     * 渲染 ResultCard 和 CategoryTag 组件
-     * F-1.3.1 ~ F-1.3.5 全部任务在此完成
-     * @private
-     */
+    /* ---- 组件渲染 ---- */
     _renderComponents() {
         /* ---- 渲染主结果卡片 (ResultCard) ---- */
         const cardContainer = document.getElementById('resultCardContainer');
@@ -208,27 +188,22 @@ export class ResultPage {
         }
     }
 
-    // ==================== 私有方法：事件绑定 ====================
-
-    /**
-     * 绑定操作按钮事件
-     * @private
-     */
+    /* ---- 事件绑定 ---- */
     _bindEvents() {
-        this._boundHandlers.guide = () => this._handleGuide();
+        this._boundHandlers.guide = () => this._openGuideDetail();
         const guideBtn = document.getElementById('guideDetailBtn');
         if (guideBtn) {
             guideBtn.addEventListener('click', this._boundHandlers.guide);
         }
 
-        this._boundHandlers.continue = () => this._handleContinue();
+        this._boundHandlers.continue = () => this._goContinue();
         const continueBtn = document.getElementById('continueBtn');
         if (continueBtn) {
             continueBtn.addEventListener('click', this._boundHandlers.continue);
         }
 
         /* 分享结果 — 复制分享文本到剪贴板 */
-        this._boundHandlers.share = () => this._handleShare();
+        this._boundHandlers.share = () => this._copyShareText();
         const shareBtn = document.getElementById('shareBtn');
         if (shareBtn) {
             shareBtn.addEventListener('click', this._boundHandlers.share);
@@ -251,14 +226,8 @@ export class ResultPage {
         }
     }
 
-    // ==================== 私有方法：操作处理 ====================
-
-    /**
-     * 处理「继续识别」操作
-     * 清除当前图片和结果状态，跳转回首页
-     * @private
-     */
-    _handleGuide() {
+    /* ---- 操作处理 ---- */
+    _openGuideDetail() {
         const keyword = this._resultData?.label_cn || this._resultData?.label_en || '';
         if (keyword) {
             store.setState('currentItemKeyword', keyword);
@@ -268,7 +237,7 @@ export class ResultPage {
         }
     }
 
-    _handleContinue() {
+    _goContinue() {
         /* 清除 store 中的图片和结果数据 */
         store.setState('selectedImage', null);
         store.setState('selectedFile', null);
@@ -284,7 +253,7 @@ export class ResultPage {
      * 使用 navigator.clipboard API（需 HTTPS 环境）
      * @private
      */
-    async _handleShare() {
+    async _copyShareText() {
         const shareText = this._getShareText();
 
         try {
@@ -318,13 +287,7 @@ export class ResultPage {
         }
     }
 
-    /**
-     * 构造分享用的文本内容
-     * 格式化输出识别结果的关键信息
-     *
-     * @returns {string} 格式化的分享文本
-     * @private
-     */
+    // 构造分享文本
     _getShareText() {
         const data = this._resultData || {};
         const label = data.label_cn || data.label_en || '未知物品';

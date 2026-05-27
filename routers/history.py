@@ -1,9 +1,4 @@
-"""
-历史记录路由模块
-
-提供识别历史的分页查询、单条删除和清空接口。
-依赖 history_store 全局单例（通过 backend_state 获取）。
-"""
+"""历史记录接口"""
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
@@ -16,7 +11,7 @@ router = APIRouter()
 
 @router.get("/api/history")
 async def get_history(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=50)) -> JSONResponse:
-    """获取识别历史记录（分页）"""
+    """分页获取历史"""
     if not backend_state.history_store:
         return JSONResponse(content={
             "success": True,
@@ -31,7 +26,7 @@ async def get_history(page: int = Query(1, ge=1), page_size: int = Query(20, ge=
 
 @router.delete("/api/history/{record_id}")
 async def delete_history(record_id: str) -> JSONResponse:
-    """删除单条历史记录"""
+    """删除单条记录"""
     if not backend_state.history_store:
         return JSONResponse(
             status_code=404,
@@ -49,7 +44,7 @@ async def delete_history(record_id: str) -> JSONResponse:
 
 @router.delete("/api/history")
 async def clear_history() -> JSONResponse:
-    """清空全部历史记录"""
+    """清空全部历史"""
     if not backend_state.history_store:
         return JSONResponse(
             status_code=404,
@@ -61,7 +56,7 @@ async def clear_history() -> JSONResponse:
 
 @router.get("/api/points/history")
 async def get_points_history(request: Request, page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=50)):
-    """获取用户积分变动历史"""
+    """积分变动历史"""
     from routers.auth import _get_current_user
 
     user = _get_current_user(request)
@@ -74,7 +69,7 @@ async def get_points_history(request: Request, page: int = Query(1, ge=1), page_
         db = get_db()
         offset = (page - 1) * page_size
 
-        # 统计两个表的联合总记录数（与下方UNION ALL查询保持一致）
+        # 打卡+答题的联合总记录数
         total_row = db.fetchone("""
             SELECT COUNT(*) as count FROM (
                 SELECT id FROM checkins WHERE user_id = ?

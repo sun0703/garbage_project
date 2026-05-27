@@ -1,7 +1,4 @@
-"""
-用户认证路由模块
-包含注册、登录、登出、OAuth 第三方登录、当前用户信息等接口
-"""
+"""用户认证相关路由"""
 
 import hashlib
 import logging
@@ -28,11 +25,11 @@ class UserSettingsRequest(BaseModel):
     nickname: str = ""
     avatar: str = ""
 
-# ==================== 会话常量 ====================
+# 会话配置
 SESSION_COOKIE_NAME = "session_id"
 SESSION_EXPIRE_SECONDS = 86400 * 7
 
-# ==================== OAuth 配置（生产环境应从环境变量读取） ====================
+# OAuth配置，生产环境记得从环境变量读
 OAUTH_CONFIG = {
     "wechat": {
         "enabled": False,
@@ -58,7 +55,7 @@ OAUTH_CONFIG = {
 
 
 def _hash_password(password: str) -> str:
-    """对密码进行 SHA-256 哈希"""
+    # SHA-256哈希，先这么用着
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
 

@@ -1,12 +1,5 @@
-/**
- * 搜索结果页视图（Search Page）
- *
- * 职责：提供搜索框（autofocus）、从 URL hash 解析查询参数、
- *       执行搜索请求并渲染结果列表，支持点击结果项跳转详情。
- * 容器：#page-search
- */
+// 搜索结果页 — 搜索框 + 结果列表 + 搜索历史
 
-// ==================== 模块依赖导入 ====================
 import { store } from '../store.js';
 import { api } from '../api.js';
 import { showToast, showLoading, hideLoading } from '../utils/ui.js';
@@ -14,7 +7,6 @@ import { escapeHtml } from '../utils/escape.js';
 import { ConfusingPairCard } from '../components/confusing-pair-card.js';
 import { SearchSuggest } from '../components/search-suggest.js';
 
-// ==================== 页面类定义 ====================
 export class SearchPage {
     /** 页面根容器 DOM 引用 */
     container = null;
@@ -126,13 +118,7 @@ export class SearchPage {
         console.log('[SearchPage] 搜索页已销毁');
     }
 
-    // ==================== 私有方法：URL 参数解析 ====================
-
-    /**
-     * 从 URL hash 中解析查询参数
-     * 支持格式：#/search?q=关键词 或从 store 读取 searchQuery
-     * @private
-     */
+    
     _parseQueryParams() {
         /* 优先从 URL hash 解析 */
         const hash = window.location.hash || '';
@@ -147,13 +133,7 @@ export class SearchPage {
         }
     }
 
-    // ==================== 私有方法：渲染 ====================
-
-    /**
-     * 渲染搜索页面 HTML 结构
-     * 包含导航栏、搜索框、结果列表区、空状态提示
-     * @private
-     */
+    
     _render() {
         this.container.innerHTML = `
             <!-- 导航栏 -->
@@ -194,12 +174,7 @@ export class SearchPage {
         `;
     }
 
-    // ==================== 私有方法：DOM 缓存 ====================
-
-    /**
-     * 缓存高频使用的 DOM 元素引用
-     * @private
-     */
+    
     _cacheDOM() {
         this.searchInput = document.getElementById('searchPageInput');
         this.resultsContainer = document.getElementById('searchResultsArea');
@@ -230,12 +205,7 @@ export class SearchPage {
         }, 100);
     }
 
-    // ==================== 私有方法：事件绑定 ====================
-
-    /**
-     * 绑定全部交互事件
-     * @private
-     */
+    
     _bindEvents() {
         /* Enter 键触发搜索 */
         this._boundHandlers.keydown = (e) => {
@@ -287,15 +257,7 @@ export class SearchPage {
         }
     }
 
-    // ==================== 私有方法：搜索核心逻辑 ====================
-
-    /**
-     * 执行搜索请求
-     * 流程：加载状态 → API调用 → 渲染结果/显示空状态
-     *
-     * @param {string} query - 搜索关键词
-     * @private
-     */
+    
     async _doSearch(query) {
         /* 防止重复搜索和空查询 */
         if (this._searching || !query || !query.trim()) return;
@@ -349,15 +311,7 @@ export class SearchPage {
         }
     }
 
-    // ==================== 私有方法：结果渲染 ====================
-
-    /**
-     * 渲染搜索结果列表
-     * 每项显示：图标 + 名称 + 类别 + 相似度分数
-     *
-     * @param {Array<Object>} results - 搜索结果数组
-     * @private
-     */
+    
     _renderResults(results) {
         if (!this.resultsContainer) return;
         /* 隐藏搜索历史区域 */
@@ -450,13 +404,7 @@ export class SearchPage {
         }
     }
 
-    /**
-     * 为搜索结果列表项绑定点击事件
-     * 点击后存储结果数据并跳转到结果展示页
-     *
-     * @param {Array<Object>} results - 原始结果数据数组
-     * @private
-     */
+    // 点击结果项跳转详情
     _bindResultItemEvents(results) {
         const items = this.resultsContainer?.querySelectorAll('.search-result-item');
         if (!items) return;
@@ -480,13 +428,7 @@ export class SearchPage {
         });
     }
 
-    /**
-     * 渲染空状态提示
-     * 当搜索无匹配结果时显示友好提示
-     *
-     * @param {string} query - 用户搜索的关键词
-     * @private
-     */
+    // 没搜到东西的提示
     _renderEmptyState(query) {
         if (!this.resultsContainer) return;
 
@@ -516,13 +458,7 @@ export class SearchPage {
         this.resultsContainer.appendChild(this.emptyState);
     }
 
-    /**
-     * 渲染错误状态
-     * 搜索请求失败时显示错误信息
-     *
-     * @param {string} errorMsg - 错误提示文本
-     * @private
-     */
+    // 搜索出错了
     _renderErrorState(errorMsg) {
         if (!this.resultsContainer) return;
 
@@ -550,7 +486,7 @@ export class SearchPage {
         }
     }
 
-    // ==================== F-2.2.4 搜索历史 ====================
+    /* ---- 搜索历史 ---- */
 
     _getSearchHistory() {
         try {

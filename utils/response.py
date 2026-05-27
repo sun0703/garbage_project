@@ -1,7 +1,4 @@
-"""
-统一 API 响应工具模块
-提供标准化的成功/错误响应工厂函数，消除路由中的重复模式
-"""
+"""统一API响应格式"""
 
 import time
 from fastapi.responses import JSONResponse
@@ -12,14 +9,7 @@ def success_response(
     message: str = None,
     status_code: int = 200,
 ) -> JSONResponse:
-    """
-    构建成功响应
-
-    :param data: 业务数据字典，自动设置 success=True
-    :param message: 可选的成功提示消息
-    :param status_code: HTTP 状态码，默认 200
-    :return: JSONResponse 对象
-    """
+    """成功响应"""
     body = {"success": True, "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ")}
     if data:
         body.update(data)
@@ -33,14 +23,7 @@ def error_response(
     message: str,
     status_code: int = 400,
 ) -> JSONResponse:
-    """
-    构建标准错误响应
-
-    :param code: 错误码（如 E001、E002）
-    :param message: 用户可读的错误描述
-    :param status_code: HTTP 状态码，默认 400
-    :return: JSONResponse 对象
-    """
+    """错误响应"""
     return JSONResponse(
         status_code=status_code,
         content={

@@ -1,7 +1,4 @@
-"""
-视觉推理引擎
-支持ONNX和PyTorch双引擎的图像分类推理
-"""
+"""视觉推理引擎，支持ONNX和PyTorch双引擎"""
 
 import cv2
 import numpy as np
@@ -26,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 class VisionEngine:
-    """图像分类推理引擎，支持ONNX和PyTorch(.pt)格式"""
+    """图像分类推理引擎，自动检测模型格式"""
 
     def __init__(self, model_path: str):
         self.session = None
@@ -41,7 +38,7 @@ class VisionEngine:
         self._load_model(model_path)
 
     def _load_model(self, model_path: str) -> None:
-        """加载模型文件（自动检测格式）"""
+        """加载模型，自动检测格式"""
         model_file = Path(model_path)
         if not model_file.exists():
             logger.warning("模型文件不存在: %s，视觉推理功能不可用", model_path)
@@ -83,6 +80,7 @@ class VisionEngine:
 
         output_shape = self.session.get_outputs()[0].shape
 
+        # 根据输出shape推断模型类型，这块逻辑比较绕
         if len(output_shape) == 3:
             last_dim = output_shape[-1] if output_shape[-1] is not None else 8400
             mid_dim = output_shape[1] if output_shape[1] is not None else 84
@@ -111,7 +109,7 @@ class VisionEngine:
             self.is_yolo_model = False
 
     def predict(self, image: Image.Image) -> dict:
-        """执行图像分类推理（自动选择推理引擎）"""
+        """推理入口，自动选引擎"""
         if not self.is_loaded:
             raise RuntimeError("模型未加载")
 
@@ -121,10 +119,9 @@ class VisionEngine:
             return self._predict_onnx(image)
 
     def _predict_pytorch(self, image: Image.Image) -> dict:
-        """使用Ultralytics YOLOv8进行PyTorch模型推理
-
-        conf=0.15 适配40类模型的实际输出范围（最高置信度仅22-50%），
-        原conf=0.40过高导致全部被过滤。
+        """YOLOv8 PyTorch推理
+        conf=0.15是因为40类模型实际输出置信度偏低(22-50%)，
+        原来conf=0.40会把所有结果都过滤掉
         """
         import tempfile
 
@@ -135,8 +132,8 @@ class VisionEngine:
         try:
             results = self.yolo_model(
                 tmp_path,
-                conf=0.15,      # 降低阈值适配该模型实际输出范围
-                iou=0.45,       # NMS IoU阈值
+                conf=0.15,
+                iou=0.45,
                 verbose=False,
                 imgsz=640,
             )
@@ -153,7 +150,6 @@ class VisionEngine:
                         cls_id = int(boxes.cls[idx].item())
                         cls_name = self.yolo_model.names[cls_id]
 
-                        # 二次过滤：置信度过低的不采用
                         if conf < 0.10:
                             continue
 
@@ -198,7 +194,7 @@ class VisionEngine:
             Path(tmp_path).unlink(missing_ok=True)
 
     def _predict_onnx(self, image: Image.Image) -> dict:
-        """使用ONNX Runtime进行推理"""
+        """ONNX Runtime推理"""
         input_tensor = self._preprocess(image)
         output = self.session.run(
             [self.output_name],
@@ -207,15 +203,13 @@ class VisionEngine:
         return self._postprocess(output[0])
 
     def _preprocess(self, image: Image.Image) -> np.ndarray:
-        """图像预处理，根据模型类型选择不同方式"""
+        """图像预处理，YOLO和ImageNet走不同流程"""
         if self.is_yolo_model:
-            # YOLOv8: 640x640, 简单归一化
             resized = image.resize(YOLO_INPUT_SIZE)
             img_array = np.array(resized).astype(np.float32) / 255.0
             chw = img_array.transpose(2, 0, 1)
             return np.expand_dims(chw, axis=0).astype(np.float32)
         else:
-            # ImageNet分类: 224x224, ImageNet归一化
             resized = image.resize(INPUT_SIZE)
             img_array = np.array(resized).astype(np.float32) / 255.0
             normalized = (img_array - IMAGENET_MEAN) / IMAGENET_STD
@@ -223,22 +217,20 @@ class VisionEngine:
             return np.expand_dims(chw, axis=0).astype(np.float32)
 
     def _postprocess(self, output: np.ndarray) -> dict:
-        """后处理，根据模型类型选择不同方式"""
+        """后处理分发"""
         if self.is_yolo_model and self.is_waste_model:
             return self._postprocess_yolo(output)
         else:
             return self._postprocess_classification(output)
 
     def _postprocess_yolo(self, output: np.ndarray) -> dict:
-        """YOLOv8检测模型后处理，支持4类和7类模型"""
-        # YOLOv8输出: [batch, channels, detections] -> 转置为 [batch, detections, channels]
-        predictions = output[0].transpose(1, 0)  # [8400, channels]
+        """YOLOv8检测后处理，支持4类和7类模型"""
+        predictions = output[0].transpose(1, 0)
 
-        # 提取类别logits（原始未归一化）
-        _ = predictions[:, :4]  # [cx, cy, w, h] 保留用于后续目标检测扩展
+        _ = predictions[:, :4]  # bbox，暂未使用
         class_logits = predictions[:, 4:]
 
-        # sigmoid激活转换为概率（YOLOv8输出是未归一化的logits）
+        # sigmoid转概率
         class_probs = 1 / (1 + np.exp(-class_logits))
         class_confidences = np.max(class_probs, axis=1)
 
@@ -253,7 +245,7 @@ class VisionEngine:
         confidence = float(class_confidences[best_idx])
         class_id = int(np.argmax(class_probs[best_idx]))
 
-        # 7类模型映射到中国4类标准
+        # 7类→4类映射
         if self.num_classes == 7 and class_id in YOLOV8_7CLASSES:
             mapped_category = YOLOV8_7CLASSES[class_id]["category"]
             original_name = YOLOV8_7CLASSES[class_id]["name_cn"]
@@ -265,7 +257,7 @@ class VisionEngine:
                 "original_class_name": original_name,
             }
 
-        # COCO 80类模型映射
+        # COCO 80类→4类映射
         if self.num_classes == 80:
             if class_id in COCO_TO_WASTE:
                 mapped_category = COCO_TO_WASTE[class_id]["category"]
@@ -293,7 +285,7 @@ class VisionEngine:
         }
 
     def _postprocess_classification(self, output: np.ndarray) -> dict:
-        """普通分类模型后处理"""
+        """普通分类模型后处理，softmax"""
         flat_output = output.flatten()
         shifted = flat_output - np.max(flat_output)
         exp_vals = np.exp(shifted)
@@ -318,7 +310,7 @@ class VisionEngine:
         }
 
     def _map_to_waste_category(self, imagenet_index: int, _confidence: float) -> int:
-        """将ImageNet类别映射到垃圾类别（后备方案）"""
+        """ImageNet类别→垃圾类别的粗略映射，不太准但聊胜于无"""
         if 700 <= imagenet_index <= 999:
             return 0
         elif 100 <= imagenet_index <= 399:

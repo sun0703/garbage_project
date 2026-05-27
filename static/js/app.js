@@ -1,19 +1,4 @@
-/**
- * @fileoverview 应用主入口模块 - SPA启动引导与全局初始化
- * @description 校园垃圾分类单页应用的顶层入口文件，负责：
- *              1. 实例化核心模块（Router / Store / ApiClient）
- *              2. 绑定全局错误捕获与降级处理
- *              3. 渲染全局UI组件（导航栏/标签栏）
- *              4. 注册路由规则并管理页面生命周期
- *              5. 启动首屏路由渲染
- *              6. 暴露全局调试接口
- *
- * 加载方式：在HTML中通过 <script type="module" src="/static/js/app.js"></script> 引入
- * @module app
- * @version 1.1.0
- */
-
-// ==================== 模块依赖导入 ====================
+// 应用主入口 - SPA启动引导
 
 import { Router } from './router.js';
 import { store, Store, DEFAULT_STATE } from './store.js';
@@ -22,8 +7,7 @@ import { config } from './config.js';
 import { initTheme } from './pages/settings.js';
 
 /*
- * 全局UI组件导入（安全加载模式）
- * 组件使用实例方法模式：new Component().render(selector)
+ * 全局UI组件（安全加载，找不到就跳过）
  */
 let NavBarClass = null;
 let TabBarClass = null;
@@ -42,10 +26,7 @@ try {
     console.info('[App] TabBar组件未找到，跳过标签栏渲染');
 }
 
-/*
- * 页面模块导入（懒加载，按需实例化）
- * 每个页面类必须实现 init() 和 destroy() 生命周期方法
- */
+// 页面模块懒加载缓存
 const PageModules = {};
 
 async function loadPage(name, path) {
@@ -60,12 +41,7 @@ async function loadPage(name, path) {
     }
 }
 
-// ==================== 应用配置 ====================
-/**
- * 应用运行时配置（从config.js集中导入）
- * 所有可调参数均来自外部配置，便于多环境部署
- * @see config.js
- */
+// 从config.js集中拿配置，方便多环境切换
 const APP_CONFIG = Object.freeze({
     apiBaseURL: config.api.baseURL,
     showErrorAlert: config.debug.showErrorAlert,
@@ -74,20 +50,14 @@ const APP_CONFIG = Object.freeze({
     appName: config.app.name,
 });
 
-// ==================== 全局实例创建 ====================
-
 api.baseURL = APP_CONFIG.apiBaseURL;
 const router = new Router();
 
-/**
- * 当前活跃的页面实例（用于调用destroy()生命周期）
- * @type {Object|null}
- */
+// 当前活跃的页面实例，切换时调destroy()
 let activePageInstance = null;
 
-// ==================== 全局错误处理 ====================
-
-function handleGlobalError(event) {
+// 全局错误捕获
+function catchGlobalError(event) {
     event.preventDefault();
     const errorMsg = event.message || '发生未知错误';
     store.setState('error', errorMsg);
@@ -98,7 +68,7 @@ function handleGlobalError(event) {
     }
 }
 
-function handleUnhandledRejection(event) {
+function catchRejection(event) {
     event.preventDefault();
     const reason = event.reason;
     if (reason instanceof ApiError) {
@@ -111,16 +81,10 @@ function handleUnhandledRejection(event) {
     store.setState('isLoading', false);
 }
 
-// ==================== UI组件渲染 ====================
-
-/** 导航栏组件实例 @type {Object|null} */
 let navBarInstance = null;
-
-/** 标签栏组件实例 @type {Object|null} */
 let tabBarInstance = null;
 
 function initGlobalComponents() {
-    /* 导航栏：使用实例化模式 new NavBar(options).render('#navBar') */
     if (NavBarClass) {
         try {
             navBarInstance = new NavBarClass({ container: '#navBar', title: APP_CONFIG.appName });
@@ -133,7 +97,6 @@ function initGlobalComponents() {
         }
     }
 
-    /* 标签栏：使用标准 init() 模式，传入 container 自动挂载 */
     if (TabBarClass) {
         try {
             tabBarInstance = new TabBarClass({ container: '#tabBar', activeIndex: 0 });
@@ -147,20 +110,10 @@ function initGlobalComponents() {
     }
 }
 
-// ==================== 路由注册与页面生命周期管理 ====================
-
-/**
- * 创建页面路由处理器工厂函数
- * 负责管理页面的 init/destroy 生命周期，
- * 确保每次切换页面时正确清理旧页面并初始化新页面
- *
- * @param {string} pageName - 页面名称标识
- * @param {string} modulePath - 页面模块的导入路径
- * @returns {Function} 路由处理器函数，签名 (params, query) => void
- */
+// 页面路由处理器工厂，管理init/destroy生命周期
 function createPageHandler(pageName, modulePath) {
-    return async function handlePageEnter(params, query) {
-        /* 销毁当前活跃页面（调用destroy()释放事件监听和资源） */
+    return async function enterPage(params, query) {
+        // 先销毁旧页面
         if (activePageInstance && typeof activePageInstance.destroy === 'function') {
             try {
                 activePageInstance.destroy();
@@ -170,22 +123,20 @@ function createPageHandler(pageName, modulePath) {
             activePageInstance = null;
         }
 
-        /* 更新Store中的当前页面状态 */
         store.setState('currentPage', pageName);
 
-        /* 切换CSS可见性：还原所有.page → 激活目标页 */
+        // CSS切换页面可见性
         document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
         const pageEl = document.getElementById(`page-${pageName}`);
         if (pageEl) pageEl.classList.add('active');
 
-        /* 动态导入并实例化目标页面 */
+        // 动态导入并实例化目标页面
         const PageClass = await loadPage(pageName, modulePath);
         if (!PageClass) {
             console.error(`[App] 页面模块不存在: ${pageName}`);
             return;
         }
 
-        /* 创建页面实例并调用初始化 */
         try {
             activePageInstance = new PageClass({ store, api, router, params, query });
 
@@ -201,7 +152,7 @@ function createPageHandler(pageName, modulePath) {
             store.setState('error', `页面加载失败: ${e.message}`);
         }
 
-        /* 同步TabBar激活状态 */
+        // 同步TabBar高亮
         if (tabBarInstance && typeof tabBarInstance.setActiveTab === 'function') {
             const tabIndex = config.tabIndexMap[pageName];
             if (tabIndex !== undefined) {
@@ -211,55 +162,23 @@ function createPageHandler(pageName, modulePath) {
     };
 }
 
-/**
- * 注册全部应用路由规则
- * 每条路由绑定一个页面处理器，负责对应页面的完整生命周期
- *
- * @param {Router} router - 路由器实例
- * @returns {void}
- */
+// 注册所有路由，每条路由绑一个页面处理器
 function registerAllRoutes(router) {
-    /* 清除构造函数中自动注册的内置兜底路由，替换为完整生命周期处理器 */
     router
         .clearRoutes()
-        /* 首页：拍照上传 + 搜索入口 */
         .register('/home', createPageHandler('home', './pages/home.js'))
         .register('/', createPageHandler('home', './pages/home.js'))
-
-        /* 预览确认页：图片预览 + 开始识别 */
         .register('/preview', createPageHandler('preview', './pages/camera.js'))
-
-        /* 结果展示页：AI识别结果卡片 */
         .register('/result', createPageHandler('result', './pages/result.js'))
-
-        /* 搜索结果页：关键词模糊搜索列表 */
         .register('/search', createPageHandler('search', './pages/search.js'))
-
-        /* 分类指南页：四类垃圾标准说明 */
         .register('/guide', createPageHandler('guide', './pages/guide.js'))
-
-        /* 历史记录页：过往识别记录列表 */
         .register('/history', createPageHandler('history', './pages/history.js'))
-
-        /* 物品详情页：投放指引+处理步骤+相关推荐 */
         .register('/item/:keyword', createPageHandler('item', './pages/item-detail.js'))
-
-        /* 投放点地图页 */
         .register('/map', createPageHandler('map', './pages/map.js'))
-
-        /* 环保社区页：打卡+问答+活动 */
         .register('/community', createPageHandler('community', './pages/community.js'))
-
-        /* 个人中心页 */
         .register('/profile', createPageHandler('profile', './pages/profile.js'))
-
-        /* 偏好设置页 */
         .register('/settings', createPageHandler('settings', './pages/settings.js'))
-
-        /* 数据统计页 */
         .register('/stats', createPageHandler('stats', './pages/stats.js'))
-
-        /* 管理后台 */
         .register('/admin', createPageHandler('admin', './pages/admin-shell.js'));
 
     if (APP_CONFIG.logLevel !== 'silent') {
@@ -267,33 +186,25 @@ function registerAllRoutes(router) {
     }
 }
 
-// ==================== 应用启动入口 ====================
-
 function bootstrap() {
-    /* 【幂等守卫】检测重复初始化请求，防止模块热重载或脚本重复加载导致的双重初始化 */
+    // 防止热重载或脚本重复加载导致双重初始化
     if (window.__APP_BOOTSTRAPPED__) {
         console.warn('[App] 检测到重复初始化请求，已跳过');
         return;
     }
     window.__APP_BOOTSTRAPPED__ = true;
 
-    /* 第一步：初始化主题（尽早执行，避免闪烁） */
+    // 尽早初始化主题，避免闪烁
     initTheme();
 
-    /* 第二步：绑定全局错误捕获（仅绑定一次） */
-    window.addEventListener('error', handleGlobalError);
-    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+    window.addEventListener('error', catchGlobalError);
+    window.addEventListener('unhandledrejection', catchRejection);
 
-    /* 第三步：渲染全局UI组件（NavBar / TabBar）*/
     initGlobalComponents();
-
-    /* 第四步：注册所有路由规则（含页面生命周期管理） */
     registerAllRoutes(router);
-
-    /* 第五步：启动路由系统（触发首屏渲染） */
     router.start();
 
-    /* 第六步：暴露全局调试接口 */
+    // 暴露调试接口，上线前记得关
     if (APP_CONFIG.exposeDebugAPI) {
         window.__app__ = Object.freeze({
             router,
@@ -313,7 +224,6 @@ function bootstrap() {
         }
     }
 
-    /* 第六步：标记应用就绪 */
     document.documentElement.classList.add('app-ready');
 
     if (APP_CONFIG.logLevel !== 'silent') {
@@ -321,5 +231,4 @@ function bootstrap() {
     }
 }
 
-/* ES Module 自动执行启动 */
 bootstrap();

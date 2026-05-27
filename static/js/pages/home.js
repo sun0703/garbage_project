@@ -1,12 +1,6 @@
-/**
- * 首页视图 — 上传区域 + 搜索入口
- *
- * 职责：渲染图片上传区（点击/拖拽/粘贴）、搜索框、语音按钮占位；
- *       选择图片后执行校验→压缩→存储→跳转预览页的完整流程。
- * 容器：#page-home
- */
+// 首页 — 上传区域 + 搜索入口
+// 选图后走校验→压缩→存储→跳转预览的流程
 
-// ==================== 模块依赖导入 ====================
 import { store } from '../store.js';
 import { api } from '../api.js';
 import { ImageProcessor } from '../utils/image.js';
@@ -15,57 +9,23 @@ import { escapeHtml } from '../utils/escape.js';
 import { VoiceButton } from '../components/voice-btn.js';
 import { SearchSuggest } from '../components/search-suggest.js';
 
-// ==================== 页面类定义 ====================
 export class HomePage {
-    /** 页面根容器 DOM 引用 */
     container = null;
-
-    /** 隐藏的文件选择 input 元素 */
     fileInput = null;
-
-    /** 上传区域 DOM */
     uploadArea = null;
-
-    /** 预览图片 img 元素 */
     previewImg = null;
-
-    /** 搜索输入框 */
     searchInput = null;
-
-    /** 语音按钮（占位） */
     voiceBtn = null;
-
-    /** 绑定的事件处理器引用集合，用于 destroy 时移除 */
     _boundHandlers = {};
-
-    /** 搜索联想下拉组件实例 */
     _suggest = null;
-
-    /** 开始识别按钮 */
     predictBtn = null;
-
-    /** 加载遮罩层 */
     loadingOverlayEl = null;
-
-    /** 加载提示文字 */
     loadingTextEl = null;
-
-    /** 错误消息元素 */
     errorMsgEl = null;
-
-    /** 内联识别结果区域 */
     resultSection = null;
-
-    /** 内联搜索结果区域 */
     searchResultSection = null;
-
-    /** 当前选中的图片Base64数据 */
     _selectedImage = null;
 
-    /**
-     * 初始化首页视图
-     * 渲染上传区域、搜索框、绑定交互事件
-     */
     init() {
         this.container = document.getElementById('page-home');
         if (!this.container) {
@@ -73,15 +33,10 @@ export class HomePage {
             return;
         }
 
-        /* 渲染页面结构 */
         this._render();
-        /* 缓存关键 DOM 引用 */
         this._cacheDOM();
-        /* 绑定所有交互事件 */
         this._bindEvents();
-        /* 加载环保成就 */
         this._loadAchievements();
-        /* 检查登录状态 */
         this._checkLoginStatus();
 
         document.body.setAttribute('data-home-active', '');
@@ -89,14 +44,9 @@ export class HomePage {
         console.log('[HomePage] 首页初始化完成');
     }
 
-    /**
-     * 销毁首页视图
-     * 移除所有事件监听、清空容器内容、释放 DOM 引用
-     */
     destroy() {
         document.body.removeAttribute('data-home-active');
 
-        // 移除拖拽事件
         if (this.uploadArea) {
             this.uploadArea.removeEventListener('click', this._boundHandlers.uploadClick);
             this.uploadArea.removeEventListener('dragenter', this._boundHandlers.dragenter);
@@ -105,40 +55,33 @@ export class HomePage {
             this.uploadArea.removeEventListener('drop', this._boundHandlers.drop);
         }
 
-        // 移除文件选择变化事件
         if (this.fileInput) {
             this.fileInput.removeEventListener('change', this._boundHandlers.change);
         }
 
-        // 移除搜索回车事件
         if (this.searchInput) {
             this.searchInput.removeEventListener('keydown', this._boundHandlers.keydown);
         }
 
-        // 移除识别按钮事件
         if (this.predictBtn) {
             this.predictBtn.removeEventListener('click', this._boundHandlers.predictClick);
         }
 
-        // 移除重置按钮事件
         const resetBtn = document.getElementById('homeResetBtn');
         if (resetBtn) {
             resetBtn.removeEventListener('click', this._boundHandlers.resetClick);
         }
 
-        // 移除登录链接事件
         const loginLink = document.getElementById('homeLoginLink');
         if (loginLink) {
             loginLink.removeEventListener('click', this._boundHandlers.loginLink);
         }
 
-        // 销毁搜索联想组件
         if (this._suggest) {
             this._suggest.destroy();
             this._suggest = null;
         }
 
-        // 移除粘贴事件（全局）
         document.removeEventListener('paste', this._boundHandlers.paste);
 
         if (this._voiceButton) {
@@ -146,12 +89,10 @@ export class HomePage {
             this._voiceButton = null;
         }
 
-        // 清空容器
         if (this.container) {
             this.container.innerHTML = '';
         }
 
-        // 释放引用
         this.container = null;
         this.fileInput = null;
         this.uploadArea = null;
@@ -170,13 +111,8 @@ export class HomePage {
         console.log('[HomePage] 首页已销毁');
     }
 
-    // ==================== 私有方法：渲染 ====================
+    /* ---- 渲染 ---- */
 
-    /**
-     * 渲染首页完整 HTML 结构
-     * 包含上传区域（F-1.2.1 优化）、搜索框、语音按钮占位
-     * @private
-     */
     _render() {
         this.container.innerHTML = `
             <!-- 页面标题区 -->
@@ -201,7 +137,7 @@ export class HomePage {
 
             <!-- 主操作卡片 -->
             <div class="card home-card">
-                <!-- 上传区域：大尺寸虚线边框 ≥200px高 -->
+                <!-- 上传区域 -->
                 <div class="upload-area" id="homeUploadArea">
                     <div class="upload-area__icon-wrap">
                         <svg viewBox="0 0 24 24" width="28" height="28" stroke="white" stroke-width="2" fill="none">
@@ -213,7 +149,6 @@ export class HomePage {
                     <img id="homePreviewImg" alt="预览图" class="upload-area__preview">
                 </div>
 
-                <!-- 隐藏的文件输入框 -->
                 <input type="file"
                        id="homeFileInput"
                        class="hidden-input"
@@ -227,7 +162,6 @@ export class HomePage {
 
                 <div class="error-msg hidden" id="homeErrorMsg"></div>
 
-                <!-- 分割线 -->
                 <div class="divider"><span>或</span></div>
 
                 <!-- 搜索区域 -->
@@ -285,12 +219,11 @@ export class HomePage {
                 </div>
             </div>
 
-            <!-- 底部提示 -->
             <div class="home-footer">
                 <p>基于 YOLOv8 深度学习引擎 · 保护环境从分类开始</p>
             </div>
 
-            <!-- 历史记录抽屉 (F-1.5.2) -->
+            <!-- 历史记录抽屉 -->
             <div class="history-drawer-overlay" id="homeHistoryOverlay"></div>
             <aside class="history-drawer" id="homeHistoryDrawer">
                 <div class="history-drawer__header">
@@ -307,12 +240,6 @@ export class HomePage {
         `;
     }
 
-    // ==================== 私有方法：DOM 缓存 ====================
-
-    /**
-     * 缓存高频使用的 DOM 元素引用，避免重复查询
-     * @private
-     */
     _cacheDOM() {
         this.fileInput = document.getElementById('homeFileInput');
         this.uploadArea = document.getElementById('homeUploadArea');
@@ -327,17 +254,12 @@ export class HomePage {
         this.searchResultSection = document.getElementById('homeSearchResultSection');
     }
 
-    // ==================== 私有方法：事件绑定 ====================
+    /* ---- 事件绑定 ---- */
 
-    /**
-     * 绑定全部交互事件（上传、拖拽、粘贴、搜索、语音）
-     * F-1.2.5 拖拽上传 + F-1.2.6 粘贴上传
-     * @private
-     */
     _bindEvents() {
         const self = this;
 
-        /* ---- 历史记录抽屉 (F-1.5.2) ---- */
+        // 历史记录抽屉
         const historyToggle = document.getElementById('homeHistoryToggle');
         const historyOverlay = document.getElementById('homeHistoryOverlay');
         const historyClose = document.getElementById('homeHistoryClose');
@@ -357,57 +279,43 @@ export class HomePage {
         if (historyOverlay) historyOverlay.addEventListener('click', closeDrawer);
         if (historyClose) historyClose.addEventListener('click', closeDrawer);
 
-        /* ---- 点击上传区域触发文件选择 ---- */
+        // 点击上传区域触发文件选择
         this._boundHandlers.uploadClick = (e) => {
-            console.log('[HomePage] 上传区域被点击', { hasFileInput: !!this.fileInput, eventTarget: e.target });
-
             if (!this.fileInput) {
                 console.error('[HomePage] fileInput 元素不存在！');
                 return;
             }
-
-            // 添加视觉反馈
             this.uploadArea?.classList.add('clicked');
             setTimeout(() => this.uploadArea?.classList.remove('clicked'), 200);
-
-            // 触发文件选择
             this.fileInput.click();
-            console.log('[HomePage] 已调用 fileInput.click()');
         };
         if (this.uploadArea) {
             this.uploadArea.addEventListener('click', this._boundHandlers.uploadClick);
-            console.log('[HomePage] 已绑定上传区域点击事件');
-        } else {
-            console.error('[HomePage] uploadArea 元素不存在！');
         }
 
-        /* ---- 文件选择变化处理 ---- */
-        this._boundHandlers.change = (e) => this._handleFileSelect(e);
+        // 文件选择变化
+        this._boundHandlers.change = (e) => this._onFileSelect(e);
         if (this.fileInput) {
             this.fileInput.addEventListener('change', this._boundHandlers.change);
         }
 
-        /* ---- 拖拽上传事件组 (F-1.2.5) ---- */
+        // 拖拽上传
         this._boundHandlers.dragenter = (e) => {
-            e.preventDefault();
-            e.stopPropagation();
+            e.preventDefault(); e.stopPropagation();
             this.uploadArea?.classList.add('active');
         };
         this._boundHandlers.dragover = (e) => {
-            e.preventDefault();
-            e.stopPropagation();
+            e.preventDefault(); e.stopPropagation();
             this.uploadArea?.classList.add('active');
         };
         this._boundHandlers.dragleave = (e) => {
-            e.preventDefault();
-            e.stopPropagation();
+            e.preventDefault(); e.stopPropagation();
             this.uploadArea?.classList.remove('active');
         };
         this._boundHandlers.drop = (e) => {
-            e.preventDefault();
-            e.stopPropagation();
+            e.preventDefault(); e.stopPropagation();
             this.uploadArea?.classList.remove('active');
-            this._handleDrop(e);
+            this._onDrop(e);
         };
 
         if (this.uploadArea) {
@@ -417,10 +325,9 @@ export class HomePage {
             this.uploadArea.addEventListener('drop', this._boundHandlers.drop);
         }
 
-        /* ---- 粘贴上传事件 (F-1.2.6) ---- */
+        // 粘贴上传
         this._boundHandlers.paste = (e) => {
-            this._handlePaste(e);
-            // 显示粘贴成功提示
+            this._onPaste(e);
             const items = e.clipboardData?.items;
             if (items) {
                 for (const item of items) {
@@ -436,12 +343,11 @@ export class HomePage {
         };
         document.addEventListener('paste', this._boundHandlers.paste);
 
-        /* ---- 搜索回车跳转 ---- */
+        // 搜索回车跳转
         this._boundHandlers.keydown = (e) => {
             if (e.key === 'Enter') {
                 const query = this.searchInput?.value.trim();
                 if (query) {
-                    // 存储搜索关键词到 store，跳转搜索结果页
                     store.setState('searchQuery', query);
                     window.location.hash = '#/search?q=' + encodeURIComponent(query);
                 }
@@ -451,7 +357,7 @@ export class HomePage {
             this.searchInput.addEventListener('keydown', this._boundHandlers.keydown);
         }
 
-        /* 搜索联想下拉 (F-2.2.3) */
+        // 搜索联想下拉
         this._suggest = new SearchSuggest({
             inputEl: this.searchInput,
             onSelect: (keyword) => {
@@ -460,22 +366,16 @@ export class HomePage {
             }
         });
 
-        /* ---- 语音按钮（Web Speech API + ASR 纠错）---- */
+        // 语音按钮
         if (this.voiceBtn) {
-            // 初始化语音识别按钮组件
             this._voiceButton = new VoiceButton({
                 btnEl: this.voiceBtn,
                 onResult: (corrected, changed, original) => {
-                    console.log(`[HomePage] 语音识别: ${original}${changed ? ' → ' + corrected : ''}`);
-
-                    // 将纠错后的文本填入搜索框并触发搜索
                     if (this.searchInput) {
                         this.searchInput.value = corrected;
-                        // 存储到 store 并跳转搜索页
                         store.setState('searchQuery', corrected);
                         window.location.hash = '#/search?q=' + encodeURIComponent(corrected);
                     }
-
                     if (changed) {
                         showToast(`已自动纠正: "${original}" → "${corrected}"`, 'success', 2000);
                     }
@@ -486,7 +386,7 @@ export class HomePage {
             });
         }
 
-        /* ---- 开始识别按钮 ---- */
+        // 开始识别按钮
         this._boundHandlers.predictClick = () => {
             if (this._selectedImage) {
                 store.setState('selectedImage', this._selectedImage);
@@ -497,7 +397,7 @@ export class HomePage {
             this.predictBtn.addEventListener('click', this._boundHandlers.predictClick);
         }
 
-        /* ---- 重置按钮 ---- */
+        // 重置按钮
         this._boundHandlers.resetClick = () => {
             this._selectedImage = null;
             if (this.fileInput) this.fileInput.value = '';
@@ -513,7 +413,7 @@ export class HomePage {
             resetBtn.addEventListener('click', this._boundHandlers.resetClick);
         }
 
-        /* ---- 登录链接 ---- */
+        // 登录链接
         this._boundHandlers.loginLink = () => this._showLoginModal();
         const loginLink = document.getElementById('homeLoginLink');
         if (loginLink) {
@@ -521,67 +421,45 @@ export class HomePage {
         }
     }
 
-    // ==================== 私有方法：文件处理核心逻辑 ====================
+    /* ---- 文件处理 ---- */
 
-    /**
-     * 处理文件选择（input change 事件）
-     * 流程：validate → compress → store存储 → 跳转#/preview
-     * @param {Event} e - 文件选择变化事件
-     * @private
-     */
-    async _handleFileSelect(e) {
+    // 文件选择回调
+    async _onFileSelect(e) {
         const file = e.target.files?.[0];
         if (!file) return;
-
-        await this._processImage(file);
+        await this._prepareImage(file);
     }
 
-    /**
-     * 处理拖拽释放的文件 (F-1.2.5)
-     * 从 dataTransfer 提取图片文件并进入处理流程
-     * @param {DragEvent} e - 拖拽释放事件
-     * @private
-     */
-    async _handleDrop(e) {
+    // 拖拽释放回调
+    async _onDrop(e) {
         const files = e.dataTransfer?.files;
         if (!files || files.length === 0) return;
 
         const file = files[0];
-        /* 仅接受图片类型 */
         if (!file.type.startsWith('image/')) {
             showToast('请选择图片文件', 'warning');
             return;
         }
-
-        await this._processImage(file);
+        await this._prepareImage(file);
     }
 
-    /**
-     * 处理剪贴板粘贴的图片 (F-1.2.6)
-     * 从 clipboardData.items 中提取图片并进入处理流程
-     * @param {ClipboardEvent} e - 粘贴事件
-     * @private
-     */
-    async _handlePaste(e) {
+    // 粘贴回调
+    async _onPaste(e) {
         const items = e.clipboardData?.items;
         if (!items) return;
 
-        /* 遍历剪贴板条目，查找图片类型 */
         for (const item of items) {
             if (item.type.startsWith('image/')) {
                 const file = item.getAsFile();
                 if (file) {
-                    await this._processImage(file);
-                    break; /* 只处理第一张图片 */
+                    await this._prepareImage(file);
+                    break; // 只处理第一张
                 }
             }
         }
     }
 
-    /**
-     * 加载历史记录抽屉内容 (F-1.5.2)
-     * @private
-     */
+    // 加载抽屉里的历史记录
     async _loadDrawerHistory() {
         const body = document.getElementById('homeHistoryBody');
         if (!body) return;
@@ -615,7 +493,7 @@ export class HomePage {
                 `;
             }).join('');
 
-            /* 点击记录回看详情 */
+            // 点击记录回看详情
             const historyDrawer = document.getElementById('homeHistoryDrawer');
             const historyOverlay = document.getElementById('homeHistoryOverlay');
             const closeDrawer = () => {
@@ -645,29 +523,20 @@ export class HomePage {
         }
     }
 
-    /**
-     * 图片处理核心流水线
-     * 校验 → 压缩 → 存储 → 路由跳转
-     *
-     * @param {File} file - 原始图片 File 对象
-     * @private
-     */
-    async _processImage(file) {
+    // 图片处理流水线：校验 → 压缩 → 存储 → 跳转
+    async _prepareImage(file) {
         try {
-            /* 第一步：格式与大小校验 (F-1.2.1) */
             const validation = ImageProcessor.validate(file);
             if (!validation.valid) {
                 showToast(validation.message, 'error');
                 return;
             }
 
-            /* 显示加载状态 */
             showLoading('正在处理图片...');
 
-            /* 第二步：图片压缩（目标2MB以内） */
+            // 压缩到2MB以内
             const compressedBlob = await ImageProcessor.compress(file, 2048);
 
-            /* 第三步：生成预览 URL 并显示 */
             const objectUrl = URL.createObjectURL(compressedBlob);
             if (this.previewImg) {
                 this.previewImg.src = objectUrl;
@@ -675,21 +544,19 @@ export class HomePage {
                 this.uploadArea?.classList.add('has-image');
             }
 
-            /* 第四步：转换为 Base64 并存入 store */
             const base64 = await ImageProcessor.toBase64(compressedBlob);
             this._selectedImage = base64;
             store.setState('selectedImage', base64);
             store.setState('selectedFileName', file.name);
 
-            /* 释放 ObjectURL 避免内存泄漏（base64 已存储，不再需要 blob URL） */
+            // 释放ObjectURL，base64已经存了不需要了
             URL.revokeObjectURL(objectUrl);
 
-            /* 启用识别按钮 */
             if (this.predictBtn) this.predictBtn.disabled = false;
 
             hideLoading();
 
-            /* 第五步：延迟跳转到预览确认页 */
+            // 延迟跳转预览页
             setTimeout(() => {
                 window.location.hash = '#/preview';
             }, 300);
@@ -701,31 +568,17 @@ export class HomePage {
         }
     }
 
-    // ==================== 私有方法：加载遮罩与错误提示 ====================
+    /* ---- 加载遮罩与错误提示 ---- */
 
-    /**
-     * 显示内联加载遮罩
-     * @param {string} [text] - 加载提示文字
-     * @private
-     */
     _showLoading(text) {
         if (text && this.loadingTextEl) this.loadingTextEl.textContent = text;
         if (this.loadingOverlayEl) this.loadingOverlayEl.classList.remove('hidden');
     }
 
-    /**
-     * 隐藏内联加载遮罩
-     * @private
-     */
     _hideLoading() {
         if (this.loadingOverlayEl) this.loadingOverlayEl.classList.add('hidden');
     }
 
-    /**
-     * 显示内联错误消息
-     * @param {string} msg - 错误提示文本
-     * @private
-     */
     _showError(msg) {
         if (this.errorMsgEl) {
             this.errorMsgEl.textContent = msg;
@@ -733,10 +586,6 @@ export class HomePage {
         }
     }
 
-    /**
-     * 隐藏内联错误消息
-     * @private
-     */
     _hideError() {
         if (this.errorMsgEl) {
             this.errorMsgEl.classList.add('hidden');
@@ -744,22 +593,13 @@ export class HomePage {
         }
     }
 
-    /**
-     * 隐藏所有结果区域（识别结果 + 搜索结果）
-     * @private
-     */
     _hideResults() {
         if (this.resultSection) this.resultSection.classList.add('hidden');
         if (this.searchResultSection) this.searchResultSection.classList.add('hidden');
     }
 
-    // ==================== 私有方法：成就系统 ====================
+    /* ---- 成就系统 ---- */
 
-    /**
-     * 加载用户环保成就列表
-     * 调用 api.getAchievements() 获取成就数据并渲染
-     * @private
-     */
     async _loadAchievements() {
         try {
             const d = await api.getAchievements();
@@ -773,11 +613,6 @@ export class HomePage {
         if (grid) grid.innerHTML = '<p style="color:#95A0AA;font-size:13px;text-align:center;padding:12px;">登录后解锁环保成就</p>';
     }
 
-    /**
-     * 渲染成就徽章网格
-     * @param {Array<Object>} list - 成就列表
-     * @private
-     */
     _renderAchievements(list) {
         const grid = document.getElementById('homeAchievementsGrid');
         if (!grid) return;
@@ -790,14 +625,6 @@ export class HomePage {
         `).join('');
     }
 
-    /**
-     * 显示成就解锁通知 Toast
-     * @param {Object} ach - 成就对象
-     * @param {string} ach.icon - 成就图标
-     * @param {string} ach.name - 成就名称
-     * @param {number} [ach.points_reward] - 积分奖励
-     * @private
-     */
     _showAchievementToast(ach) {
         const container = document.getElementById('achvToastGlobal');
         if (!container) return;
@@ -821,14 +648,7 @@ export class HomePage {
         }, 4000);
     }
 
-    /**
-     * 处理API响应中的新成就通知
-     * 检查 responseData.new_achievements 并逐个弹出 Toast
-     *
-     * @static
-     * @param {Object} responseData - API响应数据
-     * @param {Array<Object>} [responseData.new_achievements] - 新解锁的成就列表
-     */
+    // 处理API返回的新成就通知
     static processAchievements(responseData) {
         const list = responseData.new_achievements;
         if (list && list.length > 0) {
@@ -838,13 +658,8 @@ export class HomePage {
         }
     }
 
-    // ==================== 私有方法：登录状态与登录弹窗 ====================
+    /* ---- 登录状态与登录弹窗 ---- */
 
-    /**
-     * 检查用户登录状态
-     * 调用 api.getMe() 获取当前用户信息并更新 UI
-     * @private
-     */
     async _checkLoginStatus() {
         try {
             const d = await api.getMe();
@@ -862,11 +677,7 @@ export class HomePage {
         } catch (_) {}
     }
 
-    /**
-     * 显示登录/注册模态弹窗
-     * 包含登录和注册两个 Tab，支持表单切换与提交
-     * @private
-     */
+    // 登录/注册弹窗，三个tab
     _showLoginModal() {
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay';
@@ -911,7 +722,7 @@ export class HomePage {
         document.body.appendChild(overlay);
         requestAnimationFrame(() => overlay.classList.add('visible'));
 
-        /* Tab 切换逻辑 */
+        // Tab切换
         overlay.querySelectorAll('.modal-tab').forEach(tab => {
             tab.addEventListener('click', () => {
                 overlay.querySelectorAll('.modal-tab').forEach(t => t.classList.remove('active'));
@@ -926,7 +737,7 @@ export class HomePage {
         document.getElementById('closeModal').addEventListener('click', () => overlay.remove());
         overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 
-        /* 发送验证码按钮逻辑 */
+        // 发送验证码
         let smsCooldown = 0;
         const sendSmsBtn = document.getElementById('sendSmsCodeBtn');
         sendSmsBtn.addEventListener('click', async () => {
@@ -947,14 +758,13 @@ export class HomePage {
                 sendSmsBtn.textContent = '发送中...';
                 const d = await api.sendSmsCode(phone);
                 if (d.success) {
-                    /* MVP阶段：自动填入验证码 */
+                    // MVP阶段自动填入验证码
                     if (d.code) {
                         document.getElementById('phoneLoginCode').value = d.code;
                         showToast('验证码已发送（开发模式自动填入）', 'success', 2000);
                     } else {
                         showToast('验证码已发送', 'success', 2000);
                     }
-                    /* 60秒冷却倒计时 */
                     smsCooldown = 60;
                     const timer = setInterval(() => {
                         smsCooldown--;
@@ -975,7 +785,7 @@ export class HomePage {
             }
         });
 
-        /* 手机号登录提交 */
+        // 手机号登录提交
         document.getElementById('submitPhoneLogin').addEventListener('click', async () => {
             const phone = document.getElementById('phoneLoginPhone').value.trim();
             const code = document.getElementById('phoneLoginCode').value.trim();
@@ -1039,21 +849,8 @@ export class HomePage {
         });
     }
 
-    // ==================== 私有方法：内联结果渲染 ====================
+    /* ---- 内联结果渲染 ---- */
 
-    /**
-     * 渲染内联识别结果
-     * 填充分类徽章、物品名称、置信度条、投放指引等信息
-     *
-     * @param {Object} result - 识别结果对象
-     * @param {string} result.category - 垃圾分类名称
-     * @param {string} result.label_cn - 物品中文名称
-     * @param {number} result.confidence - 置信度（0~1）
-     * @param {string} [result.bin_color] - 分类颜色
-     * @param {string} [result.guidance] - 投放指引
-     * @param {number} [result.inference_time_ms] - 推理耗时
-     * @private
-     */
     _renderInlineResult(result) {
         if (!this.resultSection) return;
 
@@ -1083,17 +880,6 @@ export class HomePage {
         this.resultSection.classList.remove('hidden');
     }
 
-    /**
-     * 渲染内联搜索结果列表
-     * 将搜索匹配结果以卡片形式展示在首页
-     *
-     * @param {Array<Object>} results - 搜索结果数组
-     * @param {string} results[].label - 物品名称
-     * @param {string} results[].category - 所属分类
-     * @param {string} [results[].bin_color] - 分类颜色
-     * @param {number} [results[].similarity_score] - 相似度百分比
-     * @private
-     */
     _renderInlineSearchResult(results) {
         if (!this.searchResultSection) return;
         const container = document.getElementById('homeSearchResults');

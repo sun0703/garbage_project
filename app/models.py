@@ -1,7 +1,4 @@
-"""
-请求/响应 Pydantic 模型定义
-从 main.py 提取集中管理，供路由模块和主程序引用
-"""
+"""请求/响应的Pydantic模型定义"""
 
 from pydantic import BaseModel, Field
 

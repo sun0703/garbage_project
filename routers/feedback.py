@@ -1,9 +1,4 @@
-"""
-用户反馈路由模块
-
-提供识别结果反馈提交接口。
-依赖 feedback_store 全局单例（通过 backend_state 获取）。
-"""
+"""用户反馈接口"""
 
 import hashlib
 import logging
@@ -21,7 +16,7 @@ router = APIRouter()
 
 @router.post("/api/feedback")
 async def submit_feedback(request: FeedbackRequest) -> JSONResponse:
-    """提交识别结果反馈"""
+    """提交反馈"""
     if request.predicted_category_id not in (0, 1, 2, 3):
         return JSONResponse(
             status_code=400,
@@ -45,13 +40,13 @@ async def submit_feedback(request: FeedbackRequest) -> JSONResponse:
             content={"success": False, "error": {"code": "E006", "message": "反馈服务未就绪"}},
         )
 
-    # 仅存储图片哈希摘要，避免大量 Base64 数据撑爆内存
+    # 只存图片哈希，不存原始base64，省内存
     image_hash = hashlib.sha256(request.image_base64.encode("utf-8")).hexdigest()[:16]
     feedback_id = backend_state.feedback_store.add({
         "image_hash": image_hash,
         "predicted_category_id": request.predicted_category_id,
         "correct_category_id": request.correct_category_id,
-        "comment": request.comment[:500],  # 限制评论长度
+        "comment": request.comment[:500],  # 评论太长截断
     })
 
     logger.info("📝 收到用户反馈: %s, 预测=%d, 正确=%d", feedback_id,

@@ -1,7 +1,4 @@
-"""
-识别历史记录存储模块（内存 + JSON文件备份）
-从 main.py 提取为独立模块
-"""
+"""识别历史记录，内存+JSON文件备份"""
 
 import json
 import time
@@ -13,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class HistoryStore:
-    """识别历史记录存储（内存 + JSON文件备份）"""
+    """历史记录，内存为主，磁盘只存最近100条"""
 
     def __init__(self, max_items: int = 200, backup_path: Path | None = None):
         self.max_items = max_items
@@ -61,7 +58,7 @@ class HistoryStore:
         if not self._backup_path:
             return
         try:
-            # 只存最近100条到磁盘
+            # 只存最近100条，多了磁盘文件会很大
             with open(self._backup_path, "w", encoding="utf-8") as f:
                 json.dump(self._records[:100], f, ensure_ascii=False, indent=2)
         except Exception as e:

@@ -1,22 +1,5 @@
 """
-高级多模态融合垃圾分类识别系统（Advanced Multi-Modal Fusion System）
-
-技术栈：
-┌─────────────────────────────────────────────────────────────┐
-│  Layer 1: YOLOv8 (目标检测) → 粗定位 + 大类分类             │
-│  Layer 2: SAHI (切片推理) → 小目标增强检测                  │
-│  Layer 3: 双层级联 (粗分类→路由→专用子模型) → 精细识别   │
-│  Fusion: 加权投票 + 置信度校准 → 最终决策                   │
-└─────────────────────────────────────────────────────────────┘
-
-核心优势：
-1. YOLO: 快速目标检测，适合大中型物体
-2. SAHI: 切片推理解决小目标漏检问题（垃圾通常较小）
-3. 双层级联: 先分4大类再精细化，类别越少准确率越高
-4. 融合决策: 多视角交叉验证，大幅提升准确率
-
-作者：AI Assistant
-日期：2025-05-25
+多模态融合垃圾分类，YOLO检测+SAHI切片+双层级联精细化
 """
 
 import logging
@@ -31,11 +14,10 @@ import numpy as np
 from PIL import Image, ImageDraw
 import cv2
 
-# ==================== 日志配置 ====================
 logger = logging.getLogger(__name__)
 
 
-# ==================== 枚举与常量 ====================
+# 枚举与常量
 class WasteCategory(Enum):
     """垃圾四大类别"""
     KITCHEN_WASTE = 0
@@ -117,7 +99,7 @@ class MultiModalResult:
     consistency_score: float = 1.0
 
 
-# ==================== 类别映射 ====================
+# 类别映射
 CATEGORY_MAP = {
     WasteCategory.KITCHEN_WASTE: {"name": "厨余垃圾", "color": "#8B4513", "icon": "🗑️"},
     WasteCategory.RECYCLABLE: {"name": "可回收物", "color": "#007bff", "icon": "♻️"},
@@ -127,14 +109,14 @@ CATEGORY_MAP = {
 
 # 40类垃圾专用模型的精确映射表（与garbage_yolov8m_best.pt完全对齐）
 YOLO_40CLASS_MAP = {
-    # ===== 其他垃圾 (Other Trash) - category 2 =====
+    # 其他垃圾 (Other Trash) - category 2
     0: {"name_cn": "一次性快餐盒", "category": WasteCategory.OTHER_TRASH},
     1: {"name_cn": "脏塑料", "category": WasteCategory.OTHER_TRASH},
     2: {"name_cn": "烟蒂", "category": WasteCategory.OTHER_TRASH},
     3: {"name_cn": "牙签", "category": WasteCategory.OTHER_TRASH},
     4: {"name_cn": "碎花盆和盘子", "category": WasteCategory.OTHER_TRASH},
     5: {"name_cn": "竹筷", "category": WasteCategory.OTHER_TRASH},
-    # ===== 厨余垃圾 (Kitchen Waste) - category 0 =====
+    # 厨余垃圾 (Kitchen Waste) - category 0
     6: {"name_cn": "剩菜剩饭", "category": WasteCategory.KITCHEN_WASTE},
     7: {"name_cn": "大骨头", "category": WasteCategory.KITCHEN_WASTE},
     8: {"name_cn": "果皮", "category": WasteCategory.KITCHEN_WASTE},
@@ -143,7 +125,7 @@ YOLO_40CLASS_MAP = {
     11: {"name_cn": "蔬菜叶和根", "category": WasteCategory.KITCHEN_WASTE},
     12: {"name_cn": "蛋壳", "category": WasteCategory.KITCHEN_WASTE},
     13: {"name_cn": "鱼骨", "category": WasteCategory.KITCHEN_WASTE},
-    # ===== 可回收物 (Recyclable) - category 1 =====
+    # 可回收物 (Recyclable) - category 1
     14: {"name_cn": "电池组", "category": WasteCategory.RECYCLABLE},
     15: {"name_cn": "背包", "category": WasteCategory.RECYCLABLE},
     16: {"name_cn": "化妆品瓶", "category": WasteCategory.RECYCLABLE},
@@ -167,10 +149,10 @@ YOLO_40CLASS_MAP = {
     34: {"name_cn": "锅", "category": WasteCategory.RECYCLABLE},
     35: {"name_cn": "食用油容器", "category": WasteCategory.RECYCLABLE},
     36: {"name_cn": "饮料瓶/塑料瓶", "category": WasteCategory.RECYCLABLE},
-    # ===== 有害垃圾 (Hazardous) - category 3 =====
+    # 有害垃圾 (Hazardous) - category 3
     37: {"name_cn": "干电池", "category": WasteCategory.HAZARDOUS},
     38: {"name_cn": "药膏", "category": WasteCategory.HAZARDOUS},
-    # ===== 可回收物续 =====
+    # 可回收物续
     39: {"name_cn": "纸张", "category": WasteCategory.RECYCLABLE},
 }
 
@@ -207,7 +189,7 @@ FINE_CLASSES = {
 }
 
 
-# ==================== 第一层：YOLO 检测器 ====================
+# 第一层：YOLO检测器
 class YOLODetector:
     """
     YOLOv8 目标检测器（第一层）
@@ -462,7 +444,7 @@ class YOLODetector:
         return best_id
 
 
-# ==================== 第二层：SAHI 切片推理引擎 ====================
+# 第二层：SAHI切片推理引擎
 class SAHIEngine:
     """
     SAHI (Slicing Aided Hyper Inference) 切片推理引擎
@@ -634,7 +616,7 @@ class SAHIEngine:
         return temp_detector._fallback_detect(slice_img, top_k=1)
 
 
-# ==================== 第三层：双层级联精细化分类器 ====================
+# 第三层：双层级联精细化分类器
 class CascadeFineClassifier:
     """
     双层级联精细化分类器
@@ -699,19 +681,19 @@ class CascadeFineClassifier:
         """
         start_time = time.perf_counter()
 
-        # ========== Step 1: 粗分类（4大类） ==========
+        # Step 1: 粗分类（4大类）
         coarse_category, coarse_confidence, category_probs = self._coarse_classify(yolo_results, image)
 
         logger.info("  [Cascade Step1] 粗分类: %s (%.1f%%)",
                    CATEGORY_MAP[coarse_category]["name"], coarse_confidence * 100)
 
-        # ========== Step 2: 路由决策 ==========
+        # Step 2: 路由决策
         target_categories, strategy_desc = self._route(coarse_category, coarse_confidence, category_probs)
 
         logger.info("  [Cascade Step2] 路由: %s → %s", strategy_desc,
                    [CATEGORY_MAP[c]["name"] for c in target_categories])
 
-        # ========== Step 3: 精细化子模型推理 ==========
+        # Step 3: 精细化子模型推理
         fine_results = self._fine_classify(image, target_categories, yolo_results, top_k)
 
         inference_time = (time.perf_counter() - start_time) * 1000
@@ -979,7 +961,7 @@ class CascadeFineClassifier:
         return WasteCategory.OTHER_TRASH
 
 
-# ==================== 融合决策系统 ====================
+# 融合决策系统
 class FusionDecisionMaker:
     """
     多模态融合决策系统
@@ -1136,7 +1118,7 @@ class FusionDecisionMaker:
         )
 
 
-# ==================== 主系统：多模态融合分类器 ====================
+# 主系统：多模态融合分类器
 class MultiModalFusionClassifier:
     """
     多模态融合垃圾分类识别系统（主入口）
@@ -1229,23 +1211,23 @@ class MultiModalFusionClassifier:
         total_start = time.perf_counter()
         logger.info("🔍 开始多模态融合推理...")
 
-        # ========== Layer 1: YOLO检测 ==========
+        # Layer 1: YOLO检测
         logger.info("  [Layer 1/YOLO] 检测中...")
         yolo_results = self.yolo_detector.detect(image, top_k=3)
 
-        # ========== Layer 2: SAHI切片推理 ==========
+        # Layer 2: SAHI切片推理
         sahi_results: List[DetectionResult] = []
         if self.sahi_engine:
             logger.info("  [Layer 2/SAHI] 切片推理中...")
             sahi_results = self.sahi_engine.detect_with_slicing(image, top_k=3)
 
-        # ========== Layer 3: 双层级联精细化分类 ==========
+        # Layer 3: 双层级联精细化分类
         logger.info("  [Layer 3/Cascade] 级联分类中...")
         cascade_results = self.cascade_classifier.classify(
             image, yolo_results=yolo_results, top_k=3
         )
 
-        # ========== 融合决策 ==========
+        # 融合决策
         final_result = self.fusion_maker.fuse_predictions(
             yolo_results=yolo_results,
             sahi_results=sahi_results,
@@ -1355,7 +1337,7 @@ class MultiModalFusionClassifier:
         }
 
 
-# ==================== 测试入口 ====================
+# 测试入口
 if __name__ == "__main__":
     print("=" * 70)
     print("🧪 多模态融合垃圾分类识别系统 - 测试模式")

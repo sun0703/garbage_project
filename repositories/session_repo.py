@@ -1,4 +1,4 @@
-"""会话数据访问层 —— 封装 sessions 表的所有数据库操作"""
+"""会话数据访问，sessions 表"""
 
 import uuid
 import time
@@ -13,19 +13,11 @@ SESSION_EXPIRE_SECONDS = 86400 * 7
 
 
 class SessionRepository:
-    """会话表静态仓库"""
+    """会话表仓库"""
 
     @staticmethod
     def create_session(user_id: str, expires_in: int = SESSION_EXPIRE_SECONDS) -> Optional[str]:
-        """创建新会话
-
-        Args:
-            user_id:    用户 ID
-            expires_in: 过期秒数，默认 7 天
-
-        Returns:
-            会话 ID 字符串，失败返回 None
-        """
+        """创建会话，默认7天过期"""
         try:
             db = get_db()
             session_id = uuid.uuid4().hex
@@ -43,14 +35,7 @@ class SessionRepository:
 
     @staticmethod
     def get_session_user_id(session_id: str) -> Optional[str]:
-        """根据会话 ID 获取有效会话对应的用户 ID
-
-        Args:
-            session_id: 会话 ID
-
-        Returns:
-            用户 ID 或 None（过期/不存在）
-        """
+        """根据session_id查用户，过期返回None"""
         try:
             db = get_db()
             row = db.fetchone(
@@ -64,14 +49,7 @@ class SessionRepository:
 
     @staticmethod
     def delete_session(session_id: str) -> bool:
-        """删除指定会话（登出时调用）
-
-        Args:
-            session_id: 会话 ID
-
-        Returns:
-            成功返回 True
-        """
+        """删除会话（登出）"""
         try:
             db = get_db()
             db.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
@@ -83,14 +61,7 @@ class SessionRepository:
 
     @staticmethod
     def delete_user_sessions(user_id: str) -> bool:
-        """删除用户所有会话（强制下线时调用）
-
-        Args:
-            user_id: 用户 ID
-
-        Returns:
-            成功返回 True
-        """
+        """删除用户所有会话（强制下线）"""
         try:
             db = get_db()
             db.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))

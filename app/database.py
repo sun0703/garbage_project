@@ -1,13 +1,4 @@
-"""
-数据库抽象层 — 支持 SQLite（开发）和 PostgreSQL（生产）双模式
-
-根据环境变量 DATABASE_URL 自动选择数据库引擎：
-  - 未设置或以 sqlite:// 开头 → SQLite 模式（同步）
-  - 以 postgresql:// 开头 → PostgreSQL 模式（同步）
-
-使用方式：
-    from app.database import get_db, db_engine
-"""
+"""数据库抽象层，支持SQLite和PostgreSQL双模式"""
 
 import json
 import logging
@@ -186,8 +177,7 @@ def create_database() -> DatabaseBackend:
     return SQLiteDatabase(db_path)
 
 
-# ==================== 全局数据库实例 ====================
-# 延迟初始化，在 app/main.py startup 事件中调用 init_database()
+# 全局数据库实例（延迟初始化，在startup事件中调用init_database）
 _db: Optional[DatabaseBackend] = None
 
 

@@ -1,6 +1,4 @@
-"""
-垃圾分类工具模块 — 投放建议、置信度校准、类别信息
-"""
+"""垃圾分类工具 — 投放建议、置信度校准、类别信息"""
 
 import logging
 
@@ -17,7 +15,7 @@ def set_search_engine(engine) -> None:
     _search_engine = engine
 
 
-# 物品差异化投放建议库
+# 物品差异化投放建议，格式: {物品名: (类别id, [步骤])}
 _DISPOSAL_TIPS: dict[str, tuple[int, list[str]]] = {
     "塑料瓶":  (0, ["倒空瓶内残留液体", "简单冲洗瓶身", "压扁瓶身减少体积", "投入蓝色可回收物桶"]),
     "饮料瓶":  (0, ["倒空瓶内残留液体", "简单冲洗瓶身", "压扁瓶身减少体积", "投入蓝色可回收物桶"]),
@@ -66,6 +64,7 @@ _DISPOSAL_TIPS: dict[str, tuple[int, list[str]]] = {
     "尘土":     (3, ["装袋密封防止扬尘", "投入灰色其他垃圾桶"]),
 }
 
+# 没匹配到具体物品时的兜底建议
 _FALLBACK_TIPS: dict[int, list[str]] = {
     0: ["清洁干净、干燥无油污", "按材质分类整理后投放", "投入蓝色可回收物桶"],
     1: ["含有毒有害物质，请妥善包装", "投入红色有害垃圾桶", "不确定时咨询社区工作人员"],
@@ -75,7 +74,7 @@ _FALLBACK_TIPS: dict[int, list[str]] = {
 
 
 def _get_disposal_tips(label_cn: str, class_index: int) -> list[str]:
-    """根据物品名称匹配差异化投放建议"""
+    """按物品名匹配投放建议，匹配不到就用类别兜底"""
     if not label_cn or label_cn == "识别物品":
         return _FALLBACK_TIPS.get(class_index, ["请正确分类后投放"])
     for keyword, (_cat_id, steps) in _DISPOSAL_TIPS.items():
@@ -84,17 +83,17 @@ def _get_disposal_tips(label_cn: str, class_index: int) -> list[str]:
     return _FALLBACK_TIPS.get(class_index, ["请正确分类后投放"])
 
 
-# 40类模型的类别难度系数（基于实际识别难度调整）
+# 40类模型的类别难度系数，根据实际识别效果调的
 CLASS_DIFFICULTY_40 = {
-    # 容易识别（系数 > 1.0，提升置信度）
+    # 容易识别的，系数>1提升置信度
     "易拉罐": 1.08, "饮料瓶": 1.10, "塑料瓶": 1.06,
     "玻璃制品": 1.07, "金属制品": 1.09,
 
-    # 中等难度（系数 = 1.0）
+    # 中等
     "一次性餐具": 1.00, "纸巾": 1.00, "塑料袋": 1.00,
     "快递包装": 1.00, "旧书报纸": 1.02,
 
-    # 较难识别（系数 < 1.0，降低置信度）
+    # 不好认的，系数<1降低置信度
     "剩菜剩饭": 0.92, "果皮": 0.90, "菜叶菜根": 0.88,
     "蛋壳": 0.85, "骨头": 0.87, "过期食品": 0.89,
 }
@@ -106,10 +105,7 @@ def _calibrate_confidence_40class(
     num_detections: int,
     is_demo_mode: bool
 ) -> float:
-    """40类模型置信度校准
-
-    策略：类别难度系数 + 多检测框一致性奖励 + 高/低置信度保护
-    """
+    """40类模型置信度校准：难度系数 + 一致性奖励 + 高低置信度保护"""
     if raw_confidence <= 0:
         return 0.0
 
@@ -117,23 +113,19 @@ def _calibrate_confidence_40class(
     if class_id in GARBAGE_40CLASSES:
         class_name_cn = GARBAGE_40CLASSES[class_id]["name_cn"]
 
-    # 类别难度校准
     difficulty_factor = CLASS_DIFFICULTY_40.get(class_name_cn, 1.0)
     calibrated = raw_confidence * difficulty_factor
 
-    # 一致性奖励（多检测框时）
+    # 多个检测框指向同一类，说明更可信
     if num_detections >= 2 and not is_demo_mode:
         consistency_bonus = min(0.05, num_detections * 0.01)
         calibrated += consistency_bonus
 
-    # 高置信度保护
     if raw_confidence > 0.90:
         calibrated = max(calibrated, 0.88)
-    # 低置信度惩罚
     elif raw_confidence < 0.30:
         calibrated *= 0.8
 
-    # 范围限制
     calibrated = max(0.25, min(0.98, calibrated))
 
     return round(calibrated, 4)
@@ -146,11 +138,7 @@ def _get_class_info(
     is_metallic: bool = False,
     original_class_name: str | None = None
 ) -> dict:
-    """获取类别详细信息
-
-    支持基于物品类型和金属特征智能选择示例名称，
-    按物品类型返回差异化投放建议。
-    """
+    """拼装类别详情，包括桶颜色、投放建议等"""
     base_info = WASTE_CATEGORIES.get(class_index, WASTE_CATEGORIES[2]).copy()
 
     info = {
@@ -165,6 +153,7 @@ def _get_class_info(
 
     use_vocab_name = (original_class_name is None or original_class_name == "")
 
+    # 有搜索引擎词库的话，尝试智能匹配更具体的物品名
     if _search_engine and _search_engine.vocab and use_vocab_name:
         if is_demo_mode:
             sample_item = _search_engine.get_smart_item(class_index, item_type, is_metallic)

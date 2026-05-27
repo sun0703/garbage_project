@@ -1,7 +1,4 @@
-"""
-校园生活垃圾智能分类识别系统 - 后端主程序
-FastAPI + Uvicorn + ONNX Runtime + FuzzyWuzzy + Pillow + OpenCV
-"""
+"""校园垃圾分类后端主程序"""
 
 import json
 import logging

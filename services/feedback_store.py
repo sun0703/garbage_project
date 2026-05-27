@@ -1,7 +1,4 @@
-"""
-用户反馈存储模块（内存 + JSON文件追加）
-从 main.py 提取为独立模块
-"""
+"""用户反馈存储，内存+JSON文件"""
 
 import json
 import time
@@ -13,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class FeedbackStore:
-    """用户反馈存储（内存 + JSON文件追加）"""
+    """反馈记录，内存为主、JSON文件做持久化"""
 
     def __init__(self, backup_path: Path | None = None):
         self._records: list[dict] = []

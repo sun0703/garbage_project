@@ -45,6 +45,7 @@ jobs:
 
   # ==================== Docker 构建验证 ====================
   build:
+    needs: [lint, test]  # 确保代码检查和测试完成后再构建
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

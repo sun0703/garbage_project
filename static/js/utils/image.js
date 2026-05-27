@@ -146,7 +146,13 @@ export class ImageProcessor {
             if (currentStep >= QUALITY_STEPS.length) {
               // 所有质量等级都已尝试完毕，使用最低质量的结果
               canvas.toBlob(
-                (blob) => resolve(blob),
+                (blob) => {
+                  // FIX-003: 压缩完成后清理Canvas资源，防止内存泄漏
+                  ctx.clearRect(0, 0, canvas.width, canvas.height);
+                  canvas.width = 0;
+                  canvas.height = 0;
+                  resolve(blob);
+                },
                 'image/jpeg',
                 QUALITY_STEPS[QUALITY_STEPS.length - 1]
               );
@@ -156,8 +162,12 @@ export class ImageProcessor {
             const quality = QUALITY_STEPS[currentStep];
             canvas.toBlob(
               (blob) => {
-                // 当前质量下输出已达标，直接返回
+                // 当前质量下输出已达标，直接返回并清理资源
                 if (blob && blob.size <= targetBytes) {
+                  // FIX-003: 达标后清理Canvas资源，防止内存泄漏
+                  ctx.clearRect(0, 0, canvas.width, canvas.height);
+                  canvas.width = 0;
+                  canvas.height = 0;
                   resolve(blob);
                   return;
                 }
@@ -276,6 +286,12 @@ export class ImageProcessor {
 
           // 以固定质量和格式导出为DataURL
           const dataURL = canvas.toDataURL('image/jpeg', 0.6);
+
+          // FIX-003: 缩略图生成完成后清理Canvas资源，防止内存泄漏
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          canvas.width = 0;
+          canvas.height = 0;
+
           resolve(dataURL);
 
         } catch (error) {

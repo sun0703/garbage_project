@@ -1,5 +1,8 @@
 /**
  * @fileoverview 语音识别按钮组件 - VoiceButton
+ *
+ * ⚠️ **迁移状态**: 待迁移至 BaseComponent 基类
+ *
  * @description 基于 Web Speech API (SpeechRecognition) 的语音输入组件
  *              支持 Chrome / Edge / Safari 浏览器，自动降级提示
  *

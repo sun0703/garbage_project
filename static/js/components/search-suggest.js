@@ -1,3 +1,11 @@
+/**
+ * 搜索建议组件 - SearchSuggest
+ *
+ * ⚠️ **迁移状态**: 待迁移至 BaseComponent 基类
+ *
+ * 提供搜索联想、历史记录管理等功能
+ */
+
 import { api } from '../api.js';
 import { escapeHtml } from '../utils/escape.js';
 

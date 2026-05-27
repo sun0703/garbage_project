@@ -7,6 +7,8 @@
 
 // ==================== 内部状态与常量 ====================
 
+import { escapeHtml } from './escape.js';
+
 /** Toast队列：存储待显示的消息，实现排队机制 */
 let _toastQueue = [];
 
@@ -102,8 +104,9 @@ export function showToast(msg, type = 'info', duration = TOAST_DEFAULT_DURATION)
   const validTypes = ['success', 'error', 'warning', 'info'];
   const safeType = validTypes.includes(type) ? type : 'info';
 
-  // 将消息推入队列
-  _toastQueue.push({ msg, type: safeType, duration });
+  // FIX-002: Toast消息入队前进行类型安全转换，防止非字符串值导致异常
+  const safeMsg = typeof msg === 'string' ? msg : String(msg ?? '');
+  _toastQueue.push({ msg: safeMsg, type: safeType, duration });
 
   // 尝试消费队列（若当前空闲则立即显示）
   _processToastQueue();
@@ -167,9 +170,18 @@ export function hideToast() {
 export function showLoading(text = '正在识别中...') {
   const overlay = _getOrCreateElement('loadingOverlay', 'div');
   overlay.className = 'loading-overlay';
-  overlay.querySelector('.loading-overlay__text')
-    ? (overlay.querySelector('.loading-overlay__text').textContent = text)
-    : (overlay.innerHTML = `<div class="spinner"></div><span class="loading-overlay__text">${text}</span>`);
+  // FIX-002: 使用DOM API替代innerHTML构建Loading元素，防止XSS注入
+  if (!overlay.querySelector('.loading-overlay__text')) {
+    const spinner = document.createElement('div');
+    spinner.className = 'spinner';
+    const textSpan = document.createElement('span');
+    textSpan.className = 'loading-overlay__text';
+    textSpan.textContent = text;
+    overlay.appendChild(spinner);
+    overlay.appendChild(textSpan);
+  } else {
+    overlay.querySelector('.loading-overlay__text').textContent = text;
+  }
   overlay.classList.remove('hidden');
 }
 
@@ -255,21 +267,45 @@ export async function showModal({
 }) {
   const overlay = _getOrCreateElement('modalOverlay', 'div');
 
-  // 构建弹窗HTML结构并设置样式类
+  // FIX-002: 使用DOM API替代innerHTML构建Modal元素，防止title/content参数XSS注入
   overlay.className = 'modal-overlay';
-  overlay.innerHTML = `
-    <div class="modal">
-      <div class="modal__header">
-        <h3 class="modal__title">${title}</h3>
-        <button class="modal__close" id="modalCloseBtn" aria-label="关闭">&times;</button>
-      </div>
-      <div class="modal__body">${content}</div>
-      <div class="modal__footer">
-        <button class="btn btn-secondary modal__btn-cancel">${cancelText}</button>
-        <button class="btn btn-primary modal__btn-confirm">${confirmText}</button>
-      </div>
-    </div>
-  `;
+  overlay.innerHTML = '';
+
+  const modalDiv = document.createElement('div');
+  modalDiv.className = 'modal';
+
+  const headerDiv = document.createElement('div');
+  headerDiv.className = 'modal__header';
+  const titleEl = document.createElement('h3');
+  titleEl.className = 'modal__title';
+  titleEl.textContent = title;
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'modal__close';
+  closeBtn.id = 'modalCloseBtn';
+  closeBtn.setAttribute('aria-label', '关闭');
+  closeBtn.innerHTML = '&times;';
+  headerDiv.appendChild(titleEl);
+  headerDiv.appendChild(closeBtn);
+
+  const bodyDiv = document.createElement('div');
+  bodyDiv.className = 'modal__body';
+  bodyDiv.textContent = content;
+
+  const footerDiv = document.createElement('div');
+  footerDiv.className = 'modal__footer';
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'btn btn-secondary modal__btn-cancel';
+  cancelBtn.textContent = cancelText;
+  const confirmBtn = document.createElement('button');
+  confirmBtn.className = 'btn btn-primary modal__btn-confirm';
+  confirmBtn.textContent = confirmText;
+  footerDiv.appendChild(cancelBtn);
+  footerDiv.appendChild(confirmBtn);
+
+  modalDiv.appendChild(headerDiv);
+  modalDiv.appendChild(bodyDiv);
+  modalDiv.appendChild(footerDiv);
+  overlay.appendChild(modalDiv);
 
   // 移除隐藏类触发入场动画
   overlay.classList.remove('hidden');

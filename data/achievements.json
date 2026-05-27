@@ -1,0 +1,100 @@
+{
+  "achievements": [
+    {
+      "id": "first_predict",
+      "name": "初识垃圾",
+      "description": "完成第一次垃圾识别",
+      "icon": "🔍",
+      "condition": { "type": "count", "field": "total_predictions", "value": 1 },
+      "points_reward": 10
+    },
+    {
+      "id": "predict_10",
+      "name": "识别新手",
+      "description": "累计识别10次垃圾",
+      "icon": "♻️",
+      "condition": { "type": "count", "field": "total_predictions", "value": 10 },
+      "points_reward": 15
+    },
+    {
+      "id": "predict_50",
+      "name": "分类能手",
+      "description": "累计识别50次垃圾",
+      "icon": "🎯",
+      "condition": { "type": "count", "field": "total_predictions", "value": 50 },
+      "points_reward": 30
+    },
+    {
+      "id": "checkin_streak_3",
+      "name": "三天坚持",
+      "description": "连续打卡3天",
+      "icon": "🔥",
+      "condition": { "type": "streak", "field": "checkin", "value": 3 },
+      "points_reward": 10
+    },
+    {
+      "id": "checkin_streak_7",
+      "name": "周周坚持",
+      "description": "连续打卡7天",
+      "icon": "🌟",
+      "condition": { "type": "streak", "field": "checkin", "value": 7 },
+      "points_reward": 30
+    },
+    {
+      "id": "quiz_perfect_5",
+      "name": "答题达人",
+      "description": "累计答对5道题",
+      "icon": "🧠",
+      "condition": { "type": "count", "field": "quiz_correct", "value": 5 },
+      "points_reward": 20
+    },
+    {
+      "id": "quiz_perfect_10",
+      "name": "知识渊博",
+      "description": "累计答对10道题",
+      "icon": "📚",
+      "condition": { "type": "count", "field": "quiz_correct", "value": 10 },
+      "points_reward": 30
+    },
+    {
+      "id": "points_100",
+      "name": "百分百环保",
+      "description": "累计获得100积分",
+      "icon": "💯",
+      "condition": { "type": "total_points", "value": 100 },
+      "points_reward": 25
+    },
+    {
+      "id": "points_500",
+      "name": "环保先锋",
+      "description": "累计获得500积分",
+      "icon": "🏅",
+      "condition": { "type": "total_points", "value": 500 },
+      "points_reward": 50
+    },
+    {
+      "id": "first_checkin",
+      "name": "初次打卡",
+      "description": "完成第一次环保打卡",
+      "icon": "📍",
+      "condition": { "type": "count", "field": "checkin_count", "value": 1 },
+      "points_reward": 10
+    },
+    {
+      "id": "checkin_10",
+      "name": "打卡达人",
+      "description": "累计打卡10次",
+      "icon": "📋",
+      "condition": { "type": "count", "field": "checkin_count", "value": 10 },
+      "points_reward": 20
+    },
+    {
+      "id": "all_categories",
+      "name": "全能分类师",
+      "description": "识别过所有4类垃圾",
+      "icon": "♻️",
+      "condition": { "type": "unique_categories", "value": 4 },
+      "points_reward": 50
+    }
+  ]
+}

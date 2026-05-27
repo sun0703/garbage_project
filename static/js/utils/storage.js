@@ -95,13 +95,21 @@ export class Storage {
    * @returns {*} 解析后的数据对象，读取失败或无数据时返回默认值
    * @description 内部辅助方法：统一处理JSON解析异常和数据缺失场景
    */
-  _read(key) {
+  _read(key, _retryCount = 0) {
     try {
       const raw = localStorage.getItem(key);
       return raw ? JSON.parse(raw) : null;
     } catch (error) {
-      // JSON解析失败时返回null并输出警告
-      console.warn(`[Storage] 读取 ${key} 失败:`, error.message);
+      // FIX-004: JSON解析失败时记录详细错误日志
+      console.warn(`[Storage] 读取 ${key} 失败 (第${_retryCount + 1}次尝试):`, error.message);
+
+      if (_retryCount === 0) {
+        console.warn(`[Storage] 检测到 ${key} 数据可能已损坏，正在清除...`);
+        localStorage.removeItem(key);
+        return this._read(key, 1);
+      }
+
+      console.error(`[Storage] ${key} 数据清除后仍读取失败，返回null`);
       return null;
     }
   }

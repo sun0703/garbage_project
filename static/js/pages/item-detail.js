@@ -1,12 +1,5 @@
-/**
- * 物品详情页视图（Item Detail Page）
- *
- * 职责：展示单个垃圾物品的完整投放指引；
- *       包含：物品名称、分类、投放指引、处理步骤、注意事项、
- *       相关物品推荐、易混淆物品对比；
- *       数据来源 /api/guide/item/:keyword。
- * 容器：#page-item
- */
+// 物品详情页 — 单个垃圾的完整投放指引
+// 数据来自 /api/guide/item/:keyword
 
 import { api } from '../api.js';
 import { store } from '../store.js';

@@ -1,3 +1,5 @@
+// 环保社区 — 打卡/答题/活动/排行榜
+
 import { store } from '../store.js';
 import { api } from '../api.js';
 import { escapeHtml } from '../utils/escape.js';
@@ -115,7 +117,7 @@ export class CommunityPage {
             <button class="btn btn-secondary btn-sm" id="logoutBtn">退出</button>
         `;
 
-        this._boundHandlers.logout = () => this._handleLogout();
+        this._boundHandlers.logout = () => this._doLogout();
         document.getElementById('logoutBtn')?.addEventListener('click', this._boundHandlers.logout);
     }
 
@@ -141,7 +143,7 @@ export class CommunityPage {
             } else {
                 statusEl.textContent = '今日尚未打卡';
                 btn.disabled = false;
-                this._boundHandlers.checkin = () => this._handleCheckin();
+                this._boundHandlers.checkin = () => this._doCheckin();
                 btn.addEventListener('click', this._boundHandlers.checkin);
             }
         } catch (e) {
@@ -150,7 +152,7 @@ export class CommunityPage {
         }
     }
 
-    async _handleCheckin() {
+    async _doCheckin() {
         const btn = document.getElementById('checkinBtn');
         if (btn) btn.disabled = true;
         try {
@@ -220,12 +222,12 @@ export class CommunityPage {
             btn.addEventListener('click', () => {
                 if (this._quizAnswered) return;
                 this._quizAnswered = true;
-                this._handleQuizAnswer(parseInt(btn.dataset.index));
+                this._submitQuizAnswer(parseInt(btn.dataset.index));
             });
         });
     }
 
-    async _handleQuizAnswer(selected) {
+    async _submitQuizAnswer(selected) {
         if (!this._quiz) return;
 
         const options = document.querySelectorAll('.quiz-option');
@@ -512,7 +514,7 @@ export class CommunityPage {
         });
     }
 
-    async _handleLogout() {
+    async _doLogout() {
         try {
             await api.logout();
             this._user = null;

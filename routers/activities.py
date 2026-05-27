@@ -1,7 +1,4 @@
-"""
-环保活动路由模块
-包含活动列表、详情、报名、取消报名、管理员签到核销、活动 CRUD 等接口
-"""
+"""环保活动接口"""
 
 import logging
 import time
@@ -22,7 +19,7 @@ from routers.auth import _get_current_user
 
 @router.get("/api/activities")
 async def get_activities(status: str = "", page: int = 1, page_size: int = 10):
-    """分页获取活动列表，支持按状态过滤"""
+    """活动列表"""
     try:
         activities, total = ActivityRepository.list_activities(status, page, page_size)
         for a in activities:
@@ -36,7 +33,7 @@ async def get_activities(status: str = "", page: int = 1, page_size: int = 10):
 
 @router.get("/api/activities/{activity_id}")
 async def get_activity(activity_id: str):
-    """获取单个活动详情"""
+    """活动详情"""
     try:
         a = ActivityRepository.get_activity_by_id(activity_id)
         if not a:
@@ -51,7 +48,7 @@ async def get_activity(activity_id: str):
 
 @router.post("/api/activities/signup")
 async def signup_activity(request: Request, req: ActivitySignupRequest):
-    """报名参加活动"""
+    """报名活动"""
     user = _get_current_user(request)
     if not user:
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
@@ -84,7 +81,7 @@ async def signup_activity(request: Request, req: ActivitySignupRequest):
 
 @router.get("/api/activities/{activity_id}/signed")
 async def check_activity_signup(request: Request, activity_id: str):
-    """检查当前用户是否已报名指定活动"""
+    """检查是否已报名"""
     user = _get_current_user(request)
     if not user:
         return JSONResponse(content={"success": True, "signed_up": False})
@@ -98,16 +95,7 @@ async def check_activity_signup(request: Request, activity_id: str):
 
 @router.post("/api/activities/{activity_id}/checkin/{user_id}")
 async def admin_checkin_user(activity_id: str, user_id: str, request: Request):
-    """
-    管理员签到核销接口 - 管理员确认用户已到场参加活动
-
-    功能说明：
-    1. 验证当前操作用户具有管理员权限（role = 'admin'）
-    2. 验证目标活动存在且有效
-    3. 验证目标用户确实已报名该活动
-    4. 将报名记录状态更新为 'checked_in'，并记录签到时间戳
-    5. 返回签到成功结果及签到时间
-    """
+    """管理员签到核销"""
     current_user = _get_current_user(request)
     if not current_user:
         return JSONResponse(
@@ -116,7 +104,7 @@ async def admin_checkin_user(activity_id: str, user_id: str, request: Request):
         )
 
     try:
-        # 权限验证：仅允许 admin 角色执行签到核销操作
+        # 只有admin能核销
         if current_user.get("role") != "admin":
             logger.warning("⚠️ 非管理员尝试执行签到核销: user_id=%s, target_user=%s, activity=%s",
                            current_user["id"], user_id, activity_id)
@@ -125,7 +113,7 @@ async def admin_checkin_user(activity_id: str, user_id: str, request: Request):
                 content={"success": False, "error": {"code": "E403", "message": "仅管理员可执行签到核销操作"}}
             )
 
-        # 验证目标活动是否存在
+        # 活动是否存在
         activity = ActivityRepository.get_activity_by_id(activity_id)
         if not activity:
             return JSONResponse(
@@ -133,7 +121,7 @@ async def admin_checkin_user(activity_id: str, user_id: str, request: Request):
                 content={"success": False, "error": {"code": "E404", "message": "活动不存在"}}
             )
 
-        # 验证目标用户是否已报名该活动
+        # 是否已报名
         signup = ActivityRepository.get_signup_record(activity_id, user_id)
         if not signup:
             return JSONResponse(
@@ -141,7 +129,7 @@ async def admin_checkin_user(activity_id: str, user_id: str, request: Request):
                 content={"success": False, "error": {"code": "E404", "message": "该用户未报名此活动"}}
             )
 
-        # 检查是否已经签到（防止重复操作）
+        # 已签到的不能重复签
         if signup["status"] == "checked_in":
             checkin_time = ActivityRepository.get_signup_checkin_time(signup["id"])
 
@@ -154,7 +142,7 @@ async def admin_checkin_user(activity_id: str, user_id: str, request: Request):
                 }
             )
 
-        # 执行签到核销：更新报名状态为 'checked_in'，记录签到时间戳
+        # 执行签到
         checkin_time = ActivityRepository.mark_checked_in(signup["id"])
         if not checkin_time:
             return JSONResponse(
@@ -216,7 +204,7 @@ async def create_activity(request: Request, req: ActivityCreateRequest):
 
 @router.put("/api/activities/{activity_id}")
 async def update_activity(activity_id: str, request: Request, req: ActivityCreateRequest):
-    """管理员或创建者更新活动"""
+    """更新活动"""
     user = _get_current_user(request)
     if not user:
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
@@ -245,7 +233,7 @@ async def update_activity(activity_id: str, request: Request, req: ActivityCreat
 
 @router.delete("/api/activities/{activity_id}")
 async def delete_activity(activity_id: str, request: Request):
-    """管理员或创建者删除活动"""
+    """删除活动"""
     user = _get_current_user(request)
     if not user:
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
@@ -264,7 +252,7 @@ async def delete_activity(activity_id: str, request: Request):
 
 @router.post("/api/activities/{activity_id}/cancel")
 async def cancel_activity_signup(activity_id: str, request: Request):
-    """用户取消活动报名"""
+    """取消报名"""
     user = _get_current_user(request)
     if not user:
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})

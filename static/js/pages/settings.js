@@ -1,3 +1,5 @@
+// 偏好设置 — 主题/模式/通知开关
+
 import { store } from '../store.js';
 import { api } from '../api.js';
 import { showToast } from '../utils/ui.js';
@@ -285,10 +287,7 @@ export function getUserSettings() {
     return { ...DEFAULT_SETTINGS };
 }
 
-/**
- * 应用主题到 document.documentElement
- * @param {string} theme - 'light' | 'dark' | 'system'
- */
+// theme: 'light' | 'dark' | 'system'
 export function applyTheme(theme) {
     const root = document.documentElement;
     if (theme === 'dark') {

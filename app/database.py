@@ -12,12 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class DatabaseBackend:
-    """
-    数据库后端抽象基类
-
-    定义统一的数据库操作接口，子类分别实现 SQLite 和 PostgreSQL 的具体逻辑。
-    所有 SQL 语句使用标准 SQL 以兼容两种数据库。
-    """
+    """数据库后端抽象基类，子类分别实现SQLite和PostgreSQL"""
 
     def connect(self) -> None:
         """建立数据库连接"""
@@ -45,14 +40,7 @@ class DatabaseBackend:
 
 
 class SQLiteDatabase(DatabaseBackend):
-    """
-    SQLite 数据库后端（开发环境默认）
-
-    特性：
-    - 零配置，数据文件存储在 data/app.db
-    - WAL 模式提升并发读性能
-    - 自动建表和迁移
-    """
+    """SQLite后端，开发环境默认用这个，零配置"""
 
     def __init__(self, db_path: str = "data/app.db"):
         self.db_path = Path(db_path)
@@ -92,14 +80,7 @@ class SQLiteDatabase(DatabaseBackend):
 
 
 class PostgreSQLDatabase(DatabaseBackend):
-    """
-    PostgreSQL 数据库后端（生产环境）
-
-    特性：
-    - 通过 psycopg2 同步驱动连接
-    - 支持连接池
-    - 自动建表
-    """
+    """PostgreSQL后端，生产环境用"""
 
     def __init__(self, database_url: str):
         self.database_url = database_url
@@ -157,14 +138,7 @@ class PostgreSQLDatabase(DatabaseBackend):
 
 
 def create_database() -> DatabaseBackend:
-    """
-    工厂函数：根据环境变量创建对应的数据库后端
-
-    优先级：
-    1. DATABASE_URL 环境变量（PostgreSQL 连接串）
-    2. DATABASE_PATH 环境变量（SQLite 文件路径）
-    3. 默认 SQLite: data/app.db
-    """
+    """根据环境变量创建对应的数据库后端"""
     database_url = os.getenv("DATABASE_URL", "")
 
     if database_url and database_url.startswith("postgresql"):
@@ -191,7 +165,7 @@ def get_db() -> DatabaseBackend:
 
 
 def init_database() -> DatabaseBackend:
-    """初始化数据库：创建连接、建表、迁移、索引、种子数据"""
+    """初始化数据库：建表、迁移、索引、种子数据，一次性搞定"""
     global _db
     _db = create_database()
     _db.connect()

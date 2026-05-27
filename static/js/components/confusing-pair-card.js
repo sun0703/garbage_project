@@ -1,12 +1,5 @@
-/**
- * 易错物品对比卡片组件 (ConfusingPairCard)
- *
- * ⚠️ **迁移状态**: 待迁移至 BaseComponent 基类
- *
- * 职责：展示一对易混淆垃圾的左右对比卡片；
- *       每侧显示物品名称、正确分类、原因和投放建议；
- *       中间显示关键区分点。
- */
+// 易混淆对比卡片 — 左右对比展示 + 关键区分点
+// TODO: 迁移到BaseComponent基类
 
 import { escapeHtml } from '../utils/escape.js';
 

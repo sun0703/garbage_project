@@ -1,14 +1,11 @@
-# ==================== 校园垃圾分类AI助手 - 生产级 Docker Compose ====================
-# 使用方式：
-#   开发环境: docker compose up -d
-#   生产环境: docker compose -f docker-compose.yml up -d
-#
-# 环境变量：复制 .env.example 为 .env 并修改
+# 校园垃圾分类AI助手 - Docker Compose
+# 开发环境: docker compose up -d
+# 环境变量: 复制 .env.example 为 .env 并修改
 
 version: "3.8"
 
 services:
-  # ==================== Web 应用服务 ====================
+  # Web应用
   web:
     build:
       context: ..
@@ -42,7 +39,7 @@ services:
     networks:
       - ecosort-net
 
-  # ==================== PostgreSQL 数据库 ====================
+  # PostgreSQL
   db:
     image: postgres:16-alpine
     container_name: ecosort-db
@@ -64,7 +61,7 @@ services:
     networks:
       - ecosort-net
 
-  # ==================== Redis 缓存 ====================
+  # Redis
   redis:
     image: redis:7-alpine
     container_name: ecosort-redis
@@ -82,7 +79,7 @@ services:
     networks:
       - ecosort-net
 
-  # ==================== Nginx 反向代理 ====================
+  # Nginx反向代理
   nginx:
     image: nginx:alpine
     container_name: ecosort-nginx

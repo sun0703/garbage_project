@@ -60,7 +60,7 @@ def _hash_password(password: str) -> str:
 
 
 def _get_current_user(request: Request):
-    """从请求 Cookie 中获取当前登录用户信息"""
+    # 从Cookie拿当前用户
     session_id = request.cookies.get(SESSION_COOKIE_NAME)
     if not session_id:
         return None
@@ -71,27 +71,21 @@ def _get_current_user(request: Request):
 
 
 def _create_session(user_id: str) -> str:
-    """创建用户会话，返回 session_id"""
+    """创建会话"""
     return SessionRepository.create_session(user_id, SESSION_EXPIRE_SECONDS)
 
 
-# ==================== OAuth 辅助函数 ====================
+# OAuth辅助函数
 
 def _generate_oauth_state(provider: str) -> str:
-    """生成 OAuth state 参数（CSRF 防护）"""
+    # CSRF防护的state参数
     raw = f"{provider}:{time.time()}:{os.urandom(8).hex()}"
     import hashlib as _hashlib
     return _hashlib.sha256(raw.encode()).hexdigest()[:32]
 
 
 def _extract_oauth_user_info(provider: str, data: dict):
-    """
-    从不同 OAuth 提供商的用户数据中提取统一格式的用户信息
-
-    @param provider: 提供商名称 (wechat/github)
-    @param data: 原始 API 返回数据
-    @return 统一格式字典或 None
-    """
+    # 从不同OAuth提供商提取统一格式用户信息
     if provider == "wechat":
         openid = data.get("openid") or data.get("unionid")
         if not openid:
@@ -118,7 +112,7 @@ def _extract_oauth_user_info(provider: str, data: dict):
 
 
 def _generate_oauth_username(provider: str, user_info: dict) -> str:
-    """生成基于 OAuth 的唯一用户名"""
+    # 生成OAuth用户唯一用户名
     prefix_map = {"wechat": "wx_", "github": "gh_"}
     base_name = user_info.get("nickname") or "user"
     import re
@@ -127,7 +121,7 @@ def _generate_oauth_username(provider: str, user_info: dict) -> str:
     return f"{prefix_map.get(provider, 'oa_')}{clean_name}_{suffix}"
 
 
-# ==================== 用户系统路由 ====================
+# 用户系统路由
 
 @router.post("/register")
 async def register(req: RegisterRequest, response: Response):
@@ -180,7 +174,7 @@ async def login(req: LoginRequest, response: Response):
         return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "登录失败"}})
 
 
-# ==================== 手机号验证码登录接口 ====================
+# 手机号验证码登录
 
 class SmsCodeRequest(BaseModel):
     """发送验证码请求体"""
@@ -189,14 +183,7 @@ class SmsCodeRequest(BaseModel):
 
 @router.post("/sms-code")
 async def send_sms_code(req: SmsCodeRequest):
-    """发送手机验证码（MVP阶段：模拟发送，直接返回验证码）
-
-    Args:
-        req: 包含 phone 字段的请求体
-
-    Returns:
-        验证码发送结果（开发模式直接返回验证码）
-    """
+    """发送验证码（MVP阶段直接返回，上线前要改）"""
     phone = req.phone
     # 校验手机号格式
     import re
@@ -205,10 +192,10 @@ async def send_sms_code(req: SmsCodeRequest):
 
     # 生成6位随机验证码
     code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
-    # 持久化存储到数据库，有效期5分钟
+    # 持久化到数据库，5分钟有效
     SmsCodeRepository.save_code(phone, code, expire_seconds=300)
 
-    # MVP阶段：直接返回验证码（生产环境不返回）
+    # TODO: 上线后不能直接返回验证码
     return JSONResponse(content={
         "success": True,
         "code": code,
@@ -218,19 +205,7 @@ async def send_sms_code(req: SmsCodeRequest):
 
 @router.post("/phone-login")
 async def phone_login(req: PhoneLoginRequest):
-    """手机号+验证码登录
-
-    流程：
-    1. 校验验证码是否正确且未过期
-    2. 手机号已注册 → 直接登录
-    3. 手机号未注册 → 自动创建用户并登录
-
-    Args:
-        req: 包含 phone 和 code 字段的请求体
-
-    Returns:
-        登录结果，含用户信息和会话Cookie
-    """
+    """手机号+验证码登录，未注册自动创建"""
     phone = req.phone
     code = req.code
 
@@ -243,15 +218,14 @@ async def phone_login(req: PhoneLoginRequest):
     if stored_code != code:
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "验证码错误"}})
 
-    # 验证码校验通过，清除已用验证码
+    # 验证码用完就删
     SmsCodeRepository.delete_code(phone)
 
     # 查找手机号对应的用户
     user = UserRepository.get_user_by_phone(phone)
 
     if user:
-        # 手机号已注册，直接登录
-        # 检查账号状态
+        # 已注册，直接登录
         if user.get("status") == "banned":
             return JSONResponse(status_code=403, content={"success": False, "error": {"code": "E403", "message": "账号已被禁用"}})
 
@@ -259,10 +233,10 @@ async def phone_login(req: PhoneLoginRequest):
         user_id = user["id"]
         is_new_user = False
     else:
-        # 手机号未注册，自动创建用户
+        # 未注册，自动创建
         username = f"phone_{phone[-4:]}_{uuid.uuid4().hex[:4]}"
         nickname = f"用户{phone[-4:]}"
-        # 手机号注册用户无密码，生成随机密码哈希
+        # 手机注册没密码，生成个随机的
         random_password = uuid.uuid4().hex
         user_id = UserRepository.create_user(
             username=username,
@@ -306,15 +280,11 @@ async def logout(request: Request, response: Response):
     return resp
 
 
-# ==================== OAuth 第三方登录接口 ====================
+# OAuth第三方登录
 
 @router.get("/oauth/providers")
 async def list_oauth_providers():
-    """
-    列出可用的 OAuth 登录方式
-
-    前端可据此决定是否显示对应的登录按钮。
-    """
+    # 返回可用的OAuth登录方式
     providers = []
     display_config = {
         "wechat": {"display_name": "微信登录", "icon": "wechat", "color": "#07C160", "hint": "微信扫码登录"},
@@ -338,12 +308,7 @@ async def list_oauth_providers():
 
 @router.get("/oauth/{provider}")
 async def oauth_authorize(provider: str):
-    """
-    获取第三方 OAuth 授权 URL
-
-    前端调用此接口获取授权链接，然后跳转到第三方登录页面。
-    授权完成后会回调到配置的 redirect_uri。
-    """
+    """获取OAuth授权URL"""
     if provider not in OAUTH_CONFIG:
         return JSONResponse(
             status_code=400,
@@ -370,9 +335,10 @@ async def oauth_authorize(provider: str):
             "redirect_uri": config["redirect_uri"],
             "response_type": "code",
             "scope": config.get("scope", ""),
-            "state": _generate_oauth_state(provider),  # CSRF 保护
+            "state": _generate_oauth_state(provider),
         }
 
+        # 微信多一个appid参数
         if provider == "wechat":
             params["appid"] = config["client_id"]
 
@@ -395,12 +361,7 @@ async def oauth_authorize(provider: str):
 
 @router.post("/oauth/{provider}/callback")
 async def oauth_callback(provider: str, request: dict):
-    """
-    处理 OAuth 回调，完成用户认证
-
-    第三方登录成功后会携带 code 回调到此接口，
-    后端用 code 换取 access_token，再获取用户信息。
-    """
+    """OAuth回调，用code换token再拿用户信息"""
     code = request.get("code")
 
     if not code:
@@ -420,7 +381,7 @@ async def oauth_callback(provider: str, request: dict):
     try:
         import httpx
 
-        # 用 authorization_code 换取 access_token
+        # 用code换access_token
         token_params = {
             "client_id": config["client_id"],
             "client_secret": config["client_secret"],
@@ -430,7 +391,7 @@ async def oauth_callback(provider: str, request: dict):
         }
 
         async with httpx.AsyncClient() as client:
-            # 获取 access_token
+            # 换token
             token_resp = await client.post(config["token_url"], data=token_params, timeout=10.0)
             token_data = token_resp.json()
 
@@ -446,7 +407,7 @@ async def oauth_callback(provider: str, request: dict):
                 token_data.get("data", {}).get("access_token", "")
             )
 
-            # 获取用户信息
+            # 拿用户信息
             headers = {"Authorization": f"Bearer {access_token}"}
             user_resp = await client.get(
                 config["user_url"],
@@ -455,7 +416,7 @@ async def oauth_callback(provider: str, request: dict):
             )
             user_data = user_resp.json()
 
-        # 提取第三方用户信息
+        # 提取用户信息
         oauth_user_info = _extract_oauth_user_info(provider, user_data)
 
         if not oauth_user_info:
@@ -468,12 +429,11 @@ async def oauth_callback(provider: str, request: dict):
         existing_user = UserRepository.get_user_by_oauth(provider, oauth_user_info["oauth_id"])
 
         if existing_user:
-            # 已有账户，更新最后登录时间
             UserRepository.update_last_login_and_avatar(existing_user["id"], oauth_user_info.get("avatar") or "")
             user_id = existing_user["id"]
             is_new_user = False
         else:
-            # 新用户注册
+            # 新用户，自动注册
             username = _generate_oauth_username(provider, oauth_user_info)
             user_id = UserRepository.create_user(
                 username="",
@@ -514,7 +474,7 @@ async def oauth_callback(provider: str, request: dict):
 
 @router.get("/me")
 async def get_current_user(request: Request):
-    """获取当前登录用户信息"""
+    """获取当前用户"""
     user = _get_current_user(request)
     if not user:
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "未登录"}})

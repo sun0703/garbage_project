@@ -1,34 +1,4 @@
-/**
- * 底部Tab栏组件 - TabBar
- *
- * 功能说明：
- * - 固定底部显示，包含5个主要导航Tab
- * - 支持激活状态高亮和切换动画
- * - 点击自动切换路由（Hash路由）
- * - 仅移动端显示，PC端（>=768px）自动隐藏
- * - 适配安全区域（iPhone底部横条等）
- *
- * 继承自 BaseComponent，遵循标准化生命周期：
- * constructor → init() → render() → bindEvents() → afterInit()
- *
- * @class TabBar
- * @extends BaseComponent
- * @example
- * import { TabBar } from './tab-bar.js';
- *
- * // 新标准用法（推荐）
- * const tabBar = new TabBar({
- *   container: '#tabBar',
- *   props: { activeIndex: 0 },
- *   events: { tabChange: (index, tab) => console.log(index) }
- * });
- * tabBar.init();
- * tabBar.setActiveTab(2);
- *
- * // 向后兼容用法（仍支持）
- * const tabBar = new TabBar();
- * tabBar.render('#tabBar');
- */
+// 底部Tab栏 — 5个导航Tab + 切换动画 + 安全区域适配
 
 import { BaseComponent } from './BaseComponent.js';
 
@@ -136,7 +106,7 @@ export class TabBar extends BaseComponent {
 
     this._tabItems.forEach((item, index) => {
       this._bindEvent(item, 'click', () => {
-        this._handleTabClick(index);
+        this._switchTab(index);
       });
 
       this._bindEvent(item, 'touchstart', () => {
@@ -222,7 +192,7 @@ export class TabBar extends BaseComponent {
    * @param {number} clickedIndex - 被点击的Tab索引
    * @returns {void}
    */
-  _handleTabClick(clickedIndex) {
+  _switchTab(clickedIndex) {
     if (clickedIndex === this.state.activeIndex) return;
 
     const prevIndex = this.state.activeIndex;

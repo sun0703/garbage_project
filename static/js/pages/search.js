@@ -181,7 +181,7 @@ export class SearchPage {
         this._historyArea = document.getElementById('searchHistoryArea');
     }
 
-    // ==================== 私有方法：搜索初始化 ====================
+    /* ---- 搜索初始化 ---- */
 
     /**
      * 初始化搜索输入框状态

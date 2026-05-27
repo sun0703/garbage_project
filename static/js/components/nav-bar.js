@@ -1,36 +1,4 @@
-/**
- * 顶部导航栏组件 - NavBar
- *
- * 功能说明：
- * - 固定顶部显示，带毛玻璃效果
- * - 左侧回收图标 + 标题文字
- * - 右侧可选历史入口按钮
- * - 支持动态修改标题（如识别结果页显示物品名）
- * - 点击Logo区域返回首页
- *
- * 继承自 BaseComponent，遵循标准化生命周期：
- * constructor → init() → render() → bindEvents() → afterInit()
- *
- * @class NavBar
- * @extends BaseComponent
- * @example
- * import { NavBar } from './nav-bar.js';
- *
- * // 新标准用法（推荐）
- * const navBar = new NavBar({
- *   container: '#navBar',
- *   props: {
- *     title: '校园垃圾分类',
- *     showHistoryBtn: true,
- *     onHistoryClick: () => console.log('history')
- *   }
- * });
- * navBar.init();
- *
- * // 向后兼容用法（仍支持）
- * const navBar = new NavBar({ title: '校园垃圾分类' });
- * navBar.render('#navBar');
- */
+// 顶部导航栏 — 毛玻璃效果 + Logo + 历史入口
 
 import { escapeHtml } from '../utils/escape.js';
 import { BaseComponent } from './BaseComponent.js';
@@ -112,13 +80,13 @@ export class NavBar extends BaseComponent {
     const logoArea = this.el.querySelector('#navLogoArea');
     if (logoArea) {
       logoArea.style.cursor = 'pointer';
-      this._bindEvent(logoArea, 'click', () => this._handleLogoClick());
+      this._bindEvent(logoArea, 'click', () => this._goHome());
     }
 
     if (this.props.showHistoryBtn) {
       const historyBtn = this.el.querySelector('#navHistoryBtn');
       if (historyBtn) {
-        this._bindEvent(historyBtn, 'click', () => this._handleHistoryClick());
+        this._bindEvent(historyBtn, 'click', () => this._openHistory());
       }
     }
   }
@@ -201,7 +169,7 @@ export class NavBar extends BaseComponent {
    * @private
    * @returns {void}
    */
-  _handleLogoClick() {
+  _goHome() {
     window.location.hash = '#/home';
 
     this.el.dispatchEvent(new CustomEvent('nav:home', {
@@ -215,7 +183,7 @@ export class NavBar extends BaseComponent {
    * @private
    * @returns {void}
    */
-  _handleHistoryClick() {
+  _openHistory() {
     if (typeof this.props.onHistoryClick === 'function') {
       this.props.onHistoryClick();
     } else {

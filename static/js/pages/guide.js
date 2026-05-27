@@ -1,12 +1,7 @@
-/**
- * 分类指南页视图（Guide Page）— 阶段二增强版
- *
- * 职责：展示4类垃圾分类的标准说明卡片（厨余/可回收/其他/有害）；
- *       每个卡片包含：类别名称、颜色标识、图标、定义、投放注意事项、
- *       常见示例、校园特有物品、容易分错的物品；
- *       支持折叠/展开交互；
- *       数据来源优先 /api/guide/standard 接口，失败时使用本地静态数据兜底。
- * 容器：#page-guide
+/*
+ * 分类指南页
+ * 四类垃圾分类标准说明卡片 + 易混淆对比
+ * 数据优先走API，挂了用本地兜底
  */
 
 import { api } from '../api.js';
@@ -14,6 +9,7 @@ import { showToast, showLoading, hideLoading } from '../utils/ui.js';
 import { escapeHtml } from '../utils/escape.js';
 import { ConfusingPairCard } from '../components/confusing-pair-card.js';
 
+// 本地兜底数据，API挂了就用这套
 const FALLBACK_CATEGORIES = [
     {
         id: 0, name: '厨余垃圾', color: '#8B4513',

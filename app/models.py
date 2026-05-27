@@ -4,12 +4,10 @@ from pydantic import BaseModel, Field
 
 
 class PredictRequest(BaseModel):
-    """图像预测请求体"""
     image: str  # Base64编码的图片数据
 
 
 class BatchPredictRequest(BaseModel):
-    """批量图像预测请求体"""
     images: list[str]  # Base64编码的图片数组，最多5张
 
 
@@ -46,14 +44,12 @@ class PhoneLoginRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    """用户登录请求体"""
     username: str
     password: str
     remember: bool = False
 
 
 class CheckinRequest(BaseModel):
-    """打卡请求体"""
     point_id: str = ""
     lat: float = 0
     lng: float = 0
@@ -62,13 +58,11 @@ class CheckinRequest(BaseModel):
 
 
 class QuizAnswerRequest(BaseModel):
-    """答题请求体"""
     question_id: str
     selected: int = Field(..., ge=0, le=3)
 
 
 class ActivitySignupRequest(BaseModel):
-    """活动报名请求体"""
     activity_id: str
 
 

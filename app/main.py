@@ -38,6 +38,7 @@ logging.getLogger().addHandler(_file_handler)
 logger = logging.getLogger(__name__)
 
 # 多模态融合分类器
+# 先用简单方案，后续再上多模型融合
 try:
     from app.multimodal_fusion import MultiModalFusionClassifier
     _MULTIMODAL_AVAILABLE = True
@@ -48,6 +49,7 @@ except ImportError as e:
     logger.warning("多模态融合模块不可用 (%s)，将使用单模型模式", e)
 
 # 最优双层架构 (v2.0)
+# TODO: 后面重构这块，目前先这么凑合用
 _OPTIMAL_DUAL_LAYER_AVAILABLE = False
 OptimalDualLayerFusion = None
 try:
@@ -104,11 +106,7 @@ _rate_limiter = RateLimiter(default_max_requests=30, default_window_seconds=60)
 
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
-    """请求频率限制中间件
-
-    按路径分级限流，白名单IP自动跳过，
-    支持 X-Forwarded-For 代理头。
-    """
+    """限流中间件，防刷"""
     path = request.url.path
 
     if not path.startswith("/api/") or request.method == "OPTIONS":
@@ -165,7 +163,7 @@ async def rate_limit_middleware(request: Request, call_next):
 
 @app.middleware("http")
 async def static_cache_middleware(request: Request, call_next):
-    """静态资源缓存策略：开发环境禁用缓存，生产环境按类型设置"""
+    """静态资源缓存，开发环境禁用缓存方便调试"""
     response = await call_next(request)
     path = request.url.path
 
@@ -186,7 +184,7 @@ async def static_cache_middleware(request: Request, call_next):
     return response
 
 
-# Vite 开发客户端请求兜底（项目未使用 Vite，避免 404 噪音）
+# Vite 开发客户端请求兜底，项目没用到Vite，避免404噪音
 @app.get("/@vite/{path:path}")
 async def vite_client_fallback(path: str):
     return Response(content="/* EcoSort: not using Vite */", media_type="application/javascript")
@@ -194,7 +192,7 @@ async def vite_client_fallback(path: str):
 
 @app.on_event("startup")
 def startup_event() -> None:
-    """应用启动时初始化所有服务"""
+    """启动时初始化所有服务"""
     logger.info("正在初始化服务...")
 
     backend_state.vision_engine = VisionEngine(str(MODEL_PATH))
@@ -207,6 +205,7 @@ def startup_event() -> None:
     set_search_engine(backend_state.search_engine)
 
     # 初始化分类器，优先级: 最优双层架构 > 标准三层架构 > 单模型
+    # 临时处理，线上暂未遇到问题
     optimal_init_success = False
     if _OPTIMAL_DUAL_LAYER_AVAILABLE:
         try:
@@ -260,7 +259,7 @@ def startup_event() -> None:
 
 @app.on_event("shutdown")
 def shutdown_event() -> None:
-    """应用关闭时释放资源"""
+    """关闭时释放资源"""
     if backend_state.vision_engine:
         backend_state.vision_engine.dispose()
         backend_state.vision_engine = None

@@ -1,7 +1,4 @@
-"""
-成就系统路由模块
-包含用户已解锁成就列表接口
-"""
+"""成就系统"""
 
 import json
 import logging
@@ -23,7 +20,7 @@ ACHIEVEMENTS_FILE = Path(__file__).parent.parent / "data" / "achievements.json"
 
 
 def _load_achievements():
-    """加载成就数据"""
+    # 从json加载成就数据
     try:
         if ACHIEVEMENTS_FILE.exists():
             with open(ACHIEVEMENTS_FILE, "r", encoding="utf-8") as f:
@@ -35,7 +32,7 @@ def _load_achievements():
 
 
 def _check_achievements(user_data: dict) -> list:
-    """检查用户已解锁的成就（与 achievements.json 的 condition 字段对齐）"""
+    # 检查用户已解锁的成就，跟achievements.json的condition字段对齐
     achievements = _load_achievements()
     unlocked = []
 
@@ -87,7 +84,7 @@ def _check_achievements(user_data: dict) -> list:
 
 @router.get("")
 async def get_achievements(request: Request):
-    """获取用户已解锁的成就列表"""
+    """获取已解锁成就"""
     user = _get_current_user(request)
     if not user:
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})

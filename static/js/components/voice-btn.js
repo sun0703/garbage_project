@@ -1,19 +1,5 @@
-/**
- * @fileoverview 语音识别按钮组件 - VoiceButton
- *
- * ⚠️ **迁移状态**: 待迁移至 BaseComponent 基类
- *
- * @description 基于 Web Speech API (SpeechRecognition) 的语音输入组件
- *              支持 Chrome / Edge / Safari 浏览器，自动降级提示
- *
- * @module components/voice-btn
- * @example
- * import { VoiceButton } from './voice-btn.js';
- * const voiceBtn = new VoiceButton({
- *     btnEl: document.getElementById('voiceBtn'),
- *     onResult: (text) => console.log('识别结果:', text),
- * });
- */
+// 语音识别按钮 — Web Speech API，Chrome/Edge/Safari可用
+// TODO: 迁移到BaseComponent基类
 
 export class VoiceButton {
     /**

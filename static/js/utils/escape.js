@@ -1,26 +1,6 @@
-/**
- * HTML 安全工具模块
- * 提供统一的 XSS 防护函数，避免各组件重复实现 HTML 转义逻辑
- */
+// HTML安全工具 — XSS防护，各组件共用
 
-/**
- * HTML 特殊字符转义，防止 XSS 注入
- * 使用 DOM textContent 方式（最安全且性能最佳）
- *
- * @param {*} str - 需要转义的值（推荐传入string，支持null/undefined/number/object等类型）
- * @returns {string} 转义后的安全字符串
- * @description 处理规则：
- *   - null/undefined → 返回空字符串（console.warn提示）
- *   - 非字符串类型 → 强制转换为String()后转义
- *   - 正常字符串 → 使用DOM textContent方式安全转义
- *
- * @example
- * escapeHtml(null)          // ''
- * escapeHtml(undefined)     // ''
- * escapeHtml(123)           // '123'
- * escapeHtml({a:1})         // '[object Object]'
- * escapeHtml('<script>')    // '&lt;script&gt;'
- */
+// 用DOM textContent方式转义，最安全也最快
 export function escapeHtml(str) {
     if (str === null || str === undefined) {
         console.warn('[escapeHtml] 收到 null/undefined 参数，返回空字符串');

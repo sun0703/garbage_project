@@ -1,33 +1,24 @@
-/**
- * 预览确认页视图（Camera/Preview Page）
- *
- * 职责：展示已选图片预览，提供「开始识别」和「重新选择」操作；
- *       识别流程：压缩 → 上传 → 识别结果处理（含状态机反馈、网络异常检测、自动降级）。
- * 容器：#page-preview
- */
+// 预览确认页 — 图片预览 + 开始识别
+// 识别流程：上传 → AI识别 → 降级兜底
 
-// ==================== 模块依赖导入 ====================
 import { store } from '../store.js';
 import { api, ApiError } from '../api.js';
 import { ImageProcessor } from '../utils/image.js';
 import { showToast, showLoading, hideLoading, setLoadingText, showModal } from '../utils/ui.js';
 import { escapeHtml } from '../utils/escape.js';
 
-// ==================== 状态机枚举 ====================
-
-/** 识别流程各阶段状态 (F-1.2.4 上传状态反馈) */
+// 识别流程状态
 const RecognizeState = {
-    IDLE: 'idle',           // 空闲
-    COMPRESSING: 'compressing', // 压缩中
-    UPLOADING: 'uploading',     // 上传中
-    RECOGNIZING: 'recognizing', // 识别中
-    ERROR: 'error'              // 出错
+    IDLE: 'idle',
+    COMPRESSING: 'compressing',
+    UPLOADING: 'uploading',
+    RECOGNIZING: 'recognizing',
+    ERROR: 'error'
 };
 
-// ==================== 需要降级处理的错误码 (F-1.4.2) ====================
+// 需要降级的错误码
 const FALLBACK_ERROR_CODES = new Set(['E2002', 'E002']);
 
-// ==================== 页面类定义 ====================
 export class PreviewPage {
     /** 页面根容器 DOM 引用 */
     container = null;
@@ -249,7 +240,7 @@ export class PreviewPage {
     }
 
     /* ---- 识别核心流水线 ---- */
-    async _handleRecognize() {
+    async _startRecognize() {
         /* 防止重复提交 */
         if (this._recognizing) return;
         this._recognizing = true;

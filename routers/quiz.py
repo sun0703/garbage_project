@@ -1,7 +1,4 @@
-"""
-知识问答路由模块
-包含每日问答题目获取、答题提交等接口
-"""
+"""知识问答接口"""
 
 import json
 import logging
@@ -25,7 +22,7 @@ from routers.auth import _get_current_user
 
 @router.get("/api/quiz/daily")
 async def get_daily_quiz(request: Request):
-    """获取每日问答题目（未答过的题目中随机一题）"""
+    """每日问答，未答过的随机一题"""
     user = _get_current_user(request)
 
     try:
@@ -50,7 +47,7 @@ async def get_daily_quiz(request: Request):
 
 @router.post("/api/quiz/answer")
 async def answer_quiz(request: Request, req: QuizAnswerRequest):
-    """提交答题答案"""
+    """提交答案"""
     user = _get_current_user(request)
     if not user:
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})

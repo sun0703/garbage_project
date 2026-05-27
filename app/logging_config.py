@@ -8,21 +8,7 @@ from datetime import datetime, timezone
 
 
 class JsonFormatter(logging.Formatter):
-    """
-    轻量级 JSON 日志格式化器
-
-    输出格式示例：
-    {
-        "timestamp": "2026-05-27T10:30:00.123Z",
-        "level": "INFO",
-        "logger": "app.main",
-        "message": "服务启动完成",
-        "module": "main",
-        "func": "startup_event",
-        "lineno": 42,
-        "request_id": "abc-123"
-    }
-    """
+    """JSON日志格式化器，生产环境配合ELK用"""
 
     def format(self, record: logging.LogRecord) -> str:
         log_entry = {
@@ -55,11 +41,7 @@ class JsonFormatter(logging.Formatter):
 
 
 class TextFormatter(logging.Formatter):
-    """
-    增强文本格式化器（开发环境）
-
-    在标准格式基础上增加颜色标记和 request_id
-    """
+    """带颜色的文本格式，开发时看着舒服"""
 
     COLORS = {
         "DEBUG": "\033[36m",     # 青色
@@ -89,12 +71,7 @@ class TextFormatter(logging.Formatter):
 
 
 def setup_logging(log_level: str = "INFO", log_format: str = "text") -> None:
-    """
-    配置全局日志系统
-
-    @param log_level: 日志级别（DEBUG/INFO/WARNING/ERROR）
-    @param log_format: 日志格式（text/json）
-    """
+    """配置全局日志，log_format=json给生产用"""
     # 选择格式化器
     if log_format.lower() == "json":
         formatter = JsonFormatter()

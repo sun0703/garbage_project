@@ -1,3 +1,5 @@
+// 管理后台外壳 — 侧边栏导航 + 权限校验 + 子页面容器
+
 import { api } from '../api.js';
 import { escapeHtml } from '../utils/escape.js';
 

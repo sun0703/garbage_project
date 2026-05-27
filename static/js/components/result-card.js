@@ -334,7 +334,7 @@ export class ResultCard extends BaseComponent {
     this._currentData = null;
   }
 
-  // ==================== 私有方法：各区域更新逻辑 ====================
+  /* ---- 各区域更新逻辑 ---- */
 
   /**
    * 更新卡片头部分类信息
@@ -510,7 +510,7 @@ export class ResultCard extends BaseComponent {
     }, { once: true });
   }
 
-  // ==================== DOM工具方法 ====================
+  /* ---- DOM工具方法 ---- */
 
   /**
    * 设置元素文本内容（安全转义）

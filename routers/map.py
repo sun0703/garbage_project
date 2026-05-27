@@ -1,7 +1,4 @@
-"""
-地图与打卡路由模块
-包含投放点查询、环保打卡、打卡海报生成等接口
-"""
+"""地图打卡接口"""
 
 import json
 import logging
@@ -24,7 +21,7 @@ router = APIRouter(tags=["地图打卡"])
 from routers.auth import _get_current_user
 
 
-# ---------- 投放点地图 ----------
+# 投放点地图
 
 @router.get("/api/map/points")
 async def get_disposal_points(zone: str = "", category: str = ""):
@@ -59,11 +56,11 @@ async def get_disposal_point(point_id: str):
         return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "获取投放点详情失败"}})
 
 
-# ---------- 环保打卡 ----------
+# 环保打卡
 
 @router.post("/api/checkin")
 async def create_checkin(request: Request, req: CheckinRequest):
-    """创建打卡记录（含位置校验、拍照哈希、连续签到翻倍积分）"""
+    """打卡，含位置校验和连续签到翻倍"""
     user = _get_current_user(request)
     if not user:
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
@@ -72,7 +69,7 @@ async def create_checkin(request: Request, req: CheckinRequest):
         if CheckinRepository.check_today_exists(user["id"]):
             return JSONResponse(status_code=400, content={"success": False, "error": {"code": "E400", "message": "今日已打卡"}})
 
-        # 位置校验：如果提供了投放点ID，检查用户是否在投放点附近（500米内）
+        # 位置校验：有投放点ID且提供了经纬度，检查500米内
         if req.point_id and req.lat and req.lng:
             point = DisposalPointRepository.get_by_id(req.point_id)
             if point:
@@ -89,7 +86,7 @@ async def create_checkin(request: Request, req: CheckinRequest):
                         "error": {"code": "E400", "message": f"距离投放点{int(distance)}米，需在500米内才能打卡"}
                     })
 
-        # 连续签到翻倍积分：基础5分，连续3天+2，连续7天+5，连续30天+10
+        # 连续签到翻倍：基础5分，3天+2，7天+5，30天+10
         consecutive_days = CheckinRepository.get_consecutive_days(user["id"], 30)
         bonus_map = {3: 2, 7: 5, 30: 10}
         bonus = 0
@@ -128,7 +125,7 @@ async def create_checkin(request: Request, req: CheckinRequest):
 
 @router.get("/api/checkin/today")
 async def get_today_checkin(request: Request):
-    """获取今日打卡状态"""
+    """今日打卡状态"""
     user = _get_current_user(request)
     if not user:
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
@@ -143,7 +140,7 @@ async def get_today_checkin(request: Request):
 
 @router.get("/api/checkin/history")
 async def get_checkin_history(request: Request, page: int = 1, page_size: int = 20):
-    """分页获取打卡历史"""
+    """打卡历史"""
     user = _get_current_user(request)
     if not user:
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
@@ -156,16 +153,11 @@ async def get_checkin_history(request: Request, page: int = 1, page_size: int = 
         return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "获取打卡历史失败"}})
 
 
-# ==================== 打卡海报生成 ====================
+# 打卡海报
 
 @router.get("/api/checkin/poster")
 async def generate_checkin_poster(request: Request, checkin_id: str = Query(...)):
-    """
-    生成打卡分享海报数据
-
-    返回海报所需的全部数据（用户信息、打卡详情、统计数据），
-    前端使用 Canvas 绘制精美海报。
-    """
+    """生成打卡分享海报数据，前端用Canvas绘制"""
     user = _get_current_user(request)
     if not user:
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
@@ -178,16 +170,16 @@ async def generate_checkin_poster(request: Request, checkin_id: str = Query(...)
 
         checkin = row
 
-        # 计算连续打卡天数
+        # 连续打卡天数
         consecutive_days = CheckinRepository.get_consecutive_days(user["id"], 30)
 
-        # 获取总统计
+        # 总统计
         total_checkins, total_points_earned = CheckinRepository.get_user_stats(user["id"])
 
-        # 计算排名
+        # 排名
         rank = UserRepository.get_rank_by_points(user.get("points", 0))
 
-        # 生成日期文本
+        # 日期
         from datetime import datetime
         date_text = datetime.now().strftime("%Y年%m月%d日")
 
@@ -204,7 +196,7 @@ async def generate_checkin_poster(request: Request, checkin_id: str = Query(...)
         closest_day = min(slogans.keys(), key=lambda d: abs(d - consecutive_days))
         slogan = slogans[closest_day]
 
-        # 等级计算
+        # 等级
         level_thresholds = [0, 50, 200, 500, 1000]
         level_names = ["环保新人", "分类达人", "绿色先锋", "环保卫士", "校园大使"]
         level_icons = ["🌱", "🌿", "🌳", "🏆", "👑"]

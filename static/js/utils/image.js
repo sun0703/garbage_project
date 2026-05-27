@@ -1,43 +1,12 @@
-/**
- * @fileoverview 图片处理工具模块
- * @description 提供图片校验、压缩、格式转换等功能的工具类
- *              适用于校园垃圾分类SPA前端图片上传前的预处理场景
- * @module utils/image
- */
+// 图片处理工具 — 校验/压缩/格式转换
+// 上传前的预处理都在这
 
-/**
- * 支持的图片格式白名单（MIME Type）
- * @constant {string[]}
- */
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_DIMENSION = 1280;             // 压缩时最大边长
+const QUALITY_STEPS = [0.85, 0.7, 0.5, 0.3]; // 质量递减序列
 
-/** 单文件最大允许大小：10MB */
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
-
-/** 压缩时最大边长限制（像素） */
-const MAX_DIMENSION = 1280;
-
-/** JPEG压缩质量递减序列 */
-const QUALITY_STEPS = [0.85, 0.7, 0.5, 0.3];
-
-/**
- * 图片处理器类
- * @class ImageProcessor
- * @description 封装图片校验、压缩、缩略图生成等静态方法，
- *              所有方法均为异步或同步操作，无内部状态依赖
- *
- * @example
- * import { ImageProcessor } from './utils/image.js';
- *
- * // 校验文件
- * const result = ImageProcessor.validate(file);
- * if (!result.valid) {
- *   console.error(result.error);
- * }
- *
- * // 压缩图片
- * const blob = await ImageProcessor.compress(file, 2048);
- */
+// 所有方法都是静态的，不需要实例化
 export class ImageProcessor {
 
   /**

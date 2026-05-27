@@ -1,3 +1,5 @@
+// 数据统计 — Chart.js图表 + 成就展示
+
 import { api } from '../api.js';
 import { escapeHtml } from '../utils/escape.js';
 import { icon } from '../utils/icons.js';

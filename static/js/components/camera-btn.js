@@ -114,12 +114,12 @@ export class CameraBtn {
 
         this._boundHandlers.btnClick = (e) => {
             e.preventDefault();
-            this._handleButtonClick();
+            this._triggerFileSelect();
         };
         visibleBtn.addEventListener('click', this._boundHandlers.btnClick);
 
         this._boundHandlers.fileChange = (e) => {
-            this._handleFileChange(e);
+            this._onFileChosen(e);
         };
         this._fileInput.addEventListener('change', this._boundHandlers.fileChange);
 
@@ -222,7 +222,7 @@ export class CameraBtn {
      * @private
      * @returns {void}
      */
-    _handleButtonClick() {
+    _triggerFileSelect() {
         if (this._fileInput?.disabled) return;
 
         this._fileInput?.click();
@@ -238,7 +238,7 @@ export class CameraBtn {
      * @param {Event} event - change事件对象
      * @returns {void}
      */
-    _handleFileChange(event) {
+    _onFileChosen(event) {
         const file = event.target.files[0] || null;
 
         if (typeof this._onFileSelect === 'function') {

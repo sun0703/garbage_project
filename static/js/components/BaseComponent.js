@@ -1,34 +1,9 @@
-/**
+/*
  * UI组件基类
- * 提供统一的初始化、渲染、更新、销毁生命周期管理
- *
- * 设计目标：
- * - 统一所有UI组件的接口规范
- * - 提供标准化的生命周期钩子
- * - 自动管理事件监听器的注册与清理
- * - 支持渐进式迁移现有组件
- *
- * @class BaseComponent
- * @example
- * import { BaseComponent } from './BaseComponent.js';
- *
- * class MyComponent extends BaseComponent {
- *   constructor(options = {}) {
- *     super({
- *       container: options.container,
- *       props: { title: options.title },
- *       state: { count: 0 }
- *     });
- *   }
- *
- *   render() {
- *     const el = document.createElement('div');
- *     el.className = 'my-component';
- *     el.innerHTML = `<h1>${this.props.title}</h1>`;
- *     return el;
- *   }
- * }
+ * 统一生命周期：constructor → init() → render() → bindEvents() → afterInit()
+ * 自动管理事件监听器注册与清理，子类只需关心render和业务逻辑
  */
+
 export class BaseComponent {
   /**
    * 构造函数 - 初始化组件配置

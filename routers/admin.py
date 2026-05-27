@@ -1,7 +1,4 @@
-"""
-管理后台路由模块
-包含管理员登录、仪表盘统计、用户管理、内容管理、投放点管理、模型管理和活动管理接口
-"""
+"""管理后台"""
 
 import hashlib
 import json
@@ -86,7 +83,6 @@ class ModelSwitchRequest(BaseModel):
 
 
 class ConfusingPairRequest(BaseModel):
-    """易错物品对创建请求模型"""
     item_a_name: str
     item_a_category: str
     item_a_reason: str
@@ -100,7 +96,6 @@ class ConfusingPairRequest(BaseModel):
 
 
 class ActivityUpdateRequest(BaseModel):
-    """活动更新请求模型"""
     title: Optional[str] = None
     description: Optional[str] = None
     cover_image: Optional[str] = None
@@ -113,7 +108,6 @@ class ActivityUpdateRequest(BaseModel):
 
 
 class ActivityCreateRequest(BaseModel):
-    """活动创建请求模型"""
     title: str
     description: Optional[str] = None
     cover_image: Optional[str] = None
@@ -126,12 +120,12 @@ class ActivityCreateRequest(BaseModel):
 
 
 def _hash_admin_password(password: str) -> str:
-    """对管理员密码进行 SHA-256 哈希"""
+    # 管理员密码哈希
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
 
 def _get_admin_session(request: Request):
-    """从请求 Cookie 中获取当前登录的管理员信息"""
+    # 从Cookie获取管理员会话
     session_id = request.cookies.get(ADMIN_SESSION_COOKIE_NAME)
     if not session_id:
         return None
@@ -151,7 +145,7 @@ def _get_admin_session(request: Request):
 
 
 def _create_admin_session(username: str) -> str:
-    """创建管理员会话，返回 session_id"""
+    # 创建管理员会话
     try:
         session_id = uuid.uuid4().hex
         now = time.time()
@@ -169,7 +163,7 @@ def _create_admin_session(username: str) -> str:
 
 
 def _require_admin(request: Request):
-    """验证管理员权限"""
+    # 验证管理员权限
     admin = _get_admin_session(request)
     if not admin:
         return None
@@ -177,7 +171,7 @@ def _require_admin(request: Request):
 
 
 def _init_admin_tables():
-    """初始化管理员相关表"""
+    # 初始化管理员相关表
     try:
         db = get_db()
         db.execute("""
@@ -213,22 +207,22 @@ def _init_admin_tables():
 
 
 def _generate_strong_password(length=16):
-    """生成强随机密码，包含大小写字母、数字和特殊字符"""
+    # 生成随机强密码
     alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
     password = ''.join(secrets.choice(alphabet) for _ in range(length))
     return password
 
 
 def _seed_default_admin():
-    """创建默认管理员账户（密码从环境变量读取或自动生成强密码）"""
+    # 创建默认管理员，密码从环境变量读或自动生成
     try:
         db = get_db()
         existing = db.fetchone("SELECT username FROM admin_users WHERE username = ?", ("admin",))
         if not existing:
-            # 优先从环境变量读取密码，否则生成随机强密码
             default_password = os.environ.get("ADMIN_DEFAULT_PASSWORD")
             if not default_password:
                 default_password = _generate_strong_password()
+                # 没配环境变量就自动生成，打印出来方便看
                 logger.warning(
                     "未设置环境变量 ADMIN_DEFAULT_PASSWORD，已自动生成默认管理员密码: %s "
                     "请登录后立即修改密码",
@@ -285,7 +279,7 @@ async def admin_check(request: Request):
 
 @router.get("/stats/dashboard")
 async def get_dashboard_stats(request: Request):
-    """获取仪表盘统计数据（含趋势、分类分布、热门物品）"""
+    """仪表盘统计"""
     admin = _require_admin(request)
     if not admin:
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
@@ -315,13 +309,13 @@ async def get_dashboard_stats(request: Request):
             WHERE created_at > ?
         """, (time.time() - 86400,))["count"]
 
-        # 今日活跃用户（DAU）
+        # 今日活跃用户
         dau = db.fetchone("""
             SELECT COUNT(DISTINCT user_id) as count FROM checkins
             WHERE created_at > ?
         """, (time.time() - 86400,))["count"]
 
-        # 近30天活跃趋势
+        # 近30天趋势
         daily_trend = []
         for i in range(29, -1, -1):
             day_start = time.time() - (i + 1) * 86400
@@ -334,13 +328,13 @@ async def get_dashboard_stats(request: Request):
             date_label = datetime.fromtimestamp(day_start).strftime("%m/%d")
             daily_trend.append({"date": date_label, "count": cnt})
 
-        # 识别分类分布（从打卡记录的 category 字段统计）
+        # 分类分布
         category_distribution = {}
         rows = db.fetchall("SELECT category, COUNT(*) as cnt FROM checkins WHERE category != '' GROUP BY category")
         for row in rows:
             category_distribution[row["category"]] = row["cnt"]
 
-        # 热门识别物品 TOP10（从打卡记录统计）
+        # 热门物品TOP10
         hot_rows = db.fetchall("""
             SELECT category, COUNT(*) as cnt FROM checkins
             WHERE category != ''
@@ -378,7 +372,7 @@ async def get_dashboard_stats(request: Request):
 
 @router.get("/users")
 async def get_admin_users(request: Request, page: int = Query(1, ge=1), search: str = "", role: str = ""):
-    """获取用户列表（分页）"""
+    """用户列表"""
     admin = _require_admin(request)
     if not admin:
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
@@ -517,7 +511,7 @@ async def add_vocabulary_item(request: Request, req: VocabularyItemRequest):
             data = {"items": []}
 
         items = data.get("items", [])
-        # 检查是否已存在同名词条
+        # 检查同名词条
         for item in items:
             if item.get("label") == req.label:
                 return JSONResponse(status_code=409, content={"success": False, "error": {"code": "E409", "message": f"词条 '{req.label}' 已存在"}})
@@ -648,7 +642,7 @@ async def add_confusing_pair(request: Request, req: ConfusingPairRequest):
             data = {"version": "1.0", "description": "校园垃圾分类易混淆物品对比数据", "pairs": []}
 
         pairs = data.get("pairs", [])
-        # 生成新ID：取现有最大ID + 1
+        # 生成新ID
         new_id = max((p.get("id", 0) for p in pairs), default=0) + 1
 
         new_pair = {
@@ -697,7 +691,7 @@ async def delete_confusing_pair(request: Request, pair_id: int):
 
         pairs = data.get("pairs", [])
         original_count = len(pairs)
-        # 按 id 字段过滤删除
+        # 按id过滤删除
         pairs = [p for p in pairs if p.get("id") != pair_id]
 
         if len(pairs) == original_count:
@@ -834,7 +828,7 @@ async def delete_point(request: Request, point_id: str):
 
 @router.get("/models")
 async def get_models(request: Request):
-    """获取模型列表（动态扫描模型目录）"""
+    """模型列表"""
     admin = _require_admin(request)
     if not admin:
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
@@ -882,7 +876,7 @@ async def get_models(request: Request):
 
 @router.put("/models/{model_id}/switch")
 async def switch_model(request: Request, model_id: str, req: ModelSwitchRequest):
-    """切换模型（实际加载新模型）"""
+    """切换模型"""
     admin = _require_admin(request)
     if not admin:
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
@@ -906,7 +900,7 @@ async def switch_model(request: Request, model_id: str, req: ModelSwitchRequest)
 
 @router.get("/models/badcases")
 async def get_badcases(request: Request):
-    """获取Badcase列表"""
+    """Badcase列表"""
     admin = _require_admin(request)
     if not admin:
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
@@ -934,28 +928,26 @@ async def delete_badcase(request: Request, badcase_id: str):
     try:
         badcase_file = Path(__file__).parent.parent / "data" / "badcases.json"
 
-        # 文件不存在时直接返回成功（幂等操作）
+        # 文件不存在也算成功（幂等）
         if not badcase_file.exists():
             return JSONResponse(content={"success": True, "message": "Badcase已删除"})
 
         with open(badcase_file, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        # 兼容两种数据格式：列表或字典
+        # 兼容两种格式：列表或字典
         badcases = data if isinstance(data, list) else data.get("badcases", [])
 
         original_count = len(badcases)
-        # 过滤掉指定ID的badcase记录
         badcases = [item for item in badcases if str(item.get("id", "")) != str(badcase_id)]
 
-        # 验证是否实际删除了记录
         if len(badcases) == original_count:
             return JSONResponse(
                 status_code=404,
                 content={"success": False, "error": {"code": "E404", "message": "未找到指定的Badcase记录"}}
             )
 
-        # 保存更新后的数据
+        # 保存
         if isinstance(data, list):
             updated_data = badcases
         else:
@@ -1090,15 +1082,11 @@ async def admin_delete_activity(request: Request, activity_id: str):
         return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "删除活动失败"}})
 
 
-# ==================== 数据导出接口 ====================
+# 数据导出
 
 @router.get("/export/users")
 async def export_users(request: Request):
-    """
-    导出用户数据为 CSV 文件
-
-    需要管理员权限。返回 CSV 文件下载。
-    """
+    """导出用户CSV"""
     admin = _require_admin(request)
     if not admin:
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
@@ -1121,11 +1109,7 @@ async def export_users(request: Request):
 
 @router.get("/export/checkins")
 async def export_checkins(request: Request):
-    """
-    导出打卡数据为 CSV 文件
-
-    需要管理员权限。返回 CSV 文件下载。
-    """
+    """导出打卡CSV"""
     admin = _require_admin(request)
     if not admin:
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
@@ -1148,11 +1132,7 @@ async def export_checkins(request: Request):
 
 @router.get("/export/quiz-records")
 async def export_quiz_records(request: Request):
-    """
-    导出答题记录为 CSV 文件
-
-    需要管理员权限。返回 CSV 文件下载。
-    """
+    """导出答题记录CSV"""
     admin = _require_admin(request)
     if not admin:
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})

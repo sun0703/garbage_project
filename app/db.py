@@ -349,11 +349,8 @@ db = Database()
 
 def _bridge_to_new_database():
     """
-    桥接旧 db 全局对象到新的 database 抽象层
-
-    当 app/database.py 的 init_database() 被调用后，
-    旧代码通过 from app.db import db 获取的对象需要指向新的后端。
-    此函数将旧 db 的连接替换为 app/database.py 管理的连接。
+    桥接旧db对象到新的database抽象层
+    老代码还在用 from app.db import db，这个函数把旧连接换成新的
     """
     try:
         from app.database import get_db as _get_new_db

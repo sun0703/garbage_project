@@ -1,13 +1,9 @@
-/**
- * @fileoverview UI工具函数模块
- * @description 封装Toast提示、Loading遮罩、模态弹窗等通用UI交互组件
- *              适用于校园垃圾分类SPA前端的全局反馈交互场景
- * @module utils/ui
- */
-
-// ==================== 内部状态与常量 ====================
+// UI工具函数 — Toast/Loading/Modal/Confirm
+// 全局反馈交互组件，SPA各页面通用
 
 import { escapeHtml } from './escape.js';
+
+/* ---- 内部状态与常量 ---- */
 
 /** Toast队列：存储待显示的消息，实现排队机制 */
 let _toastQueue = [];
@@ -76,7 +72,7 @@ function _processToastQueue() {
   }, duration);
 }
 
-// ==================== 公开API ====================
+/* ---- 公开API ---- */
 
 /**
  * 显示轻量提示消息（Toast）

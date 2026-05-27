@@ -1,3 +1,5 @@
+// 个人中心 — 用户信息/等级/成就/设置入口
+
 import { store } from '../store.js';
 import { api } from '../api.js';
 import { escapeHtml } from '../utils/escape.js';
@@ -210,7 +212,7 @@ export class ProfilePage {
             actionsEl.innerHTML = `
                 <button class="btn btn-secondary btn-block" id="profileLogoutBtn">退出登录</button>
             `;
-            this._boundHandlers.logout = () => this._handleLogout();
+            this._boundHandlers.logout = () => this._doLogout();
             document.getElementById('profileLogoutBtn')?.addEventListener('click', this._boundHandlers.logout);
         }
 
@@ -352,7 +354,7 @@ export class ProfilePage {
         }
     }
 
-    async _handleLogout() {
+    async _doLogout() {
         try {
             await api.logout();
             this._user = null;

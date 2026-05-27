@@ -1,22 +1,5 @@
-/**
- * 分类标签组件 - CategoryTag
- *
- * ⚠️ **迁移状态**: 待迁移至 BaseComponent 基类
- *
- * 功能说明：
- * - 显示垃圾分类类别的小型标签（胶囊形状）
- * - 支持四种样式变体，通过 data-category-id 属性区分
- * - 颜色映射：0→其他垃圾(棕) / 1→可回收物(蓝) / 2→厨余垃圾(灰) / 3→有害垃圾(红)
- * - 内含分类图标 + 文字标签
- * - 可独立使用或嵌入其他组件（如搜索结果列表项）
- * 
- * @class CategoryTag
- * @example
- * import { CategoryTag } from './category-tag.js';
- * const tag = new CategoryTag();
- * const el = tag.render('#tagContainer');
- * tag.update(1, '可回收物'); // 蓝色标签显示"可回收物"
- */
+// 分类标签组件 — 胶囊形状，四种颜色对应四类垃圾
+// TODO: 迁移到BaseComponent基类
 
 export class CategoryTag {
     /**

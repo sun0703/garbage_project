@@ -102,11 +102,7 @@ class ModelConfig:
 
 # V2 → 40类 详细映射表
 class CategoryMapper:
-    """
-    双向类别映射器
-    - V2(12类) ↔ 主模型(40类) 的智能映射
-    - 保证语义一致性和准确度
-    """
+    """V2(12类)和主模型(40类)的双向映射"""
 
     # V2的12类 → 主模型40类的候选列表 (按匹配度排序)
     V2_TO_FINE_MAP = {
@@ -182,12 +178,7 @@ class CategoryMapper:
 
 # 架构配置导出
 def get_optimal_architecture_config() -> Dict:
-    """
-    获取最优双层架构的完整配置
-
-    Returns:
-        Dict: 包含所有层级配置的字典
-    """
+    """获取双层架构的完整配置"""
     config = {
         "version": "2.0",
         "strategy": "precision_priority_dual_layer",

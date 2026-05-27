@@ -1,7 +1,4 @@
-"""
-用户统计数据路由模块
-包含用户统计数据摘要和排行榜接口
-"""
+"""用户统计接口"""
 
 import logging
 import time
@@ -20,7 +17,7 @@ router = APIRouter(prefix="/api/stats", tags=["用户统计"])
 
 @router.get("/summary")
 async def get_stats_summary(request: Request):
-    """获取当前用户的统计数据摘要"""
+    """用户统计摘要"""
     user = _get_current_user(request)
     if not user:
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
@@ -48,7 +45,7 @@ async def get_stats_summary(request: Request):
             "created_at": user_full.get("created_at", 0),
         }
 
-        # 近30天活跃趋势
+        # 近30天趋势，逐天查有点慢，后面加缓存
         from datetime import datetime
         from app.database import get_db
         db = get_db()
@@ -94,7 +91,7 @@ async def get_stats_summary(request: Request):
 
 @router.get("/leaderboard")
 async def get_leaderboard(request: Request, type: str = Query("points", description="排行榜类型：points/checkins/quiz"), limit: int = Query(10, ge=1, le=100)):
-    """获取积分排行榜"""
+    """排行榜"""
     try:
         from app.database import get_db
         db = get_db()

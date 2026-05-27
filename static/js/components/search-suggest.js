@@ -1,30 +1,14 @@
-/**
- * 搜索建议组件 - SearchSuggest
- *
- * ⚠️ **迁移状态**: 待迁移至 BaseComponent 基类
- *
- * 提供搜索联想、历史记录管理等功能
- */
+// 搜索建议下拉组件
+// TODO: 迁移到BaseComponent基类
 
 import { api } from '../api.js';
 import { escapeHtml } from '../utils/escape.js';
 
-/** 防抖延迟时间（毫秒） */
-const DEBOUNCE_MS = 300;
-
-/** 触发联想的最小输入字符数 */
-const MIN_CHARS = 2;
-
-/** 最大显示的建议条数 */
-const MAX_ITEMS = 8;
-
-/** 搜索历史localStorage键名 */
+const DEBOUNCE_MS = 300;   // 防抖间隔
+const MIN_CHARS = 2;       // 最少输入几个字才触发联想
+const MAX_ITEMS = 8;       // 下拉最多显示几条
 const SEARCH_HISTORY_KEY = 'ecosort_search_history';
-
-/** 搜索历史最大保存条数 */
 const MAX_SEARCH_HISTORY = 20;
-
-/** 搜索历史最大显示条数（下拉框中） */
 const MAX_DISPLAY_HISTORY = 5;
 
 export class SearchSuggest {
@@ -470,7 +454,7 @@ export class SearchSuggest {
         });
     }
 
-    // ==================== 搜索历史数据操作 ====================
+    /* ---- 搜索历史数据操作 ---- */
 
     /**
      * 从localStorage加载搜索历史到内存缓存

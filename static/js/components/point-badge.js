@@ -1,23 +1,5 @@
-/**
- * 积分徽章组件 - PointBadge
- *
- * ⚠️ **迁移状态**: 待迁移至 BaseComponent 基类
- *
- * 功能说明：
- * - 小型圆形徽章，显示用户积分数字
- * - 阶段一：仅做占位显示（静态展示）
- * - 阶段二：接入真实用户数据源
- * - 支持积分变化动画（数字滚动效果）
- * - 可嵌入导航栏、Tab栏或其他位置
- * - 提供点击事件回调（阶段二跳转积分详情页）
- * 
- * @class PointBadge
- * @example
- * import { PointBadge } from './point-badge.js';
- * const badge = new PointBadge();
- * const el = badge.render('#badgeContainer');
- * badge.update(1280);
- */
+// 积分徽章 — 小圆形 + 数字 + 滚动动画
+// TODO: 迁移到BaseComponent基类
 
 export class PointBadge {
     /**
@@ -109,7 +91,7 @@ export class PointBadge {
         if (this._onClickCallback) {
             badgeEl.style.cursor = 'pointer';
             badgeEl.addEventListener('click', () => {
-                this._handleClick();
+                this._onBadgeClick();
             });
         }
 
@@ -194,7 +176,7 @@ export class PointBadge {
             this._element.removeEventListener('click', this._boundClickHandler);
             
             if (typeof callback === 'function') {
-                this._boundClickHandler = () => this._handleClick();
+                this._boundClickHandler = () => this._onBadgeClick();
                 this._element.addEventListener('click', this._boundClickHandler);
             }
         }
@@ -318,7 +300,7 @@ export class PointBadge {
      * @private
      * @returns {void}
      */
-    _handleClick() {
+    _onBadgeClick() {
         this._element?.dispatchEvent(new CustomEvent('badge:click', {
             bubbles: true,
             detail: {

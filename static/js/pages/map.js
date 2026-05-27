@@ -1,3 +1,5 @@
+// 投放点地图 — Leaflet地图 + 筛选 + 导航
+
 import { store } from '../store.js';
 import { api } from '../api.js';
 import { escapeHtml } from '../utils/escape.js';
@@ -124,16 +126,7 @@ export class MapPage {
         document.getElementById('mapCatFilter')?.addEventListener('change', this._boundHandlers.filterChange);
     }
 
-    /**
-     * 生成导航URL（根据设备类型动态选择地图应用）
-     * iOS设备使用Apple Maps，Android/其他设备使用高德地图
-     *
-     * @param {number} lat - 目标纬度
-     * @param {number} lng - 目标经度
-     * @param {string} name - 目标地点名称
-     * @returns {string} 导航链接URL
-     * @private
-     */
+    // 生成导航URL，iOS走Apple Maps，其他走高德
     _generateNavUrl(lat, lng, name) {
         /* 检测iOS设备（iPhone/iPad/iPod） */
         const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
@@ -235,15 +228,7 @@ export class MapPage {
         });
     }
 
-    /**
-     * 显示导航选项弹窗（卡片点击时调用）
-     * 提供多种导航方式选择：iOS使用Apple Maps、Android使用高德地图
-     *
-     * @param {number} lat - 目标纬度
-     * @param {number} lng - 目标经度
-     * @param {string} name - 目标地点名称
-     * @private
-     */
+    // 导航方式选择弹窗
     _showNavOptions(lat, lng, name) {
         /* 移除已存在的导航弹窗（防止重复创建） */
         const existingModal = document.getElementById('mapNavModal');

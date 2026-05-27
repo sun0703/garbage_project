@@ -93,12 +93,7 @@ model_loaded_status = Gauge(
 
 
 class MetricsMiddleware:
-    """
-    FastAPI 中间件：自动采集 HTTP 请求指标
-
-    使用方式：
-        app.add_middleware(MetricsMiddleware)
-    """
+    """自动采集HTTP请求指标的中间件"""
 
     def __init__(self, app):
         self.app = app
@@ -136,13 +131,7 @@ class MetricsMiddleware:
 
 
 def _normalize_path(path: str) -> str:
-    """
-    归一化 URL 路径，避免高基数标签导致 Prometheus 指标爆炸
-
-    将包含动态 ID 的路径归一化，如：
-      /api/search?query=xxx → /api/search
-      /api/guide/item/塑料瓶 → /api/guide/item/:name
-    """
+    """归一化路径，防止高基数标签把Prometheus搞爆"""
     # 去除查询参数
     path = path.split("?")[0]
 

@@ -75,7 +75,7 @@ export class HistoryPage {
         console.log('[HistoryPage] 历史记录页已销毁');
     }
 
-    // ==================== 私有方法：渲染 ====================
+    /* ---- 渲染 ---- */
 
     /**
      * 渲染页面 HTML 骨架结构
@@ -128,7 +128,7 @@ export class HistoryPage {
         `;
     }
 
-    // ==================== 私有方法：DOM 缓存 ====================
+    /* ---- DOM缓存 ---- */
 
     /**
      * 缓存高频使用的 DOM 元素引用
@@ -190,7 +190,7 @@ export class HistoryPage {
         }
     }
 
-    // ==================== 私有方法：列表渲染 ====================
+    /* ---- 列表渲染 ---- */
 
     /**
      * 渲染历史记录列表
@@ -279,7 +279,7 @@ export class HistoryPage {
         `;
     }
 
-    // ==================== 私有方法：时间格式化 ====================
+    // 时间格式化
 
     /**
      * 格式化时间戳为可读字符串
@@ -317,7 +317,7 @@ export class HistoryPage {
         }
     }
 
-    // ==================== 私有方法：空/错误状态 ====================
+    // 空状态/错误状态
 
     /**
      * 渲染空状态提示
@@ -373,7 +373,7 @@ export class HistoryPage {
         `;
     }
 
-    // ==================== 私有方法：事件绑定 ====================
+    /* ---- 事件绑定 ---- */
 
     /**
      * 绑定页面级事件（返回按钮、清空按钮等）
@@ -389,7 +389,7 @@ export class HistoryPage {
         }
 
         /* 一键清空按钮（需二次确认） */
-        this._boundHandlers.clear = () => this._handleClearAll();
+        this._boundHandlers.clear = () => this._confirmClearAll();
         const clearBtn = document.getElementById('clearAllBtn');
         if (clearBtn) {
             clearBtn.addEventListener('click', this._boundHandlers.clear);
@@ -430,7 +430,7 @@ export class HistoryPage {
         }
     }
 
-    // ==================== 私有方法：操作处理 ====================
+    /* ---- 操作处理 ---- */
 
     /**
      * 删除单条历史记录
@@ -480,7 +480,7 @@ export class HistoryPage {
      * 使用 confirm 二次确认后执行清空操作
      * @private
      */
-    async _handleClearAll() {
+    async _confirmClearAll() {
         if (this._records.length === 0) return;
 
         /* 二次确认弹窗 */

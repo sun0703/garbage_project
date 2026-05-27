@@ -1,8 +1,6 @@
-/**
- * SVG 图标库 - 替代 emoji 图标，提供一致的视觉风格
- * 图标来源：Lucide Icons (https://lucide.dev)
- * 使用方式：import { icon } from '../utils/icons.js'; icon('search')
- */
+// SVG图标库 — 替代emoji，统一视觉风格
+// 图标来源：Lucide Icons (https://lucide.dev)
+// 用法：import { icon } from '../utils/icons.js'; icon('search')
 
 /* 图标路径定义 - viewBox="0 0 24 24"，stroke-width="2" */
 const PATHS = {

@@ -1,40 +1,8 @@
-/**
- * @fileoverview localStorage 本地存储封装模块
- * @description 提供带命名空间前缀的localStorage操作接口，
- *              专注于垃圾分类识别历史记录的增删查清等管理功能
- * @module utils/storage
- */
+// localStorage封装 — 带前缀隔离，主要存识别历史
+// 所有key自动加ecosort前缀，不会跟别的应用撞
 
-/** 历史记录最大存储条数 */
 const MAX_HISTORY_COUNT = 50;
 
-/**
- * localStorage 存储管理类
- *
- * @class Storage
- * @description 封装带前缀隔离的localStorage读写操作，
- *              主要用于识别历史记录的持久化管理。
- *              所有键名自动拼接prefix前缀，避免与其他应用数据冲突。
- *
- * @example
- * import { Storage } from './utils/storage.js';
- *
- * // 创建实例（默认前缀 'ecosort'）
- * const storage = new Storage();
- *
- * // 保存一条识别记录
- * storage.saveHistory({
- *   thumbnail: 'data:image/jpeg;base64,...',
- *   category: '可回收物',
- *   category_id: 1,
- *   confidence: 0.92,
- *   item_name: '塑料瓶',
- *   bin_color: '#007bff'
- * });
- *
- * // 获取最近20条记录
- * const recent = storage.getHistory(20);
- */
 export class Storage {
 
   /**

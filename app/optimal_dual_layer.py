@@ -39,31 +39,7 @@ def _get_base_classes():
 
 
 class OptimalDualLayerFusion:
-    """
-    最优双层架构融合分类器 v2.0
-
-    架构设计：
-    ┌─────────────────────────────────────────────────────────────┐
-    │  Layer 1 (粗分类)              Layer 2 (精细化)               │
-    │  ┌──────────────┐             ┌──────────────┐              │
-    │  │ best v2.pt   │   路由      │ garbage_      │              │
-    │  │ (12类→4大类) │────────────▶│ yolov8m_      │              │
-    │  │ 78% mAP      │  候选ID列表 │ best.pt       │              │
-    │  │ 高置信度     │             │ (40类完整)    │              │
-    │  └──────┬───────┘             └──────┬───────┘              │
-    │         │                           │                      │
-    │         ▼                           ▼                      │
-    │  ┌──────────────────────────────────────────┐                │
-    │  │         Smart Fusion Engine v2.0        │                │
-    │  │  • V2→40类映射 (CategoryMapper)          │                │
-    │  │  • 置信度加权 (0.45 + 0.55)              │                │
-    │  │  • 一致性交叉验证                       │                │
-    │  │  • 冲突解决策略                         │                │
-    │  └──────────────────┬───────────────────────┘                │
-    │                     ▼                                        │
-    │           Final Prediction (40类 + 4大类标签)                 │
-    └─────────────────────────────────────────────────────────────┘
-    """
+    """最优双层架构：V2粗分类+主模型精细化+智能融合"""
 
     # V2模型的12类别 → 4大类的映射表
     V2_TO_4CATEGORY = {
@@ -444,13 +420,8 @@ class OptimalDualLayerFusion:
 
 # 工厂函数
 def create_optimal_classifier(auto_mode: bool = True) -> Optional[OptimalDualLayerFusion]:
-    """
-    工厂函数：创建最优双层架构分类器
-
-    @param auto_mode: 自动检测模型并创建
-    @return: 分类器实例或None(如果模型不存在)
-    """
-    # 修正：optimal_dual_layer.py 在 app/ 目录，项目根目录是上一级
+    """工厂函数，自动检测模型文件并创建分类器"""
+    # optimal_dual_layer.py 在 app/ 目录，项目根目录是上一级
     project_root = Path(__file__).parent.parent
 
     v2_path = project_root / "models" / "best v2.pt"

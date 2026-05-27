@@ -191,14 +191,7 @@ FINE_CLASSES = {
 
 # 第一层：YOLO检测器
 class YOLODetector:
-    """
-    YOLOv8 目标检测器（第一层）
-
-    职责：
-    - 快速检测图像中的所有物体
-    - 提供粗略的大类分类
-    - 输出边界框供后续模块使用
-    """
+    """YOLOv8目标检测器，第一层快速检测+粗分类"""
 
     def __init__(self, model_path: Optional[str] = None, conf_threshold: float = 0.25):
         """
@@ -336,7 +329,7 @@ class YOLODetector:
         return cat, fine_id, fine_name
 
     def _fallback_detect(self, image: Image.Image, top_k: int) -> List[DetectionResult]:
-        """Fallback：基于增强颜色特征的检测（修复版）"""
+        """模型没加载时的土办法，靠颜色特征猜一猜"""
         img_array = np.array(image.convert('RGB'))
         h, w = img_array.shape[:2]
 
@@ -399,7 +392,7 @@ class YOLODetector:
 
     def _select_best_fine_class(self, img_array: np.ndarray,
                                  fine_classes: Dict[int, Tuple[str, str]]) -> int:
-        """根据颜色特征选择最匹配的细粒度类别"""
+        """根据颜色挑个最像的细类，凑合用"""
         if not fine_classes:
             return 0
 
@@ -446,21 +439,7 @@ class YOLODetector:
 
 # 第二层：SAHI切片推理引擎
 class SAHIEngine:
-    """
-    SAHI (Slicing Aided Hyper Inference) 切片推理引擎
-
-    核心原理：
-    ┌─────────────────────────────────┐
-    │         原始大图 (1920×1080)     │
-    │  ┌───────┬───────┬───────┐      │
-    │  │ Slice │ Slice │ Slice │      │  ← 将大图切成重叠的小切片
-    │  ├───────┼───────┼───────┤      │
-    │  │ Slice │ Slice │ Slice │      │  ← 对每个切片独立推理
-    │  ├───────┼───────┼───────┤      │
-    │  │ Slice │ Slice │ Slice │      │  ← 合并结果 + NMS去重
-    │  └───────┴───────┴───────┘      │
-    └─────────────────────────────────┘
-    """
+    """SAHI切片推理引擎，把大图切成小块分别检测再合并"""
 
     def __init__(self,
                  base_detector: Optional[YOLODetector] = None,
@@ -582,7 +561,7 @@ class SAHIEngine:
         )
 
     def _nms_merge(self, detections: List[DetectionResult], iou_threshold: float = 0.4) -> List[DetectionResult]:
-        """非极大值抑制（NMS）合并重叠检测"""
+        """NMS去重，切片推理后重叠区域会有重复检测"""
         if not detections:
             return []
 
@@ -610,41 +589,14 @@ class SAHIEngine:
         return keep
 
     def _slice_feature_match(self, slice_img: Image.Image) -> List[DetectionResult]:
-        """Fallback：切片级别的特征匹配（复用YOLODetector的增强逻辑）"""
-        # 复用YOLODetector的fallback逻辑，保持一致性
+        """切片级别的特征匹配，复用YOLODetector的fallback"""
         temp_detector = YOLODetector()
         return temp_detector._fallback_detect(slice_img, top_k=1)
 
 
 # 第三层：双层级联精细化分类器
 class CascadeFineClassifier:
-    """
-    双层级联精细化分类器
-
-    核心思想：识别种类越多成功率越低，所以先分4大类，再在子模型中精细识别
-
-    架构流程：
-    ┌──────────────────────────────────────────────────────┐
-    │  Step 1: 粗分类（4大类）                              │
-    │  ┌──────────┬──────────┬──────────┬──────────┐       │
-    │  │ 厨余垃圾  │ 可回收物  │ 其他垃圾  │ 有害垃圾  │       │
-    │  └────┬─────┴────┬─────┴────┬─────┴────┬─────┘       │
-    │       │          │          │          │              │
-    │  Step 2: 路由器（根据置信度决定调用几个子模型）         │
-    │       │          │          │          │              │
-    │  Step 3: 精细化子模型                                 │
-    │  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐        │
-    │  │8类厨余 │ │22类回收│ │6类其他 │ │2类有害 │        │
-    │  │专用模型│ │专用模型│ │专用模型│ │专用模型│        │
-    │  └────────┘ └────────┘ └────────┘ └────────┘        │
-    └──────────────────────────────────────────────────────┘
-
-    实现方式：
-    - 复用YOLO模型，但通过类别过滤模拟"专用子模型"
-    - Step1: YOLO全量推理 → 聚合为4大类概率 → 选出最可能大类
-    - Step2: 路由器根据置信度决定策略（高/中/低）
-    - Step3: 在目标大类内重新排序YOLO结果，或降低阈值二次推理
-    """
+    """双层级联分类器：先分4大类再精细识别，类别越少准确率越高"""
 
     # 路由策略的置信度阈值
     CONF_HIGH = 0.70    # 高置信度：直接路由到1个子模型
@@ -963,15 +915,7 @@ class CascadeFineClassifier:
 
 # 融合决策系统
 class FusionDecisionMaker:
-    """
-    多模态融合决策系统
-
-    融合策略：
-    1. 一致性加权：如果多个模型预测一致，提高置信度
-    2. 置信度校准：对不同模型的置信度进行校准（防止过自信）
-    3. 投票机制：多数决 + 置信度加权的混合投票
-    4. 冲突解决：当模型预测冲突时，选择更可靠的模型结果
-    """
+    """多模型融合决策：加权投票+置信度校准+一致性加成"""
 
     # 各模型的可靠性权重
     MODEL_RELIABILITY = {
@@ -1120,29 +1064,7 @@ class FusionDecisionMaker:
 
 # 主系统：多模态融合分类器
 class MultiModalFusionClassifier:
-    """
-    多模态融合垃圾分类识别系统（主入口）
-
-    架构流程：
-    ┌──────────┐    ┌──────────┐    ┌──────────────┐
-    │  Layer 1  │    │  Layer 2  │    │   Layer 3     │
-    │   YOLO    │───▶│   SAHI    │───▶│  双层级联     │
-    │ (检测+粗  │    │ (切片增强  │    │ (粗分类→路由  │
-    │  分类)    │    │  小目标)   │    │  →专用子模型) │
-    └──────────┘    └──────────┘    └──────┬───────┘
-                                               │
-                          ┌────────────────────┘
-                          ▼
-                   ┌──────────────┐
-                   │ Fusion Engine │
-                   │ (加权投票+    │
-                   │  置信度校准)  │
-                   └──────┬───────┘
-                          ▼
-                   ┌──────────────┐
-                   │ Final Result  │
-                   └──────────────┘
-    """
+    """多模态融合分类主入口，三层推理+融合决策"""
 
     def __init__(self,
                  yolo_model_path: Optional[str] = None,

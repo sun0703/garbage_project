@@ -124,6 +124,8 @@ data/raw/
 data/processed/
 !data/processed/.gitkeep
 !data/waste.json
+!data/achievements.json
+!data/badcases.json
 data/history.json
 data/feedback.json
 data/app.db*

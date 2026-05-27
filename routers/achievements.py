@@ -33,28 +33,53 @@ def _load_achievements():
 
 
 def _check_achievements(user_data: dict) -> list:
-    """检查用户已解锁的成就"""
+    """检查用户已解锁的成就（与 achievements.json 的 condition 字段对齐）"""
     achievements = _load_achievements()
     unlocked = []
 
     for achievement in achievements:
-        conditions = achievement.get("conditions", {})
+        cond = achievement.get("condition") or achievement.get("conditions", {})
+        cond_type = cond.get("type", "")
         is_unlocked = False
 
-        if conditions.get("min_points"):
-            is_unlocked = user_data.get("points", 0) >= conditions["min_points"]
-        elif conditions.get("min_checkins"):
-            is_unlocked = user_data.get("checkin_count", 0) >= conditions["min_checkins"]
-        elif conditions.get("min_quiz_correct"):
-            is_unlocked = user_data.get("quiz_correct", 0) >= conditions["min_quiz_correct"]
-        elif conditions.get("min_recognitions"):
-            is_unlocked = user_data.get("quiz_total", 0) >= conditions["min_recognitions"]
-        elif conditions.get("quiz_accuracy"):
-            quiz_total = user_data.get("quiz_total", 0)
-            quiz_correct = user_data.get("quiz_correct", 0)
-            if quiz_total > 0:
-                accuracy = quiz_correct / quiz_total * 100
-                is_unlocked = accuracy >= conditions["quiz_accuracy"]
+        if cond_type == "count":
+            field = cond.get("field", "")
+            value = cond.get("value", 0)
+            if field == "total_predictions":
+                is_unlocked = user_data.get("quiz_total", 0) >= value
+            elif field == "quiz_correct":
+                is_unlocked = user_data.get("quiz_correct", 0) >= value
+            elif field == "checkin_count":
+                is_unlocked = user_data.get("checkin_count", 0) >= value
+            else:
+                is_unlocked = user_data.get(field, 0) >= value
+
+        elif cond_type == "streak":
+            field = cond.get("field", "")
+            value = cond.get("value", 0)
+            if field == "checkin":
+                from repositories.checkin_repo import CheckinRepository
+                consecutive = CheckinRepository.get_consecutive_days(user_data.get("id", ""), 30)
+                is_unlocked = consecutive >= value
+
+        elif cond_type == "total_points":
+            value = cond.get("value", 0)
+            is_unlocked = user_data.get("points", 0) >= value
+
+        elif cond_type == "unique_categories":
+            value = cond.get("value", 4)
+            # 检查用户是否识别过所有4类垃圾（从历史记录推断）
+            try:
+                from app.db import db
+                c = db.conn.cursor()
+                c.execute(
+                    "SELECT COUNT(DISTINCT category) as cnt FROM checkins WHERE user_id = ?",
+                    (user_data.get("id", ""),)
+                )
+                row = c.fetchone()
+                is_unlocked = (row["cnt"] if row else 0) >= value
+            except Exception:
+                is_unlocked = False
 
         if is_unlocked:
             unlocked.append(achievement)

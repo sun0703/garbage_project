@@ -324,9 +324,92 @@ export class MapPage {
         navigator.geolocation.getCurrentPosition(pos => {
             this._userLat = pos.coords.latitude;
             this._userLng = pos.coords.longitude;
+            this._renderNearestPoint();
         }, (err) => {
             console.warn('[MapPage] 获取位置失败:', err.message);
         });
+    }
+
+    /**
+     * 推荐最近的投放点（需求 F-3.1.5）
+     * 根据用户当前位置，计算距离最近的投放点并高亮显示
+     * @private
+     */
+    _renderNearestPoint() {
+        if (!this._userLat || !this._userLng) return;
+
+        const listEl = document.getElementById('pointList');
+        if (!listEl) return;
+
+        // 计算每个投放点到用户的距离
+        const cards = listEl.querySelectorAll('.point-card');
+        let minDist = Infinity;
+        let nearestCard = null;
+        let nearestPoint = null;
+
+        cards.forEach(card => {
+            const lat = parseFloat(card.dataset.lat);
+            const lng = parseFloat(card.dataset.lng);
+            if (lat && lng) {
+                const dist = this._calcDistance(this._userLat, this._userLng, lat, lng);
+                card.dataset.distance = dist.toFixed(0);
+                if (dist < minDist) {
+                    minDist = dist;
+                    nearestCard = card;
+                    nearestPoint = { lat, lng, name: card.querySelector('.point-card-name')?.textContent || '投放点' };
+                }
+            }
+        });
+
+        // 在列表顶部插入最近投放点推荐卡片
+        if (nearestCard && minDist < 5000) {
+            const existing = document.getElementById('nearestPointBanner');
+            if (existing) existing.remove();
+
+            const banner = document.createElement('div');
+            banner.id = 'nearestPointBanner';
+            banner.className = 'nearest-point-banner card';
+            banner.innerHTML = `
+                <div class="nearest-point-header">
+                    <span class="nearest-point-icon">📍</span>
+                    <span class="nearest-point-label">离你最近</span>
+                    <span class="nearest-point-dist">${minDist < 1000 ? Math.round(minDist) + 'm' : (minDist / 1000).toFixed(1) + 'km'}</span>
+                </div>
+                <div class="nearest-point-name">${escapeHtml(nearestPoint.name)}</div>
+                <a href="${this._generateNavUrl(nearestPoint.lat, nearestPoint.lng, nearestPoint.name)}"
+                   target="_blank" rel="noopener noreferrer" class="nearest-point-nav-btn">
+                    🧭 导航前往
+                </a>
+            `;
+            banner.addEventListener('click', (e) => {
+                if (e.target.closest('.nearest-point-nav-btn')) return;
+                if (this._map && nearestPoint.lat && nearestPoint.lng) {
+                    this._map.setView([nearestPoint.lat, nearestPoint.lng], 18);
+                    this._markers.forEach(m => {
+                        const pos = m.getLatLng();
+                        if (Math.abs(pos.lat - nearestPoint.lat) < 0.0001 && Math.abs(pos.lng - nearestPoint.lng) < 0.0001) {
+                            m.openPopup();
+                        }
+                    });
+                }
+            });
+            listEl.insertBefore(banner, listEl.firstChild);
+        }
+    }
+
+    /**
+     * 使用 Haversine 公式计算两点之间的距离（米）
+     * @private
+     */
+    _calcDistance(lat1, lng1, lat2, lng2) {
+        const R = 6371000; // 地球半径（米）
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLng = (lng2 - lng1) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                  Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
     }
 
     destroy() {

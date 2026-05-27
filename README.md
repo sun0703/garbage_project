@@ -13,6 +13,9 @@
 - **前端 SPA**: 原生 JavaScript 模块化架构,Hash 路由 + 发布订阅状态管理
 - **限流保护**: IP 级滑动窗口限流,路径分级限流(预测接口 20 次/分钟,搜索 30 次/分钟)
 - **用户系统**: 注册/登录/注销、OAuth 第三方登录(微信 + GitHub)、Session 管理
+- **成就系统**: 基于条件解锁的成就体系(识别次数/连续打卡/积分里程碑/全类别覆盖)
+- **管理后台**: 管理员登录、仪表盘统计、用户管理、内容管理(词库/分类)、投放点管理、模型切换、Badcase 管理、活动管理
+- **数据统计**: 用户统计摘要、积分排行榜(多维度)、30 天活跃趋势
 
 ---
 
@@ -42,7 +45,7 @@
 ┌─────────────────────────────────────────────────┐
 │                 路由层 (routers/)                  │
 │  预测 · 搜索 · 指南 · 历史 · 反馈 · 语音 · 调试    │
-│   认证 · 地图 · 问答 · 活动                      │
+│   认证 · 地图 · 问答 · 活动 · 成就 · 管理 · 统计    │
 ├─────────────────────────────────────────────────┤
 │                 服务层 (services/)                 │
 │  视觉引擎 · 搜索引擎 · 缓存 · 限流 · 存储 · 语音   │
@@ -73,6 +76,9 @@
 | `map.py` | 校园地图、投放点 | `/api/map/*` |
 | `quiz.py` | 知识问答 | `/api/quiz/*` |
 | `activities.py` | 环保活动管理 | `/api/activities/*` |
+| `achievements.py` | 成就系统 | `/api/achievements` |
+| `admin.py` | 管理后台 | `/api/admin/*` |
+| `stats.py` | 用户统计与排行榜 | `/api/stats/*` |
 
 #### 2. 服务层 (services/)
 
@@ -172,9 +178,31 @@ Fusion: 加权投票 + 置信度校准 → 最终决策
 - **健康检查接口**: `/api/health` 检查模型和服务状态
 - **模型诊断工具集**: 图像特征分析、置信度校准
 
+### 成就系统
+
+- **条件解锁**: 基于识别次数、连续打卡、积分里程碑、全类别覆盖等条件自动解锁
+- **成就类型**: count(计数)、streak(连续)、total_points(积分)、unique_categories(类别覆盖)
+- **积分奖励**: 每个成就解锁后获得对应积分奖励
+- **进度展示**: 前端展示已解锁/全部成就进度
+
+### 管理后台
+
+- **管理员认证**: 独立的管理员登录体系,Session Cookie 鉴权,密码从环境变量或自动生成
+- **仪表盘**: 总用户/总打卡/活跃活动/DAU/30天活跃趋势/分类分布/热门物品
+- **用户管理**: 分页列表、搜索、状态封禁、角色调整
+- **内容管理**: 词库 CRUD(含新增/删除词条)、分类列表 CRUD
+- **投放点管理**: 投放点 CRUD(名称/坐标/地址/分类/区域/室内标记)
+- **模型管理**: 动态扫描模型目录、在线切换模型、Badcase 列表管理
+- **活动管理**: 创建/更新/删除活动、查看报名列表
+
+### 数据统计
+
+- **用户摘要**: 总识别次数/打卡/积分/排名/问答正确率/30天趋势/积分来源分布/分类分布
+- **排行榜**: 支持积分/打卡/问答三种维度,可自定义返回数量
+
 ---
 
-## API 接口总览(共 43 个)
+## API 接口总览(共 70 个)
 
 ### 主页 & 健康检查
 
@@ -284,6 +312,48 @@ Fusion: 加权投票 + 置信度校准 → 最终决策
 | DELETE | `/api/activities/{activity_id}` | 删除活动 |
 | POST | `/api/activities/{activity_id}/cancel` | 取消报名 |
 
+### 成就系统
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/achievements` | 获取用户已解锁成就列表 |
+
+### 管理后台
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/admin/login` | 管理员登录 |
+| GET | `/api/admin/check` | 检查管理员登录状态 |
+| GET | `/api/admin/stats/dashboard` | 仪表盘统计数据(含趋势/分类分布/热门物品) |
+| GET | `/api/admin/users` | 用户列表(分页/搜索/角色筛选) |
+| PUT | `/api/admin/users/{user_id}/status` | 更新用户状态 |
+| PUT | `/api/admin/users/{user_id}/role` | 更新用户角色 |
+| GET | `/api/admin/content/vocabulary` | 获取词汇表 |
+| PUT | `/api/admin/content/vocabulary` | 更新词汇表 |
+| POST | `/api/admin/content/vocabulary/item` | 新增词条 |
+| DELETE | `/api/admin/content/vocabulary/item/{label}` | 删除词条 |
+| GET | `/api/admin/content/categories` | 获取分类列表 |
+| PUT | `/api/admin/content/categories` | 更新分类列表 |
+| GET | `/api/admin/points` | 投放点列表 |
+| POST | `/api/admin/points` | 创建投放点 |
+| PUT | `/api/admin/points/{point_id}` | 更新投放点 |
+| DELETE | `/api/admin/points/{point_id}` | 删除投放点 |
+| GET | `/api/admin/models` | 获取模型列表(动态扫描模型目录) |
+| PUT | `/api/admin/models/{model_id}/switch` | 切换模型(实际加载新模型) |
+| GET | `/api/admin/models/badcases` | 获取 Badcase 列表 |
+| DELETE | `/api/admin/models/badcases/{badcase_id}` | 删除 Badcase |
+| POST | `/api/admin/activities` | 创建活动 |
+| GET | `/api/admin/activities/{activity_id}/signups` | 获取活动报名列表 |
+| PUT | `/api/admin/activities/{activity_id}` | 更新活动 |
+| DELETE | `/api/admin/activities/{activity_id}` | 删除活动 |
+
+### 用户统计
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/stats/summary` | 当前用户统计数据摘要(含30天趋势/积分分布/分类分布) |
+| GET | `/api/stats/leaderboard` | 积分排行榜(支持 points/checkins/quiz 三种类型) |
+
 ---
 
 ## 项目结构
@@ -335,13 +405,17 @@ Fusion: 加权投票 + 置信度校准 → 最终决策
 │   ├── auth.py                   # 用户认证路由(注册/登录/OAuth/信息)
 │   ├── map.py                    # 地图路由(投放点/打卡)
 │   ├── quiz.py                   # 知识问答路由
-│   └── activities.py             # 活动管理路由(CRUD/报名/签到)
+│   ├── activities.py             # 活动管理路由(CRUD/报名/签到)
+│   ├── achievements.py           # 成就系统路由(解锁成就列表)
+│   ├── admin.py                  # 管理后台路由(仪表盘/用户/内容/投放点/模型/活动)
+│   └── stats.py                  # 用户统计路由(摘要/排行榜)
 │
 ├── utils/                        # Python 工具模块
 │   ├── __init__.py               # 工具包初始化
 │   ├── response.py               # 统一 API 响应工厂(success/error 格式)
 │   ├── json_loader.py            # JSON 文件缓存加载器
-│   └── image.py                  # 图像处理(Base64 编解码/尺寸校验)
+│   ├── image.py                  # 图像处理(Base64 编解码/尺寸校验)
+│   └── export_model.py           # 模型导出工具(PT→ONNX 转换)
 │
 ├── models/                       # 模型目录（模型文件需自行下载放置于此）
 │   └── garbage_yolov8m_best.pt   # 40 类垃圾分类 YOLOv8m 模型
@@ -351,12 +425,14 @@ Fusion: 加权投票 + 置信度校准 → 最终决策
 │   ├── guide_standard.json       # 四大类分类标准数据
 │   ├── confusing_pairs.json      # 易混淆物品对比数据(20+ 组)
 │   ├── disposal_steps.json       # 物品处理步骤(25 条)
+│   ├── achievements.json         # 成就定义数据(条件/奖励/图标)
 │   ├── history.json              # 识别历史备份(运行时自动生成)
 │   ├── feedback.json             # 用户反馈备份(运行时自动生成)
 │   └── app.db                    # SQLite 业务数据库(首次启动自动创建)
 │
 ├── static/                       # 前端静态资源
 │   ├── index.html                # SPA 主页面
+│   ├── favicon.ico               # 网站图标
 │   ├── css/
 │   │   ├── main.css              # 主样式表(设计令牌/毛玻璃/响应式)
 │   │   └── components.css        # 组件样式
@@ -365,6 +441,7 @@ Fusion: 加权投票 + 置信度校准 → 最终决策
 │   │   ├── router.js             # Hash 路由器(hashchange + 正则匹配)
 │   │   ├── store.js              # 发布订阅状态管理(细粒度 key 订阅)
 │   │   ├── api.js                # API 客户端(Fetch 封装/超时/错误码映射)
+│   │   ├── config.js             # 应用全局配置(API/超时/存储/路由/调试)
 │   │   ├── pages/                # 页面视图
 │   │   │   ├── home.js           # 首页(上传 + 搜索)
 │   │   │   ├── camera.js         # 预览确认页
@@ -375,15 +452,28 @@ Fusion: 加权投票 + 置信度校准 → 最终决策
 │   │   │   ├── item-detail.js    # 物品详情页
 │   │   │   ├── community.js      # 环保社区页
 │   │   │   ├── map.js            # 投放点地图页
-│   │   │   └── profile.js        # 个人中心页
+│   │   │   ├── profile.js        # 个人中心页
+│   │   │   ├── settings.js       # 设置页
+│   │   │   ├── stats.js          # 统计数据页
+│   │   │   ├── admin-shell.js    # 管理后台外壳(布局/导航)
+│   │   │   └── admin/            # 管理后台子页面
+│   │   │       ├── dashboard.js  # 仪表盘
+│   │   │       ├── users.js      # 用户管理
+│   │   │       ├── content.js    # 内容管理(词库/分类)
+│   │   │       ├── points.js     # 投放点管理
+│   │   │       ├── models.js     # 模型管理
+│   │   │       └── activities.js # 活动管理
 │   │   ├── components/           # UI 组件
+│   │   │   ├── BaseComponent.js  # 组件基类(生命周期/事件管理)
 │   │   │   ├── nav-bar.js        # 顶部导航栏
 │   │   │   ├── tab-bar.js        # 底部标签栏
+│   │   │   ├── camera-btn.js     # 拍照按钮组件
 │   │   │   ├── result-card.js    # 结果卡片
 │   │   │   ├── category-tag.js   # 分类标签
 │   │   │   ├── voice-btn.js      # 语音按钮
 │   │   │   ├── search-suggest.js # 搜索联想下拉
-│   │   │   └── confusing-pair-card.js # 易混淆对比卡片
+│   │   │   ├── confusing-pair-card.js # 易混淆对比卡片
+│   │   │   └── point-badge.js    # 积分徽章组件
 │   │   └── utils/
 │   │       ├── image.js          # 图像处理工具(压缩/旋转/预览)
 │   │       ├── storage.js        # 本地存储工具(localStorage 封装)
@@ -412,6 +502,7 @@ Fusion: 加权投票 + 置信度校准 → 最终决策
 ├── .github/                      # GitHub 配置
 │   ├── workflows/
 │   │   └── ci.yml                # CI 工作流
+│   ├── labeler.yml               # 自动标签配置
 │   └── linters/                  # Linter 配置
 │       ├── .python-lint          # pylint 配置
 │       └── .python-black         # black 配置
@@ -442,8 +533,9 @@ Fusion: 加权投票 + 置信度校准 → 最终决策
 | **路由器** | `router.js` | Hash 路由管理、页面视图切换、参数解析 |
 | **状态管理** | `store.js` | 发布订阅模式、细粒度订阅、不可变更新 |
 | **API 客户端** | `api.js` | 统一 HTTP 请求、错误处理、业务方法封装 |
-| **页面视图** | `pages/*.js` | 各页面业务逻辑(10 个页面) |
-| **UI 组件** | `components/*.js` | 7 个可复用组件 |
+| **应用配置** | `config.js` | 集中管理 API/超时/存储/路由/调试等运行时参数 |
+| **页面视图** | `pages/*.js` | 各页面业务逻辑(含管理后台共 16 个页面) |
+| **UI 组件** | `components/*.js` | 9 个可复用组件(含 BaseComponent 基类) |
 
 ### 路由结构
 
@@ -458,6 +550,9 @@ Fusion: 加权投票 + 置信度校准 → 最终决策
 #/map             # 投放点地图页
 #/community       # 社区活动页
 #/profile         # 个人中心页
+#/settings        # 设置页
+#/stats           # 统计数据页
+#/admin           # 管理后台(仪表盘/用户/内容/投放点/模型/活动)
 ```
 
 ### 页面生命周期
@@ -793,6 +888,7 @@ YOLO_INPUT_SIZE=640
 CONFIDENCE_THRESHOLD=0.25
 CACHE_MAX_ITEMS=500
 CACHE_TTL_HOURS=24
+ADMIN_DEFAULT_PASSWORD=your_secure_password
 ```
 
 ---
@@ -871,6 +967,18 @@ MIT License
 ---
 
 ## 更新日志
+
+### v1.2.0 (2025-05-27)
+
+- ✨ 新增成就系统(条件解锁/积分奖励/进度展示)
+- ✨ 新增管理后台(仪表盘/用户管理/内容管理/投放点管理/模型切换/Badcase 管理/活动管理)
+- ✨ 新增用户统计与排行榜(摘要/30天趋势/积分分布/多维度排行)
+- ✨ 新增前端全局配置模块(config.js)
+- ✨ 新增前端组件基类(BaseComponent.js)
+- ✨ 新增前端页面(设置/统计/管理后台6子页面)
+- ✨ 新增前端组件(拍照按钮/积分徽章)
+- ✨ 新增模型导出工具(PT→ONNX)
+- 🔧 管理员密码支持环境变量配置(ADMIN_DEFAULT_PASSWORD)
 
 ### v1.1.0 (2025-05-25)
 

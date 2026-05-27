@@ -49,6 +49,9 @@ class Database:
                 checkin_count INTEGER DEFAULT 0,
                 quiz_correct INTEGER DEFAULT 0,
                 quiz_total INTEGER DEFAULT 0,
+                status TEXT DEFAULT 'active',
+                role TEXT DEFAULT 'user',
+                phone TEXT DEFAULT '',
                 oauth_provider TEXT DEFAULT '',
                 oauth_id TEXT DEFAULT '',
                 created_at REAL NOT NULL,
@@ -77,6 +80,7 @@ class Database:
                 categories TEXT DEFAULT '[]',
                 campus_zone TEXT DEFAULT '',
                 is_indoor INTEGER DEFAULT 0,
+                open_hours TEXT DEFAULT '',
                 created_at REAL NOT NULL
             )
         """)
@@ -127,7 +131,7 @@ class Database:
                 id TEXT PRIMARY KEY,
                 title TEXT NOT NULL,
                 description TEXT DEFAULT '',
-                cover_url TEXT DEFAULT '',
+                cover_image TEXT DEFAULT '',
                 location TEXT DEFAULT '',
                 start_time REAL NOT NULL,
                 end_time REAL NOT NULL,
@@ -146,12 +150,16 @@ class Database:
                 id TEXT PRIMARY KEY,
                 activity_id TEXT NOT NULL,
                 user_id TEXT NOT NULL,
+                status TEXT DEFAULT 'signed_up',
+                checked_at TEXT DEFAULT '',
                 created_at REAL NOT NULL,
                 UNIQUE(activity_id, user_id),
                 FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-            ),
+            )
+        """)
 
+        c.execute("""
             CREATE TABLE IF NOT EXISTS feedback (
                 id TEXT PRIMARY KEY,
                 user_id TEXT NOT NULL,
@@ -174,10 +182,21 @@ class Database:
                 "oauth_provider": "TEXT DEFAULT ''",
                 "oauth_id": "TEXT DEFAULT ''",
                 "updated_at": "REAL DEFAULT 0",
+                "status": "TEXT DEFAULT 'active'",
+                "role": "TEXT DEFAULT 'user'",
+                "phone": "TEXT DEFAULT ''",
             },
             "activities": {
                 "creator_id": "TEXT DEFAULT ''",
                 "updated_at": "REAL DEFAULT 0",
+                "cover_image": "TEXT DEFAULT ''",
+            },
+            "activity_signups": {
+                "status": "TEXT DEFAULT 'signed_up'",
+                "checked_at": "TEXT DEFAULT ''",
+            },
+            "disposal_points": {
+                "open_hours": "TEXT DEFAULT ''",
             },
         }
 
@@ -193,6 +212,18 @@ class Database:
                         logger.warning("数据库迁移跳过 [%s.%s]: %s", table, col_name, e)
 
         self.conn.commit()
+
+        # 迁移旧 activities 表的 cover_url → cover_image 数据
+        try:
+            c.execute("PRAGMA table_info(activities)")
+            act_cols = {row[1] for row in c.fetchall()}
+            if "cover_url" in act_cols and "cover_image" in act_cols:
+                c.execute("UPDATE activities SET cover_image = cover_url WHERE cover_image = '' AND cover_url != ''")
+                self.conn.commit()
+                logger.info("数据库迁移: activities.cover_url 数据已迁移到 cover_image")
+        except Exception as e:
+            logger.warning("数据库迁移跳过 [activities.cover_url→cover_image]: %s", e)
+
         logger.info("数据库迁移检查完成")
 
     def add_indexes(self):

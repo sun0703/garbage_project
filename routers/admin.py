@@ -42,6 +42,16 @@ class UserRoleRequest(BaseModel):
     role: str
 
 
+class VocabularyItemRequest(BaseModel):
+    label: str
+    category: str = ""
+    category_id: int = 0
+    category_name: str = ""
+    aliases: list = []
+    guidance: str = ""
+    yolo_label: str = ""
+
+
 class VocabularyRequest(BaseModel):
     items: list
 
@@ -74,6 +84,20 @@ class ModelSwitchRequest(BaseModel):
     model_id: str
 
 
+class ConfusingPairRequest(BaseModel):
+    """易错物品对创建请求模型"""
+    item_a_name: str
+    item_a_category: str
+    item_a_reason: str
+    item_b_name: str
+    item_b_category: str
+    item_b_reason: str
+    key_difference: str
+    frequency: str = "medium"
+    scene: str = ""
+    tags: list[str] = []
+
+
 class ActivityUpdateRequest(BaseModel):
     """活动更新请求模型"""
     title: Optional[str] = None
@@ -83,7 +107,21 @@ class ActivityUpdateRequest(BaseModel):
     start_time: Optional[float] = None
     end_time: Optional[float] = None
     max_participants: Optional[int] = None
+    points_reward: Optional[int] = None
     status: Optional[str] = None
+
+
+class ActivityCreateRequest(BaseModel):
+    """活动创建请求模型"""
+    title: str
+    description: Optional[str] = None
+    cover_image: Optional[str] = None
+    location: Optional[str] = None
+    start_time: Optional[float] = None
+    end_time: Optional[float] = None
+    max_participants: Optional[int] = None
+    points_reward: Optional[int] = None
+    status: Optional[str] = "open"
 
 
 def _hash_admin_password(password: str) -> str:
@@ -247,7 +285,7 @@ async def admin_check(request: Request):
 
 @router.get("/stats/dashboard")
 async def get_dashboard_stats(request: Request):
-    """获取仪表盘统计数据"""
+    """获取仪表盘统计数据（含趋势、分类分布、热门物品）"""
     admin = _require_admin(request)
     if not admin:
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
@@ -285,6 +323,43 @@ async def get_dashboard_stats(request: Request):
         """, (time.time() - 86400,))
         today_new_users = c.fetchone()["count"]
 
+        # 今日活跃用户（DAU）
+        c.execute("""
+            SELECT COUNT(DISTINCT user_id) as count FROM checkins
+            WHERE created_at > ?
+        """, (time.time() - 86400,))
+        dau = c.fetchone()["count"]
+
+        # 近30天活跃趋势
+        daily_trend = []
+        for i in range(29, -1, -1):
+            day_start = time.time() - (i + 1) * 86400
+            day_end = time.time() - i * 86400
+            c.execute("""
+                SELECT COUNT(DISTINCT user_id) as cnt FROM checkins
+                WHERE created_at > ? AND created_at <= ?
+            """, (day_start, day_end))
+            cnt = c.fetchone()["cnt"]
+            from datetime import datetime
+            date_label = datetime.fromtimestamp(day_start).strftime("%m/%d")
+            daily_trend.append({"date": date_label, "count": cnt})
+
+        # 识别分类分布（从打卡记录的 category 字段统计）
+        category_distribution = {}
+        c.execute("SELECT category, COUNT(*) as cnt FROM checkins WHERE category != '' GROUP BY category")
+        for row in c.fetchall():
+            category_distribution[row["category"]] = row["cnt"]
+
+        # 热门识别物品 TOP10（从打卡记录统计）
+        c.execute("""
+            SELECT category, COUNT(*) as cnt FROM checkins
+            WHERE category != ''
+            GROUP BY category
+            ORDER BY cnt DESC
+            LIMIT 10
+        """)
+        hot_items = [{"name": row["category"], "count": row["cnt"]} for row in c.fetchall()]
+
         dashboard = {
             "total_users": total_users,
             "total_checkins": total_checkins,
@@ -294,6 +369,15 @@ async def get_dashboard_stats(request: Request):
             "total_feedback": total_feedback,
             "today_checkins": today_checkins,
             "today_new_users": today_new_users,
+            "dau": dau,
+            "active_users": dau,
+            "today_recognitions": today_checkins,
+            "daily_trend": daily_trend,
+            "trend": daily_trend,
+            "category_distribution": category_distribution,
+            "category_dist": category_distribution,
+            "hot_items": hot_items,
+            "popular_items": hot_items,
         }
 
         return JSONResponse(content={"success": True, "dashboard": dashboard})
@@ -332,7 +416,7 @@ async def get_admin_users(request: Request, page: int = Query(1, ge=1), search: 
         total = c.fetchone()["count"]
 
         c.execute(f"""
-            SELECT id, username, nickname, avatar, points, checkin_count, quiz_correct, quiz_total, created_at, last_login
+            SELECT id, username, nickname, avatar, points, checkin_count, quiz_correct, quiz_total, created_at, last_login, status, role
             FROM users
             {where_sql}
             ORDER BY created_at DESC
@@ -429,6 +513,80 @@ async def update_vocabulary(request: Request, req: VocabularyRequest):
         return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "更新词汇表失败"}})
 
 
+@router.post("/content/vocabulary/item")
+async def add_vocabulary_item(request: Request, req: VocabularyItemRequest):
+    """新增词条"""
+    admin = _require_admin(request)
+    if not admin:
+        return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
+
+    try:
+        vocabulary_file = Path(__file__).parent.parent / "data" / "waste.json"
+        if vocabulary_file.exists():
+            with open(vocabulary_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        else:
+            data = {"items": []}
+
+        items = data.get("items", [])
+        # 检查是否已存在同名词条
+        for item in items:
+            if item.get("label") == req.label:
+                return JSONResponse(status_code=409, content={"success": False, "error": {"code": "E409", "message": f"词条 '{req.label}' 已存在"}})
+
+        new_item = {
+            "label": req.label,
+            "category": req.category,
+            "category_id": req.category_id,
+            "category_name": req.category_name or req.category,
+            "aliases": req.aliases,
+            "guidance": req.guidance,
+            "yolo_label": req.yolo_label,
+        }
+        items.append(new_item)
+        data["items"] = items
+
+        with open(vocabulary_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+        return JSONResponse(status_code=201, content={"success": True, "message": "词条已添加", "item": new_item})
+    except Exception as e:
+        logger.error("新增词条失败: %s", e)
+        return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "新增词条失败"}})
+
+
+@router.delete("/content/vocabulary/item/{label}")
+async def delete_vocabulary_item(request: Request, label: str):
+    """删除词条"""
+    admin = _require_admin(request)
+    if not admin:
+        return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
+
+    try:
+        vocabulary_file = Path(__file__).parent.parent / "data" / "waste.json"
+        if not vocabulary_file.exists():
+            return JSONResponse(status_code=404, content={"success": False, "error": {"code": "E404", "message": "词库文件不存在"}})
+
+        with open(vocabulary_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        items = data.get("items", [])
+        original_count = len(items)
+        items = [item for item in items if item.get("label") != label]
+
+        if len(items) == original_count:
+            return JSONResponse(status_code=404, content={"success": False, "error": {"code": "E404", "message": f"词条 '{label}' 不存在"}})
+
+        data["items"] = items
+        with open(vocabulary_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+        return JSONResponse(content={"success": True, "message": f"词条 '{label}' 已删除"})
+    except Exception as e:
+        logger.error("删除词条失败: %s", e)
+        return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "删除词条失败"}})
+
+
 @router.get("/content/categories")
 async def get_categories(request: Request):
     """获取分类列表"""
@@ -464,6 +622,107 @@ async def update_categories(request: Request, req: CategoryRequest):
     except Exception as e:
         logger.error("更新分类列表失败: %s", e)
         return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "更新分类列表失败"}})
+
+
+@router.get("/content/confusing")
+async def get_confusing_pairs(request: Request):
+    """获取易错物品对列表"""
+    admin = _require_admin(request)
+    if not admin:
+        return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
+
+    try:
+        confusing_file = Path(__file__).parent.parent / "data" / "confusing_pairs.json"
+        if confusing_file.exists():
+            with open(confusing_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                pairs = data.get("pairs", [])
+                return JSONResponse(content={"success": True, "pairs": pairs})
+        return JSONResponse(content={"success": True, "pairs": []})
+    except Exception as e:
+        logger.error("获取易错物品对失败: %s", e)
+        return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "获取易错物品对失败"}})
+
+
+@router.post("/content/confusing")
+async def add_confusing_pair(request: Request, req: ConfusingPairRequest):
+    """新增易错物品对"""
+    admin = _require_admin(request)
+    if not admin:
+        return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
+
+    try:
+        confusing_file = Path(__file__).parent.parent / "data" / "confusing_pairs.json"
+        if confusing_file.exists():
+            with open(confusing_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        else:
+            data = {"version": "1.0", "description": "校园垃圾分类易混淆物品对比数据", "pairs": []}
+
+        pairs = data.get("pairs", [])
+        # 生成新ID：取现有最大ID + 1
+        new_id = max((p.get("id", 0) for p in pairs), default=0) + 1
+
+        new_pair = {
+            "id": new_id,
+            "item_a": {
+                "name": req.item_a_name,
+                "category": req.item_a_category,
+                "reason": req.item_a_reason,
+            },
+            "item_b": {
+                "name": req.item_b_name,
+                "category": req.item_b_category,
+                "reason": req.item_b_reason,
+            },
+            "key_difference": req.key_difference,
+            "frequency": req.frequency,
+            "scene": req.scene,
+            "tags": req.tags,
+        }
+        pairs.append(new_pair)
+        data["pairs"] = pairs
+
+        with open(confusing_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+        return JSONResponse(status_code=201, content={"success": True, "message": "易错物品对已添加", "pair": new_pair})
+    except Exception as e:
+        logger.error("新增易错物品对失败: %s", e)
+        return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "新增易错物品对失败"}})
+
+
+@router.delete("/content/confusing/{pair_id}")
+async def delete_confusing_pair(request: Request, pair_id: int):
+    """删除指定ID的易错物品对"""
+    admin = _require_admin(request)
+    if not admin:
+        return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
+
+    try:
+        confusing_file = Path(__file__).parent.parent / "data" / "confusing_pairs.json"
+        if not confusing_file.exists():
+            return JSONResponse(status_code=404, content={"success": False, "error": {"code": "E404", "message": "易错物品对文件不存在"}})
+
+        with open(confusing_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        pairs = data.get("pairs", [])
+        original_count = len(pairs)
+        # 按 id 字段过滤删除
+        pairs = [p for p in pairs if p.get("id") != pair_id]
+
+        if len(pairs) == original_count:
+            return JSONResponse(status_code=404, content={"success": False, "error": {"code": "E404", "message": f"易错物品对 ID={pair_id} 不存在"}})
+
+        data["pairs"] = pairs
+        with open(confusing_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+        return JSONResponse(content={"success": True, "message": f"易错物品对 ID={pair_id} 已删除"})
+    except Exception as e:
+        logger.error("删除易错物品对失败: %s", e)
+        return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "删除易错物品对失败"}})
 
 
 @router.get("/points")
@@ -587,21 +846,47 @@ async def delete_point(request: Request, point_id: str):
 
 @router.get("/models")
 async def get_models(request: Request):
-    """获取模型列表"""
+    """获取模型列表（动态扫描模型目录）"""
     admin = _require_admin(request)
     if not admin:
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
 
     try:
-        from app import backend_state
-        models = [
-            {"id": "default", "name": "默认模型", "status": "active" if backend_state.multimodal_available else "inactive"},
-            {"id": "yolov8n", "name": "YOLOv8n", "status": "available"},
-            {"id": "yolov8s", "name": "YOLOv8s", "status": "available"},
-            {"id": "yolov8m", "name": "YOLOv8m", "status": "available"},
-        ]
+        models_dir = Path(__file__).parent.parent / "models"
+        available_models = []
 
-        return JSONResponse(content={"success": True, "models": models})
+        if models_dir.exists():
+            for model_file in sorted(models_dir.glob("*.pt")):
+                model_name = model_file.stem
+                size_mb = round(model_file.stat().st_size / (1024 * 1024), 1)
+                is_active = False
+                try:
+                    from services.vision_engine import VisionEngine
+                    ve = VisionEngine()
+                    if ve._model_path and str(model_file) == str(ve._model_path):
+                        is_active = True
+                except Exception:
+                    pass
+
+                available_models.append({
+                    "id": model_name,
+                    "name": f"YOLOv8-{model_name}",
+                    "filename": model_file.name,
+                    "size_mb": size_mb,
+                    "status": "active" if is_active else "available",
+                    "path": str(model_file),
+                })
+
+        if not available_models:
+            from app import backend_state
+            available_models = [
+                {"id": "default", "name": "默认模型", "status": "active" if backend_state.multimodal_available else "inactive", "filename": "", "size_mb": 0, "path": ""},
+                {"id": "yolov8n", "name": "YOLOv8n", "status": "available", "filename": "yolov8n.pt", "size_mb": 6.2, "path": "models/yolov8n.pt"},
+                {"id": "yolov8s", "name": "YOLOv8s", "status": "available", "filename": "yolov8s.pt", "size_mb": 22.5, "path": "models/yolov8s.pt"},
+                {"id": "yolov8m", "name": "YOLOv8m", "status": "available", "filename": "yolov8m.pt", "size_mb": 52.0, "path": "models/yolov8m.pt"},
+            ]
+
+        return JSONResponse(content={"success": True, "models": available_models})
     except Exception as e:
         logger.error("获取模型列表失败: %s", e)
         return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "获取模型列表失败"}})
@@ -609,16 +894,26 @@ async def get_models(request: Request):
 
 @router.put("/models/{model_id}/switch")
 async def switch_model(request: Request, model_id: str, req: ModelSwitchRequest):
-    """切换模型"""
+    """切换模型（实际加载新模型）"""
     admin = _require_admin(request)
     if not admin:
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
 
     try:
+        models_dir = Path(__file__).parent.parent / "models"
+        model_file = models_dir / f"{model_id}.pt"
+
+        if not model_file.exists():
+            return JSONResponse(status_code=404, content={"success": False, "error": {"code": "E404", "message": f"模型文件 {model_id}.pt 不存在"}})
+
+        from services.vision_engine import VisionEngine
+        ve = VisionEngine()
+        ve.load_model(str(model_file))
+
         return JSONResponse(content={"success": True, "message": f"已切换到模型 {model_id}"})
     except Exception as e:
         logger.error("切换模型失败: %s", e)
-        return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "切换模型失败"}})
+        return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": f"切换模型失败: {str(e)}"}})
 
 
 @router.get("/models/badcases")
@@ -629,9 +924,9 @@ async def get_badcases(request: Request):
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
 
     try:
-        feedback_file = Path(__file__).parent.parent / "data" / "feedback.json"
-        if feedback_file.exists():
-            with open(feedback_file, "r", encoding="utf-8") as f:
+        badcase_file = Path(__file__).parent.parent / "data" / "badcases.json"
+        if badcase_file.exists():
+            with open(badcase_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 badcases = data if isinstance(data, list) else data.get("badcases", [])
                 return JSONResponse(content={"success": True, "badcases": badcases})
@@ -649,13 +944,13 @@ async def delete_badcase(request: Request, badcase_id: str):
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
 
     try:
-        feedback_file = Path(__file__).parent.parent / "data" / "feedback.json"
+        badcase_file = Path(__file__).parent.parent / "data" / "badcases.json"
 
         # 文件不存在时直接返回成功（幂等操作）
-        if not feedback_file.exists():
+        if not badcase_file.exists():
             return JSONResponse(content={"success": True, "message": "Badcase已删除"})
 
-        with open(feedback_file, "r", encoding="utf-8") as f:
+        with open(badcase_file, "r", encoding="utf-8") as f:
             data = json.load(f)
 
         # 兼容两种数据格式：列表或字典
@@ -679,13 +974,41 @@ async def delete_badcase(request: Request, badcase_id: str):
             updated_data = data
             updated_data["badcases"] = badcases
 
-        with open(feedback_file, "w", encoding="utf-8") as f:
+        with open(badcase_file, "w", encoding="utf-8") as f:
             json.dump(updated_data, f, ensure_ascii=False, indent=2)
 
         return JSONResponse(content={"success": True, "message": "Badcase已删除"})
     except Exception as e:
         logger.error("删除Badcase失败: %s", e)
         return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "删除Badcase失败"}})
+
+
+@router.post("/activities")
+async def admin_create_activity(request: Request, req: ActivityCreateRequest):
+    """创建活动"""
+    admin = _require_admin(request)
+    if not admin:
+        return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
+
+    try:
+        from repositories.activity_repo import ActivityRepository
+
+        activity_id = ActivityRepository.create_activity(
+            title=req.title,
+            description=req.description or "",
+            cover_image=req.cover_image or "",
+            location=req.location or "",
+            start_time=req.start_time or 0,
+            end_time=req.end_time or 0,
+            max_participants=req.max_participants or 0,
+            status=req.status or "open",
+            creator_id=admin.get("id", ""),
+        )
+
+        return JSONResponse(status_code=201, content={"success": True, "message": "活动已创建", "activity_id": activity_id})
+    except Exception as e:
+        logger.error("创建活动失败: %s", e)
+        return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "创建活动失败"}})
 
 
 @router.get("/activities/{activity_id}/signups")

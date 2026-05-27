@@ -634,6 +634,45 @@ class ApiClient {
     }
 
     /**
+     * 发送手机验证码接口 - 获取短信验证码用于手机号登录
+     *
+     * MVP阶段：验证码在响应中直接返回（开发模式）
+     * 生产环境：验证码通过短信发送，响应中不返回
+     *
+     * @public
+     * @async
+     * @param {string} phone - 手机号（11位，1开头）
+     * @returns {Promise<Object>} 发送结果：{ success, code(仅开发模式), message }
+     *
+     * @throws {ApiError} 手机号格式错误（400）、发送频率限制（429）等
+     */
+    async sendSmsCode(phone) {
+        return this.request('POST', '/api/auth/sms-code', {
+            body: { phone }
+        });
+    }
+
+    /**
+     * 手机号验证码登录接口 - 使用手机号+验证码进行登录/注册
+     *
+     * 手机号已注册 → 直接登录
+     * 手机号未注册 → 自动创建用户并登录
+     *
+     * @public
+     * @async
+     * @param {string} phone - 手机号
+     * @param {string} code - 短信验证码（4-6位数字）
+     * @returns {Promise<Object>} 登录结果：{ user, is_new_user, message }
+     *
+     * @throws {ApiError} 验证码错误（401）、验证码过期（401）、账号被禁用（403）等
+     */
+    async phoneLogin(phone, code) {
+        return this.request('POST', '/api/auth/phone-login', {
+            body: { phone, code }
+        });
+    }
+
+    /**
      * 用户登出接口 - 销毁当前会话
      *
      * @public
@@ -858,12 +897,36 @@ class ApiClient {
         return this.request('PUT', `/api/admin/activities/${id}`, { body: data });
     }
 
+    async adminCreateActivity(data) {
+        return this.request('POST', '/api/admin/activities', { body: data });
+    }
+
     async adminDeleteActivity(id) {
         return this.request('DELETE', `/api/admin/activities/${id}`);
     }
 
     async adminGetActivitySignups(id) {
         return this.request('GET', `/api/admin/activities/${id}/signups`);
+    }
+
+    async adminAddVocabularyItem(item) {
+        return this.request('POST', '/api/admin/content/vocabulary/item', { body: item });
+    }
+
+    async adminDeleteVocabularyItem(label) {
+        return this.request('DELETE', `/api/admin/content/vocabulary/item/${encodeURIComponent(label)}`);
+    }
+
+    async adminGetConfusingPairs() {
+        return this.request('GET', '/api/admin/content/confusing');
+    }
+
+    async adminAddConfusingPair(data) {
+        return this.request('POST', '/api/admin/content/confusing', { body: data });
+    }
+
+    async adminDeleteConfusingPair(pairId) {
+        return this.request('DELETE', `/api/admin/content/confusing/${pairId}`);
     }
 }
 

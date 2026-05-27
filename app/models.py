@@ -39,6 +39,13 @@ class RegisterRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=20)
     password: str = Field(..., min_length=6, max_length=32)
     nickname: str = Field("", max_length=20)
+    phone: str = Field("", pattern=r'^1[3-9]\d{9}$|^$')
+
+
+class PhoneLoginRequest(BaseModel):
+    """手机号+验证码登录请求体"""
+    phone: str = Field(..., pattern=r'^1[3-9]\d{9}$')
+    code: str = Field(..., min_length=4, max_length=6)
 
 
 class LoginRequest(BaseModel):
@@ -54,6 +61,7 @@ class CheckinRequest(BaseModel):
     lat: float = 0
     lng: float = 0
     category: str = ""
+    photo_hash: str = ""
 
 
 class QuizAnswerRequest(BaseModel):

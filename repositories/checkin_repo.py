@@ -43,6 +43,7 @@ class CheckinRepository:
         lng: float = 0,
         category: str = "",
         points_earned: int = 5,
+        photo_hash: str = "",
     ) -> Optional[str]:
         """创建打卡记录
 
@@ -53,6 +54,7 @@ class CheckinRepository:
             lng:           经度
             category:      垃圾类别
             points_earned: 获得积分
+            photo_hash:    拍照哈希
 
         Returns:
             打卡记录 ID，失败返回 None
@@ -61,9 +63,9 @@ class CheckinRepository:
             checkin_id = uuid.uuid4().hex[:12]
             now = time.time()
             db.conn.execute(
-                "INSERT INTO checkins (id, user_id, point_id, lat, lng, category, points_earned, created_at) "
-                "VALUES (?,?,?,?,?,?,?,?)",
-                (checkin_id, user_id, point_id, lat, lng, category, points_earned, now),
+                "INSERT INTO checkins (id, user_id, point_id, lat, lng, category, points_earned, photo_hash, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
+                (checkin_id, user_id, point_id, lat, lng, category, points_earned, photo_hash, now),
             )
             db.conn.commit()
             return checkin_id
@@ -148,26 +150,34 @@ class CheckinRepository:
 
     @staticmethod
     def get_consecutive_days(user_id: str, lookback_days: int = 30) -> int:
-        """计算用户近 N 天内连续打卡天数（按日期去重）
+        """计算用户连续打卡天数（从今天往前逐日检查，遇到断签即停止）
 
         Args:
             user_id:       用户 ID
-            lookback_days: 回溯天数
+            lookback_days: 最大回溯天数
 
         Returns:
             连续打卡天数
         """
         try:
             c = db.conn.cursor()
-            c.execute(
-                """SELECT COUNT(DISTINCT DATE(created_at, 'unixepoch', 'localtime')) as days
-                   FROM checkins
-                   WHERE user_id = ? AND created_at > ?
-                   ORDER BY created_at DESC""",
-                (user_id, time.time() - 86400 * lookback_days),
-            )
-            row = c.fetchone()
-            return row["days"] if row else 0
+            consecutive = 0
+            now = time.time()
+            today_start = now - (now % 86400) + 8 * 3600  # UTC+8 当天0点
+
+            for i in range(lookback_days):
+                day_start = today_start - i * 86400
+                day_end = day_start + 86400
+                c.execute(
+                    "SELECT COUNT(*) as cnt FROM checkins WHERE user_id = ? AND created_at >= ? AND created_at < ?",
+                    (user_id, day_start, day_end),
+                )
+                row = c.fetchone()
+                if row and row["cnt"] > 0:
+                    consecutive += 1
+                else:
+                    break  # 遇到断签即停止
+            return consecutive
         except Exception as e:
             logger.error("计算连续打卡天数失败 [%s]: %s", user_id, e)
             return 0

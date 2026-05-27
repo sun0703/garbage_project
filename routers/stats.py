@@ -4,11 +4,13 @@
 """
 
 import logging
+import time
 
 from fastapi import APIRouter, Request, Query
 from fastapi.responses import JSONResponse
 
 from repositories.user_repo import UserRepository
+from repositories.checkin_repo import CheckinRepository
 from routers.auth import _get_current_user
 
 logger = logging.getLogger(__name__)
@@ -35,14 +37,58 @@ async def get_stats_summary(request: Request):
 
         summary = {
             "total_recognitions": user_full.get("quiz_total", 0),
+            "total_predictions": user_full.get("quiz_total", 0),
             "total_checkins": user_full.get("checkin_count", 0),
             "total_points": user_full.get("points", 0),
+            "current_points": user_full.get("points", 0),
             "rank": rank,
             "quiz_correct": user_full.get("quiz_correct", 0),
             "quiz_total": user_full.get("quiz_total", 0),
             "quiz_accuracy": quiz_accuracy,
             "created_at": user_full.get("created_at", 0),
         }
+
+        # 近30天活跃趋势
+        from datetime import datetime
+        trend_30d = []
+        for i in range(29, -1, -1):
+            day_start = time.time() - (i + 1) * 86400
+            day_end = time.time() - i * 86400
+            from app.db import db as _db
+            c = _db.conn.cursor()
+            c.execute(
+                "SELECT COUNT(*) as cnt FROM checkins WHERE user_id = ? AND created_at > ? AND created_at <= ?",
+                (user["id"], day_start, day_end),
+            )
+            checkin_cnt = c.fetchone()["cnt"]
+            c.execute(
+                "SELECT COUNT(*) as cnt FROM quiz_records WHERE user_id = ? AND created_at > ? AND created_at <= ?",
+                (user["id"], day_start, day_end),
+            )
+            quiz_cnt = c.fetchone()["cnt"]
+            date_label = datetime.fromtimestamp(day_start).strftime("%m/%d")
+            trend_30d.append({"date": date_label, "checkin": checkin_cnt, "quiz": quiz_cnt})
+
+        summary["trend_30d"] = trend_30d
+
+        # 积分来源分布
+        transaction_distribution = {"checkin": 0, "quiz": 0, "prediction": 0}
+        from app.db import db as _db
+        c = _db.conn.cursor()
+        c.execute("SELECT SUM(points_earned) as total FROM checkins WHERE user_id = ?", (user["id"],))
+        row = c.fetchone()
+        transaction_distribution["checkin"] = row["total"] if row and row["total"] else 0
+        c.execute("SELECT SUM(points_earned) as total FROM quiz_records WHERE user_id = ? AND is_correct = 1", (user["id"],))
+        row = c.fetchone()
+        transaction_distribution["quiz"] = row["total"] if row and row["total"] else 0
+        summary["transaction_distribution"] = transaction_distribution
+
+        # 识别分类分布
+        category_distribution = {}
+        c.execute("SELECT category, COUNT(*) as cnt FROM checkins WHERE user_id = ? AND category != '' GROUP BY category", (user["id"],))
+        for row in c.fetchall():
+            category_distribution[row["category"]] = row["cnt"]
+        summary["category_distribution"] = category_distribution
 
         return JSONResponse(content={"success": True, "summary": summary})
     except Exception as e:

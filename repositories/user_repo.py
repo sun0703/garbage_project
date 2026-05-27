@@ -21,6 +21,7 @@ class UserRepository:
         avatar: str = "",
         oauth_provider: str = "",
         oauth_id: str = "",
+        phone: str = "",
     ) -> Optional[str]:
         """创建普通用户，返回 user_id；失败返回 None
 
@@ -31,6 +32,7 @@ class UserRepository:
             avatar:       头像 URL
             oauth_provider: OAuth 提供商
             oauth_id:      OAuth 用户 ID
+            phone:        手机号
 
         Returns:
             成功返回 user_id(str)，失败返回 None
@@ -40,10 +42,10 @@ class UserRepository:
             now = time.time()
             db.conn.execute(
                 "INSERT INTO users (id, username, password_hash, nickname, avatar, "
-                "points, checkin_count, quiz_correct, quiz_total, oauth_provider, oauth_id, created_at, last_login) "
-                "VALUES (?,?,?,?,?,0,0,0,0,?,?,?,?)",
+                "points, checkin_count, quiz_correct, quiz_total, oauth_provider, oauth_id, phone, created_at, last_login) "
+                "VALUES (?,?,?,?,?,0,0,0,0,?,?,?,?,?)",
                 (user_id, username, password_hash, nickname, avatar,
-                 oauth_provider, oauth_id, now, now),
+                 oauth_provider, oauth_id, phone, now, now),
             )
             db.conn.commit()
             logger.info("用户创建成功: %s", username)
@@ -224,19 +226,20 @@ class UserRepository:
             return False
 
     @staticmethod
-    def add_checkin_count(user_id: str) -> bool:
-        """用户打卡计数 +1，积分 +5
+    def add_checkin_count(user_id: str, points: int = 5) -> bool:
+        """用户打卡计数 +1，积分增加指定值
 
         Args:
             user_id: 用户 ID
+            points:  获得积分（默认5）
 
         Returns:
             成功返回 True
         """
         try:
             db.conn.execute(
-                "UPDATE users SET points = points + 5, checkin_count = checkin_count + 1 WHERE id = ?",
-                (user_id,),
+                "UPDATE users SET points = points + ?, checkin_count = checkin_count + 1 WHERE id = ?",
+                (points, user_id),
             )
             db.conn.commit()
             return True
@@ -328,3 +331,44 @@ class UserRepository:
         except Exception as e:
             logger.error("会话查询用户失败 [%s]: %s", user_id, e)
             return None
+
+    @staticmethod
+    def get_user_by_phone(phone: str) -> Optional[Dict[str, Any]]:
+        """根据手机号查询用户
+
+        Args:
+            phone: 手机号
+
+        Returns:
+            用户字典或 None
+        """
+        try:
+            c = db.conn.cursor()
+            c.execute(
+                "SELECT id, username, nickname, avatar, points, checkin_count, "
+                "quiz_correct, quiz_total, status, role, phone FROM users WHERE phone = ?",
+                (phone,),
+            )
+            row = c.fetchone()
+            return dict(row) if row else None
+        except Exception as e:
+            logger.error("查询用户失败 [phone=%s]: %s", phone, e)
+            return None
+
+    @staticmethod
+    def check_phone_exists(phone: str) -> bool:
+        """检查手机号是否已注册
+
+        Args:
+            phone: 手机号
+
+        Returns:
+            已注册返回 True，否则 False
+        """
+        try:
+            c = db.conn.cursor()
+            c.execute("SELECT COUNT(*) FROM users WHERE phone = ? AND phone != ''", (phone,))
+            return c.fetchone()[0] > 0
+        except Exception as e:
+            logger.error("检查手机号存在性失败 [%s]: %s", phone, e)
+            return False

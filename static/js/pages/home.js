@@ -191,6 +191,14 @@ export class HomePage {
                 <p style="margin-top:6px;"><a href="javascript:void(0)" id="homeLoginLink" style="color:#2D9B5E;font-size:13px;font-weight:500;text-decoration:none;">登录 / 注册</a> <span id="homeLoginStatus" style="font-size:12px;color:#95A0AA;"></span></p>
             </div>
 
+            <!-- 历史记录抽屉按钮 -->
+            <button class="history-drawer-toggle" id="homeHistoryToggle" title="识别历史">
+                <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none">
+                    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                </svg>
+                <span class="history-drawer-toggle__label">历史</span>
+            </button>
+
             <!-- 主操作卡片 -->
             <div class="card home-card">
                 <!-- 上传区域：大尺寸虚线边框 ≥200px高 -->
@@ -281,6 +289,21 @@ export class HomePage {
             <div class="home-footer">
                 <p>基于 YOLOv8 深度学习引擎 · 保护环境从分类开始</p>
             </div>
+
+            <!-- 历史记录抽屉 (F-1.5.2) -->
+            <div class="history-drawer-overlay" id="homeHistoryOverlay"></div>
+            <aside class="history-drawer" id="homeHistoryDrawer">
+                <div class="history-drawer__header">
+                    <h3>识别历史</h3>
+                    <button class="history-drawer__close" id="homeHistoryClose">&times;</button>
+                </div>
+                <div class="history-drawer__body" id="homeHistoryBody">
+                    <p style="color:#95A0AA;text-align:center;padding:20px;">加载中...</p>
+                </div>
+                <div class="history-drawer__footer">
+                    <a href="#/history" class="history-drawer__more">查看全部历史</a>
+                </div>
+            </aside>
         `;
     }
 
@@ -313,6 +336,26 @@ export class HomePage {
      */
     _bindEvents() {
         const self = this;
+
+        /* ---- 历史记录抽屉 (F-1.5.2) ---- */
+        const historyToggle = document.getElementById('homeHistoryToggle');
+        const historyOverlay = document.getElementById('homeHistoryOverlay');
+        const historyClose = document.getElementById('homeHistoryClose');
+        const historyDrawer = document.getElementById('homeHistoryDrawer');
+
+        const openDrawer = () => {
+            if (historyDrawer) historyDrawer.classList.add('open');
+            if (historyOverlay) historyOverlay.classList.add('open');
+            this._loadDrawerHistory();
+        };
+        const closeDrawer = () => {
+            if (historyDrawer) historyDrawer.classList.remove('open');
+            if (historyOverlay) historyOverlay.classList.remove('open');
+        };
+
+        if (historyToggle) historyToggle.addEventListener('click', openDrawer);
+        if (historyOverlay) historyOverlay.addEventListener('click', closeDrawer);
+        if (historyClose) historyClose.addEventListener('click', closeDrawer);
 
         /* ---- 点击上传区域触发文件选择 ---- */
         this._boundHandlers.uploadClick = (e) => {
@@ -532,6 +575,73 @@ export class HomePage {
                     break; /* 只处理第一张图片 */
                 }
             }
+        }
+    }
+
+    /**
+     * 加载历史记录抽屉内容 (F-1.5.2)
+     * @private
+     */
+    async _loadDrawerHistory() {
+        const body = document.getElementById('homeHistoryBody');
+        if (!body) return;
+
+        try {
+            const response = await api.getHistory(1, 10);
+            const records = Array.isArray(response) ? response : [];
+
+            if (records.length === 0) {
+                body.innerHTML = '<p style="color:#95A0AA;text-align:center;padding:20px;">暂无识别历史</p>';
+                return;
+            }
+
+            body.innerHTML = records.map(r => {
+                const label = r.label_cn || r.label || '未知';
+                const category = r.category || '';
+                const color = r.bin_color || '#666';
+                const confidence = r.confidence ? Math.round(r.confidence * 100) : 0;
+                return `
+                    <div class="history-drawer__item" data-record-id="${r.id}" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #f0f0f0;cursor:pointer;">
+                        <div style="width:36px;height:36px;border-radius:8px;background:${color}15;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                            <span style="color:${color};font-size:14px;font-weight:600;">${escapeHtml(label.charAt(0))}</span>
+                        </div>
+                        <div style="flex:1;min-width:0;">
+                            <div style="font-size:14px;font-weight:500;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(label)}</div>
+                            <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">
+                                <span style="color:${color}">${escapeHtml(category)}</span> · ${confidence}%
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            /* 点击记录回看详情 */
+            const historyDrawer = document.getElementById('homeHistoryDrawer');
+            const historyOverlay = document.getElementById('homeHistoryOverlay');
+            const closeDrawer = () => {
+                if (historyDrawer) historyDrawer.classList.remove('open');
+                if (historyOverlay) historyOverlay.classList.remove('open');
+            };
+
+            body.querySelectorAll('.history-drawer__item').forEach(el => {
+                el.addEventListener('click', () => {
+                    const recordId = el.dataset.recordId;
+                    const record = records.find(r => r.id === recordId);
+                    if (!record) return;
+                    store.setState('predictResult', {
+                        label_cn: record.label_cn || record.label || '',
+                        category: record.category || '',
+                        confidence: record.confidence || 0,
+                        bin_color: record.bin_color || '#666',
+                        guidance: record.guidance || ''
+                    });
+                    closeDrawer();
+                    window.location.hash = '#/result';
+                });
+            });
+        } catch (err) {
+            console.error('[HomePage] 加载抽屉历史失败:', err);
+            body.innerHTML = '<p style="color:#dc3545;text-align:center;padding:20px;">加载失败</p>';
         }
     }
 
@@ -765,6 +875,7 @@ export class HomePage {
                 <div class="modal-tabs">
                     <button class="modal-tab active" data-tab="login">登录</button>
                     <button class="modal-tab" data-tab="register">注册</button>
+                    <button class="modal-tab" data-tab="phone-login">手机号登录</button>
                 </div>
                 <div id="loginForm" class="modal-form">
                     <div class="form-group"><label>用户名</label><input type="text" id="loginUsername" class="form-input" placeholder="请输入用户名" autocomplete="username"></div>
@@ -779,24 +890,110 @@ export class HomePage {
                     <button class="btn btn-primary btn-block" id="submitRegister">注册</button>
                     <p class="form-error" id="regError" style="display:none"></p>
                 </div>
+                <div id="phoneLoginForm" class="modal-form" style="display:none">
+                    <div class="form-group"><label>手机号</label><input type="tel" id="phoneLoginPhone" class="form-input" placeholder="请输入手机号" maxlength="11" autocomplete="tel"></div>
+                    <div class="form-group" style="display:flex;gap:8px;align-items:flex-end;">
+                        <div style="flex:1;"><label>验证码</label><input type="text" id="phoneLoginCode" class="form-input" placeholder="请输入验证码" maxlength="6" autocomplete="one-time-code"></div>
+                        <button class="btn btn-secondary" id="sendSmsCodeBtn" style="white-space:nowrap;min-width:100px;">发送验证码</button>
+                    </div>
+                    <button class="btn btn-primary btn-block" id="submitPhoneLogin">登录 / 注册</button>
+                    <p class="form-error" id="phoneLoginError" style="display:none"></p>
+                </div>
                 <button class="modal-close" id="closeModal">&times;</button>
             </div>
         `;
         document.body.appendChild(overlay);
         requestAnimationFrame(() => overlay.classList.add('visible'));
 
+        /* Tab 切换逻辑 */
         overlay.querySelectorAll('.modal-tab').forEach(tab => {
             tab.addEventListener('click', () => {
                 overlay.querySelectorAll('.modal-tab').forEach(t => t.classList.remove('active'));
                 tab.classList.add('active');
-                const isLogin = tab.dataset.tab === 'login';
-                document.getElementById('loginForm').style.display = isLogin ? 'block' : 'none';
-                document.getElementById('registerForm').style.display = isLogin ? 'none' : 'block';
+                const tabName = tab.dataset.tab;
+                document.getElementById('loginForm').style.display = tabName === 'login' ? 'block' : 'none';
+                document.getElementById('registerForm').style.display = tabName === 'register' ? 'block' : 'none';
+                document.getElementById('phoneLoginForm').style.display = tabName === 'phone-login' ? 'block' : 'none';
             });
         });
 
         document.getElementById('closeModal').addEventListener('click', () => overlay.remove());
         overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+        /* 发送验证码按钮逻辑 */
+        let smsCooldown = 0;
+        const sendSmsBtn = document.getElementById('sendSmsCodeBtn');
+        sendSmsBtn.addEventListener('click', async () => {
+            const phone = document.getElementById('phoneLoginPhone').value.trim();
+            const err = document.getElementById('phoneLoginError');
+            err.style.display = 'none';
+
+            if (!/^1[3-9]\d{9}$/.test(phone)) {
+                err.textContent = '请输入正确的手机号';
+                err.style.display = 'block';
+                return;
+            }
+
+            if (smsCooldown > 0) return;
+
+            try {
+                sendSmsBtn.disabled = true;
+                sendSmsBtn.textContent = '发送中...';
+                const d = await api.sendSmsCode(phone);
+                if (d.success) {
+                    /* MVP阶段：自动填入验证码 */
+                    if (d.code) {
+                        document.getElementById('phoneLoginCode').value = d.code;
+                        showToast('验证码已发送（开发模式自动填入）', 'success', 2000);
+                    } else {
+                        showToast('验证码已发送', 'success', 2000);
+                    }
+                    /* 60秒冷却倒计时 */
+                    smsCooldown = 60;
+                    const timer = setInterval(() => {
+                        smsCooldown--;
+                        if (smsCooldown <= 0) {
+                            clearInterval(timer);
+                            sendSmsBtn.disabled = false;
+                            sendSmsBtn.textContent = '发送验证码';
+                        } else {
+                            sendSmsBtn.textContent = `${smsCooldown}s`;
+                        }
+                    }, 1000);
+                }
+            } catch (e) {
+                sendSmsBtn.disabled = false;
+                sendSmsBtn.textContent = '发送验证码';
+                err.textContent = e.message || '发送验证码失败';
+                err.style.display = 'block';
+            }
+        });
+
+        /* 手机号登录提交 */
+        document.getElementById('submitPhoneLogin').addEventListener('click', async () => {
+            const phone = document.getElementById('phoneLoginPhone').value.trim();
+            const code = document.getElementById('phoneLoginCode').value.trim();
+            const err = document.getElementById('phoneLoginError');
+            err.style.display = 'none';
+
+            if (!phone || !code) { err.textContent = '请填写手机号和验证码'; err.style.display = 'block'; return; }
+            if (!/^1[3-9]\d{9}$/.test(phone)) { err.textContent = '请输入正确的手机号'; err.style.display = 'block'; return; }
+            if (code.length < 4) { err.textContent = '验证码至少4位'; err.style.display = 'block'; return; }
+
+            try {
+                const d = await api.phoneLogin(phone, code);
+                const user = d.user || d;
+                if (user) {
+                    overlay.remove();
+                    this._checkLoginStatus();
+                    this._loadAchievements();
+                    showToast(d.message || (d.is_new_user ? '注册成功' : '登录成功'), 'success', 2000);
+                } else {
+                    err.textContent = '登录失败，请重试';
+                    err.style.display = 'block';
+                }
+            } catch (e) { err.textContent = e.message || '网络错误，请稍后重试'; err.style.display = 'block'; }
+        });
 
         document.getElementById('submitLogin').addEventListener('click', async () => {
             const u = document.getElementById('loginUsername').value.trim();

@@ -6,6 +6,9 @@ export class AdminPoints {
     _api = null;
     _pointsData = [];
     _boundHandlers = {};
+    _map = null;
+    _mapMarkers = [];
+    _showMap = false;
 
     constructor(options = {}) {
         this._api = options.api;
@@ -24,6 +27,7 @@ export class AdminPoints {
                     📍 投放点维护
                 </h2>
                 <div style="display:flex;gap:8px">
+                    <button class="admin-btn admin-btn-secondary" id="adminToggleMapBtn">🗺️ 地图视图</button>
                     <button class="admin-btn admin-btn-secondary" id="adminImportBtn">📥 批量导入</button>
                     <button class="admin-btn admin-btn-primary" id="adminAddPointBtn">+ 新增投放点</button>
                 </div>
@@ -36,6 +40,10 @@ export class AdminPoints {
                     <option value="">全部区域</option>
                 </select>
                 <button class="admin-btn admin-btn-primary" id="adminPointSearchBtn">搜索</button>
+            </div>
+
+            <div id="adminPointMapView" style="display:none;margin-bottom:16px">
+                <div id="adminMapContainer" style="height:400px;border-radius:8px;overflow:hidden;border:1px solid #e0e0e0"></div>
             </div>
 
             <div class="admin-card" style="padding:0;overflow:hidden">
@@ -64,6 +72,11 @@ export class AdminPoints {
             this._showPointModal();
         };
         document.getElementById('adminAddPointBtn').addEventListener('click', this._boundHandlers.addPoint);
+
+        this._boundHandlers.toggleMap = () => {
+            this._toggleMapView();
+        };
+        document.getElementById('adminToggleMapBtn').addEventListener('click', this._boundHandlers.toggleMap);
 
         this._boundHandlers.importClick = () => {
             this._showImportModal();
@@ -139,6 +152,8 @@ export class AdminPoints {
 
             this._pointsData = points;
             this._updateZoneOptions(data.points || data.data || []);
+
+            if (this._showMap) this._updateMapMarkers();
 
             if (points.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="7" class="admin-empty">暂无投放点数据</td></tr>';
@@ -394,12 +409,85 @@ export class AdminPoints {
         });
     }
 
+    _toggleMapView() {
+        this._showMap = !this._showMap;
+        const mapEl = document.getElementById('adminPointMapView');
+        const btn = document.getElementById('adminToggleMapBtn');
+        if (this._showMap) {
+            mapEl.style.display = 'block';
+            btn.textContent = '📋 列表视图';
+            this._initMap();
+        } else {
+            mapEl.style.display = 'none';
+            btn.textContent = '🗺️ 地图视图';
+        }
+    }
+
+    _initMap() {
+        const container = document.getElementById('adminMapContainer');
+        if (!container) return;
+
+        const loadLeaflet = () => {
+            if (typeof L === 'undefined') {
+                const link = document.createElement('link');
+                link.rel = 'stylesheet';
+                link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+                document.head.appendChild(link);
+                const script = document.createElement('script');
+                script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+                script.onload = () => this._createMap(container);
+                document.head.appendChild(script);
+            } else {
+                this._createMap(container);
+            }
+        };
+        loadLeaflet();
+    }
+
+    _createMap(container) {
+        const defaultLat = this._pointsData.length > 0 && this._pointsData[0].lat ? this._pointsData[0].lat : 30.5;
+        const defaultLng = this._pointsData.length > 0 && this._pointsData[0].lng ? this._pointsData[0].lng : 114.3;
+        this._map = L.map(container).setView([defaultLat, defaultLng], 15);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap'
+        }).addTo(this._map);
+        this._updateMapMarkers();
+        setTimeout(() => this._map.invalidateSize(), 200);
+    }
+
+    _updateMapMarkers() {
+        if (!this._map) return;
+        this._mapMarkers.forEach(m => m.remove());
+        this._mapMarkers = [];
+        const catColors = { '可回收物': '#3b82f6', '有害垃圾': '#ef4444', '厨余垃圾': '#22c55e', '其他垃圾': '#6b7280', 'recyclable': '#3b82f6', 'hazardous': '#ef4444', 'kitchen': '#22c55e', 'other': '#6b7280' };
+
+        this._pointsData.forEach(p => {
+            if (p.lat && p.lng) {
+                const cats = Array.isArray(p.categories) ? p.categories.join(', ') : (p.category || '');
+                const color = catColors[cats] || catColors[p.category] || '#6b7280';
+                const marker = L.circleMarker([p.lat, p.lng], {
+                    radius: 8, fillColor: color, color: '#fff', weight: 2, fillOpacity: 0.8
+                }).addTo(this._map).bindPopup(`<b>${escapeHtml(p.name || '')}</b><br>类型: ${escapeHtml(cats)}<br>区域: ${escapeHtml(p.zone || p.area || '')}`);
+                this._mapMarkers.push(marker);
+            }
+        });
+
+        if (this._mapMarkers.length > 0) {
+            this._map.fitBounds(this._mapMarkers.map(m => m.getLatLng()), { padding: [30, 30] });
+        }
+    }
+
     destroy() {
         document.getElementById('adminAddPointBtn')?.removeEventListener('click', this._boundHandlers.addPoint);
+        document.getElementById('adminToggleMapBtn')?.removeEventListener('click', this._boundHandlers.toggleMap);
         document.getElementById('adminImportBtn')?.removeEventListener('click', this._boundHandlers.importClick);
         document.getElementById('adminPointSearchBtn')?.removeEventListener('click', this._boundHandlers.searchClick);
         document.getElementById('adminPointSearch')?.removeEventListener('keypress', this._boundHandlers.searchKeypress);
         document.getElementById('adminPointsTableBody')?.removeEventListener('click', this._boundHandlers.tbodyClick);
+        if (this._map) {
+            this._map.remove();
+            this._map = null;
+        }
         if (this.container) {
             this.container.innerHTML = '';
         }

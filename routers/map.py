@@ -63,7 +63,7 @@ async def get_disposal_point(point_id: str):
 
 @router.post("/api/checkin")
 async def create_checkin(request: Request, req: CheckinRequest):
-    """创建打卡记录"""
+    """创建打卡记录（含位置校验、拍照哈希、连续签到翻倍积分）"""
     user = _get_current_user(request)
     if not user:
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
@@ -72,22 +72,54 @@ async def create_checkin(request: Request, req: CheckinRequest):
         if CheckinRepository.check_today_exists(user["id"]):
             return JSONResponse(status_code=400, content={"success": False, "error": {"code": "E400", "message": "今日已打卡"}})
 
+        # 位置校验：如果提供了投放点ID，检查用户是否在投放点附近（500米内）
+        if req.point_id and req.lat and req.lng:
+            point = DisposalPointRepository.get_by_id(req.point_id)
+            if point:
+                import math
+                lat1, lng1 = math.radians(req.lat), math.radians(req.lng)
+                lat2, lng2 = math.radians(point["lat"]), math.radians(point["lng"])
+                dlat = lat2 - lat1
+                dlng = lng2 - lng1
+                a = math.sin(dlat/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin(dlng/2)**2
+                distance = 6371000 * 2 * math.asin(math.sqrt(a))
+                if distance > 500:
+                    return JSONResponse(status_code=400, content={
+                        "success": False,
+                        "error": {"code": "E400", "message": f"距离投放点{int(distance)}米，需在500米内才能打卡"}
+                    })
+
+        # 连续签到翻倍积分：基础5分，连续3天+2，连续7天+5，连续30天+10
+        consecutive_days = CheckinRepository.get_consecutive_days(user["id"], 30)
+        bonus_map = {3: 2, 7: 5, 30: 10}
+        bonus = 0
+        for threshold, extra in sorted(bonus_map.items()):
+            if consecutive_days >= threshold:
+                bonus = extra
+        points_earned = 5 + bonus
+
         checkin_id = CheckinRepository.create_checkin(
             user_id=user["id"],
             point_id=req.point_id,
             lat=req.lat,
             lng=req.lng,
             category=req.category,
+            photo_hash=req.photo_hash,
+            points_earned=points_earned,
         )
         if not checkin_id:
             return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "打卡失败"}})
 
-        UserRepository.add_checkin_count(user["id"])
+        UserRepository.add_checkin_count(user["id"], points_earned)
+
+        streak_msg = ""
+        if consecutive_days > 0:
+            streak_msg = f"（连续{consecutive_days + 1}天，额外+{bonus}分）"
 
         return JSONResponse(content={
             "success": True,
-            "checkin": {"id": checkin_id, "points_earned": 5},
-            "message": "打卡成功！获得 5 积分"
+            "checkin": {"id": checkin_id, "points_earned": points_earned, "consecutive_days": consecutive_days + 1},
+            "message": f"打卡成功！获得 {points_earned} 积分{streak_msg}"
         })
     except Exception as e:
         logger.error("打卡失败: %s", e)

@@ -6,6 +6,7 @@
 import hashlib
 import logging
 import os
+import random
 import time
 import uuid
 
@@ -15,7 +16,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from repositories.user_repo import UserRepository
 from repositories.session_repo import SessionRepository
-from app.models import RegisterRequest, LoginRequest
+from app.models import RegisterRequest, LoginRequest, PhoneLoginRequest
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,9 @@ router = APIRouter(prefix="/api/auth", tags=["用户认证"])
 class UserSettingsRequest(BaseModel):
     nickname: str = ""
     avatar: str = ""
+
+# ==================== 内存验证码存储（MVP阶段） ====================
+_sms_codes: dict = {}  # {phone: (code, expire_time)}
 
 # ==================== 会话常量 ====================
 SESSION_COOKIE_NAME = "session_id"
@@ -179,6 +183,123 @@ async def login(req: LoginRequest, response: Response):
     except Exception as e:
         logger.error("登录失败: %s", e)
         return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "登录失败"}})
+
+
+# ==================== 手机号验证码登录接口 ====================
+
+class SmsCodeRequest(BaseModel):
+    """发送验证码请求体"""
+    phone: str
+
+
+@router.post("/sms-code")
+async def send_sms_code(req: SmsCodeRequest):
+    """发送手机验证码（MVP阶段：模拟发送，直接返回验证码）
+
+    Args:
+        req: 包含 phone 字段的请求体
+
+    Returns:
+        验证码发送结果（开发模式直接返回验证码）
+    """
+    phone = req.phone
+    # 校验手机号格式
+    import re
+    if not re.match(r'^1[3-9]\d{9}$', phone):
+        return JSONResponse(status_code=400, content={"success": False, "error": {"code": "E001", "message": "手机号格式不正确"}})
+
+    # 生成6位随机验证码
+    code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+    # 存入内存，有效期5分钟
+    _sms_codes[phone] = (code, time.time() + 300)
+
+    # MVP阶段：直接返回验证码（生产环境不返回）
+    return JSONResponse(content={
+        "success": True,
+        "code": code,
+        "message": "验证码已发送（开发模式直接返回）"
+    })
+
+
+@router.post("/phone-login")
+async def phone_login(req: PhoneLoginRequest):
+    """手机号+验证码登录
+
+    流程：
+    1. 校验验证码是否正确且未过期
+    2. 手机号已注册 → 直接登录
+    3. 手机号未注册 → 自动创建用户并登录
+
+    Args:
+        req: 包含 phone 和 code 字段的请求体
+
+    Returns:
+        登录结果，含用户信息和会话Cookie
+    """
+    phone = req.phone
+    code = req.code
+
+    # 校验验证码
+    stored = _sms_codes.get(phone)
+    if not stored:
+        return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先获取验证码"}})
+
+    stored_code, expire_time = stored
+    if time.time() > expire_time:
+        # 验证码已过期，清除
+        _sms_codes.pop(phone, None)
+        return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "验证码已过期，请重新获取"}})
+
+    if stored_code != code:
+        return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "验证码错误"}})
+
+    # 验证码校验通过，清除已用验证码
+    _sms_codes.pop(phone, None)
+
+    # 查找手机号对应的用户
+    user = UserRepository.get_user_by_phone(phone)
+
+    if user:
+        # 手机号已注册，直接登录
+        # 检查账号状态
+        if user.get("status") == "banned":
+            return JSONResponse(status_code=403, content={"success": False, "error": {"code": "E403", "message": "账号已被禁用"}})
+
+        UserRepository.update_last_login(user["id"])
+        user_id = user["id"]
+        is_new_user = False
+    else:
+        # 手机号未注册，自动创建用户
+        username = f"phone_{phone[-4:]}_{uuid.uuid4().hex[:4]}"
+        nickname = f"用户{phone[-4:]}"
+        # 手机号注册用户无密码，生成随机密码哈希
+        random_password = uuid.uuid4().hex
+        user_id = UserRepository.create_user(
+            username=username,
+            password_hash=_hash_password(random_password),
+            nickname=nickname,
+            phone=phone,
+        )
+        if not user_id:
+            return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "自动注册失败，请稍后重试"}})
+        is_new_user = True
+
+    # 创建会话
+    session_id = _create_session(user_id)
+
+    # 获取完整用户信息
+    user_info = UserRepository.get_user_by_id(user_id)
+
+    resp = JSONResponse(content={
+        "success": True,
+        "user": user_info,
+        "is_new_user": is_new_user,
+        "message": "欢迎加入！" if is_new_user else "欢迎回来！",
+    })
+    resp.set_cookie(SESSION_COOKIE_NAME, session_id, max_age=SESSION_EXPIRE_SECONDS, httponly=True, samesite="lax")
+
+    logger.info("手机号登录成功: phone=%s, user=%s, new=%s", phone, user_id, is_new_user)
+    return resp
 
 
 @router.post("/logout")

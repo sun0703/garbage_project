@@ -8,7 +8,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 from fuzzywuzzy import process as fuzz_process
-from services.asr_correction import correct_asr_text
+from services.asr_correction import correct_asr_text, WASTE_SYNONYMS
 
 # ==================== 拼音库导入（带 fallback） ====================
 try:
@@ -65,6 +65,19 @@ class SearchEngine:
                 for alias in item.get("aliases", []):
                     if alias and alias not in self._alias_to_label:
                         self._alias_to_label[alias] = item["label"]
+
+            # 将 WASTE_SYNONYMS 同义词字典集成到别名索引（需求 F-2.2.2）
+            for main_key, synonyms in WASTE_SYNONYMS.items():
+                # 先找到 main_key 对应的词库主标签
+                main_label = None
+                for item in self.vocab:
+                    if item["label"] == main_key or main_key in item.get("aliases", []):
+                        main_label = item["label"]
+                        break
+                if main_label:
+                    for syn in synonyms:
+                        if syn and syn not in self._alias_to_label and syn != main_label:
+                            self._alias_to_label[syn] = main_label
             # 构建拼音首字母索引（需求 F-2.2.1）
             self._build_pinyin_index()
             logger.info(

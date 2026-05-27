@@ -19,9 +19,12 @@ export class AdminActivities {
 
     _render() {
         this.container.innerHTML = `
-            <h2 style="font-size:20px;font-weight:700;color:var(--text-primary);margin-bottom:20px">
-                \u{1F389} 活动管理
-            </h2>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+                <h2 style="font-size:20px;font-weight:700;color:var(--text-primary);margin:0">
+                    🎉 活动管理
+                </h2>
+                <button class="admin-btn admin-btn-primary" id="adminAddActivityBtn">+ 创建活动</button>
+            </div>
 
             <div class="admin-card" style="padding:0;overflow:hidden">
                 <div class="admin-table-wrap">
@@ -37,12 +40,17 @@ export class AdminActivities {
                             </tr>
                         </thead>
                         <tbody id="adminActivitiesTableBody">
-                            <tr><td colspan="6" class="admin-loading">\u23F3 加载中...</td></tr>
+                            <tr><td colspan="6" class="admin-loading">⏳ 加载中...</td></tr>
                         </tbody>
                     </table>
                 </div>
             </div>
         `;
+
+        this._boundHandlers.addActivity = () => {
+            this._showActivityCreateModal();
+        };
+        document.getElementById('adminAddActivityBtn').addEventListener('click', this._boundHandlers.addActivity);
 
         this._boundHandlers.tbodyClick = async (e) => {
             const editBtn = e.target.closest('[data-action="editActivity"]');
@@ -118,6 +126,99 @@ export class AdminActivities {
         `;
     }
 
+    _showActivityCreateModal() {
+        const overlay = document.createElement('div');
+        overlay.className = 'admin-modal-overlay';
+        overlay.innerHTML = `
+            <div class="admin-modal" style="max-width:560px">
+                <h3 class="admin-modal__title">创建活动</h3>
+                <div class="admin-form-group">
+                    <label>活动标题 <span style="color:#dc3545">*</span></label>
+                    <input class="admin-input" id="actCreateTitle" placeholder="如：校园垃圾分类宣传周">
+                </div>
+                <div class="admin-form-group">
+                    <label>活动描述</label>
+                    <textarea class="admin-textarea" id="actCreateDesc" rows="3" placeholder="活动详细说明"></textarea>
+                </div>
+                <div style="display:flex;gap:12px">
+                    <div class="admin-form-group" style="flex:1">
+                        <label>开始时间</label>
+                        <input class="admin-input" id="actCreateStart" type="datetime-local">
+                    </div>
+                    <div class="admin-form-group" style="flex:1">
+                        <label>结束时间</label>
+                        <input class="admin-input" id="actCreateEnd" type="datetime-local">
+                    </div>
+                </div>
+                <div class="admin-form-group">
+                    <label>活动地点</label>
+                    <input class="admin-input" id="actCreateLocation" placeholder="如：学生活动中心">
+                </div>
+                <div class="admin-form-group">
+                    <label>最大参与人数</label>
+                    <input class="admin-input" id="actCreateMaxParticipants" type="number" min="1" value="50" placeholder="0表示不限">
+                </div>
+                <div class="admin-form-group">
+                    <label>奖励积分</label>
+                    <input class="admin-input" id="actCreatePoints" type="number" min="0" value="10" placeholder="参与活动获得的积分">
+                </div>
+                <div class="admin-modal__footer">
+                    <button class="admin-btn admin-btn-secondary" id="actCreateCancel">取消</button>
+                    <button class="admin-btn admin-btn-primary" id="actCreateSave">创建活动</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+
+        const closeModal = () => overlay.remove();
+
+        document.getElementById('actCreateCancel').addEventListener('click', closeModal);
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) closeModal();
+        });
+
+        document.getElementById('actCreateSave').addEventListener('click', async () => {
+            const title = document.getElementById('actCreateTitle').value.trim();
+            if (!title) {
+                showToast('活动标题不能为空', 'error');
+                return;
+            }
+
+            const startVal = document.getElementById('actCreateStart').value;
+            const endVal = document.getElementById('actCreateEnd').value;
+
+            const formData = {
+                title: title,
+                description: document.getElementById('actCreateDesc').value.trim(),
+                start_time: startVal ? Math.floor(new Date(startVal).getTime() / 1000) : 0,
+                end_time: endVal ? Math.floor(new Date(endVal).getTime() / 1000) : 0,
+                location: document.getElementById('actCreateLocation').value.trim(),
+                max_participants: parseInt(document.getElementById('actCreateMaxParticipants').value) || 0,
+                points_reward: parseInt(document.getElementById('actCreatePoints').value) || 0,
+                status: 'open',
+            };
+
+            const saveBtn = document.getElementById('actCreateSave');
+            saveBtn.disabled = true;
+            saveBtn.textContent = '创建中...';
+
+            try {
+                await this._api.adminCreateActivity(formData);
+                showToast('活动创建成功', 'success');
+                closeModal();
+                this._loadActivities();
+            } catch (err) {
+                console.error('[AdminActivities] 创建活动失败:', err);
+                showToast('创建失败，请重试', 'error');
+                saveBtn.disabled = false;
+                saveBtn.textContent = '创建活动';
+            }
+        });
+
+        document.getElementById('actCreateTitle').focus();
+    }
+
     _showActivityEditModal(activity, idx) {
         const overlay = document.createElement('div');
         overlay.className = 'admin-modal-overlay';
@@ -186,6 +287,7 @@ export class AdminActivities {
     }
 
     destroy() {
+        document.getElementById('adminAddActivityBtn')?.removeEventListener('click', this._boundHandlers.addActivity);
         document.getElementById('adminActivitiesTableBody')?.removeEventListener('click', this._boundHandlers.tbodyClick);
         if (this.container) {
             this.container.innerHTML = '';

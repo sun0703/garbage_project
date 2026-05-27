@@ -150,7 +150,12 @@ export class ProfilePage {
         const safeInitial = escapeHtml((user.nickname || user.username || '?')[0]);
         const isSafeUrl = (url) => /^https?:/.test(url);
 
-        if (nameEl) nameEl.textContent = user.nickname || user.username;
+        // 角色标识展示（需求 F-4.1.3）
+        const roleMap = { admin: '管理员', user: '用户', moderator: '版主' };
+        const roleLabel = roleMap[user.role] || '用户';
+        const roleClass = user.role === 'admin' ? 'profile-role--admin' : 'profile-role--user';
+
+        if (nameEl) nameEl.innerHTML = `${safeNickname} <span class="profile-role-badge ${roleClass}">${roleLabel}</span>`;
         if (usernameEl) usernameEl.textContent = `@${user.username}`;
         if (avatarEl) {
             if (user.avatar && isSafeUrl(user.avatar)) {

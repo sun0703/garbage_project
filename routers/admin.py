@@ -18,7 +18,7 @@ from fastapi import APIRouter, Request, Query, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from app.db import db
+from app.database import get_db
 from app.database import get_db as get_database
 from routers.auth import _get_current_user, SESSION_COOKIE_NAME
 
@@ -136,13 +136,12 @@ def _get_admin_session(request: Request):
     if not session_id:
         return None
     try:
-        c = db.conn.cursor()
-        c.execute("""
+        db = get_db()
+        row = db.fetchone("""
             SELECT session_id, admin_username, created_at, expires_at
             FROM admin_sessions
             WHERE session_id = ? AND expires_at > ?
         """, (session_id, time.time()))
-        row = c.fetchone()
         if row:
             return dict(row)
         return None
@@ -157,11 +156,12 @@ def _create_admin_session(username: str) -> str:
         session_id = uuid.uuid4().hex
         now = time.time()
         expires_at = now + ADMIN_SESSION_EXPIRE_SECONDS
-        db.conn.execute("""
+        db = get_db()
+        db.execute("""
             INSERT INTO admin_sessions (session_id, admin_username, created_at, expires_at)
             VALUES (?, ?, ?, ?)
         """, (session_id, username, now, expires_at))
-        db.conn.commit()
+        db.commit()
         return session_id
     except Exception as e:
         logger.error("创建管理员会话失败: %s", e)
@@ -179,8 +179,8 @@ def _require_admin(request: Request):
 def _init_admin_tables():
     """初始化管理员相关表"""
     try:
-        c = db.conn.cursor()
-        c.execute("""
+        db = get_db()
+        db.execute("""
             CREATE TABLE IF NOT EXISTS admin_users (
                 username TEXT PRIMARY KEY,
                 password_hash TEXT NOT NULL,
@@ -188,7 +188,7 @@ def _init_admin_tables():
                 created_at REAL NOT NULL
             )
         """)
-        c.execute("""
+        db.execute("""
             CREATE TABLE IF NOT EXISTS admin_sessions (
                 session_id TEXT PRIMARY KEY,
                 admin_username TEXT NOT NULL,
@@ -196,7 +196,7 @@ def _init_admin_tables():
                 expires_at REAL NOT NULL
             )
         """)
-        c.execute("""
+        db.execute("""
             CREATE TABLE IF NOT EXISTS admin_points_history (
                 id TEXT PRIMARY KEY,
                 user_id TEXT NOT NULL,
@@ -205,7 +205,7 @@ def _init_admin_tables():
                 created_at REAL NOT NULL
             )
         """)
-        db.conn.commit()
+        db.commit()
         _seed_default_admin()
         logger.info("管理员表初始化完成")
     except Exception as e:
@@ -222,9 +222,9 @@ def _generate_strong_password(length=16):
 def _seed_default_admin():
     """创建默认管理员账户（密码从环境变量读取或自动生成强密码）"""
     try:
-        c = db.conn.cursor()
-        c.execute("SELECT username FROM admin_users WHERE username = ?", ("admin",))
-        if not c.fetchone():
+        db = get_db()
+        existing = db.fetchone("SELECT username FROM admin_users WHERE username = ?", ("admin",))
+        if not existing:
             # 优先从环境变量读取密码，否则生成随机强密码
             default_password = os.environ.get("ADMIN_DEFAULT_PASSWORD")
             if not default_password:
@@ -239,11 +239,11 @@ def _seed_default_admin():
 
             password_hash = _hash_admin_password(default_password)
             now = time.time()
-            db.conn.execute("""
+            db.execute("""
                 INSERT INTO admin_users (username, password_hash, display_name, created_at)
                 VALUES (?, ?, ?, ?)
             """, ("admin", password_hash, "系统管理员", now))
-            db.conn.commit()
+            db.commit()
             logger.info("默认管理员账户已创建")
     except Exception as e:
         logger.error("创建默认管理员失败: %s", e)
@@ -256,9 +256,8 @@ _init_admin_tables()
 async def admin_login(req: AdminLoginRequest, response: Response):
     """管理员登录"""
     try:
-        c = db.conn.cursor()
-        c.execute("SELECT * FROM admin_users WHERE username = ?", (req.username,))
-        row = c.fetchone()
+        db = get_db()
+        row = db.fetchone("SELECT * FROM admin_users WHERE username = ?", (req.username,))
 
         if not row or row["password_hash"] != _hash_admin_password(req.password):
             return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "用户名或密码错误"}})
@@ -292,74 +291,64 @@ async def get_dashboard_stats(request: Request):
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
 
     try:
-        c = db.conn.cursor()
+        db = get_db()
 
-        c.execute("SELECT COUNT(*) as count FROM users")
-        total_users = c.fetchone()["count"]
+        total_users = db.fetchone("SELECT COUNT(*) as count FROM users")["count"]
 
-        c.execute("SELECT COUNT(*) as count FROM checkins")
-        total_checkins = c.fetchone()["count"]
+        total_checkins = db.fetchone("SELECT COUNT(*) as count FROM checkins")["count"]
 
-        c.execute("SELECT COUNT(*) as count FROM activities WHERE status = 'open'")
-        active_activities = c.fetchone()["count"]
+        active_activities = db.fetchone("SELECT COUNT(*) as count FROM activities WHERE status = 'open'")["count"]
 
-        c.execute("SELECT COUNT(*) as count FROM activity_signups")
-        total_signups = c.fetchone()["count"]
+        total_signups = db.fetchone("SELECT COUNT(*) as count FROM activity_signups")["count"]
 
-        c.execute("SELECT SUM(points) as total FROM users")
-        total_points = c.fetchone()["total"] or 0
+        total_points = db.fetchone("SELECT SUM(points) as total FROM users")["total"] or 0
 
-        c.execute("SELECT COUNT(*) as count FROM feedback")
-        total_feedback = c.fetchone()["count"]
+        total_feedback = db.fetchone("SELECT COUNT(*) as count FROM feedback")["count"]
 
-        c.execute("""
+        today_checkins = db.fetchone("""
             SELECT COUNT(*) as count FROM checkins
             WHERE created_at > ?
-        """, (time.time() - 86400,))
-        today_checkins = c.fetchone()["count"]
+        """, (time.time() - 86400,))["count"]
 
-        c.execute("""
+        today_new_users = db.fetchone("""
             SELECT COUNT(*) as count FROM users
             WHERE created_at > ?
-        """, (time.time() - 86400,))
-        today_new_users = c.fetchone()["count"]
+        """, (time.time() - 86400,))["count"]
 
         # 今日活跃用户（DAU）
-        c.execute("""
+        dau = db.fetchone("""
             SELECT COUNT(DISTINCT user_id) as count FROM checkins
             WHERE created_at > ?
-        """, (time.time() - 86400,))
-        dau = c.fetchone()["count"]
+        """, (time.time() - 86400,))["count"]
 
         # 近30天活跃趋势
         daily_trend = []
         for i in range(29, -1, -1):
             day_start = time.time() - (i + 1) * 86400
             day_end = time.time() - i * 86400
-            c.execute("""
+            cnt = db.fetchone("""
                 SELECT COUNT(DISTINCT user_id) as cnt FROM checkins
                 WHERE created_at > ? AND created_at <= ?
-            """, (day_start, day_end))
-            cnt = c.fetchone()["cnt"]
+            """, (day_start, day_end))["cnt"]
             from datetime import datetime
             date_label = datetime.fromtimestamp(day_start).strftime("%m/%d")
             daily_trend.append({"date": date_label, "count": cnt})
 
         # 识别分类分布（从打卡记录的 category 字段统计）
         category_distribution = {}
-        c.execute("SELECT category, COUNT(*) as cnt FROM checkins WHERE category != '' GROUP BY category")
-        for row in c.fetchall():
+        rows = db.fetchall("SELECT category, COUNT(*) as cnt FROM checkins WHERE category != '' GROUP BY category")
+        for row in rows:
             category_distribution[row["category"]] = row["cnt"]
 
         # 热门识别物品 TOP10（从打卡记录统计）
-        c.execute("""
+        hot_rows = db.fetchall("""
             SELECT category, COUNT(*) as cnt FROM checkins
             WHERE category != ''
             GROUP BY category
             ORDER BY cnt DESC
             LIMIT 10
         """)
-        hot_items = [{"name": row["category"], "count": row["cnt"]} for row in c.fetchall()]
+        hot_items = [{"name": row["category"], "count": row["cnt"]} for row in hot_rows]
 
         dashboard = {
             "total_users": total_users,
@@ -395,7 +384,7 @@ async def get_admin_users(request: Request, page: int = Query(1, ge=1), search: 
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
 
     try:
-        c = db.conn.cursor()
+        db = get_db()
         offset = (page - 1) * 20
 
         where_clauses = []
@@ -413,17 +402,15 @@ async def get_admin_users(request: Request, page: int = Query(1, ge=1), search: 
         if where_clauses:
             where_sql = "WHERE " + " AND ".join(where_clauses)
 
-        c.execute(f"SELECT COUNT(*) as count FROM users {where_sql}", params)
-        total = c.fetchone()["count"]
+        total = db.fetchone(f"SELECT COUNT(*) as count FROM users {where_sql}", params)["count"]
 
-        c.execute(f"""
+        rows = db.fetchall(f"""
             SELECT id, username, nickname, avatar, points, checkin_count, quiz_correct, quiz_total, created_at, last_login, status, role
             FROM users
             {where_sql}
             ORDER BY created_at DESC
             LIMIT 20 OFFSET ?
         """, (*params, offset))
-        rows = c.fetchall()
 
         users = [dict(row) for row in rows]
 
@@ -441,13 +428,13 @@ async def update_user_status(request: Request, user_id: str, req: UserStatusRequ
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
 
     try:
-        c = db.conn.cursor()
-        c.execute("SELECT id FROM users WHERE id = ?", (user_id,))
-        if not c.fetchone():
+        db = get_db()
+        existing = db.fetchone("SELECT id FROM users WHERE id = ?", (user_id,))
+        if not existing:
             return JSONResponse(status_code=404, content={"success": False, "error": {"code": "E404", "message": "用户不存在"}})
 
-        db.conn.execute("UPDATE users SET status = ? WHERE id = ?", (req.status, user_id))
-        db.conn.commit()
+        db.execute("UPDATE users SET status = ? WHERE id = ?", (req.status, user_id))
+        db.commit()
 
         return JSONResponse(content={"success": True, "message": "状态已更新"})
     except Exception as e:
@@ -463,13 +450,13 @@ async def update_user_role(request: Request, user_id: str, req: UserRoleRequest)
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
 
     try:
-        c = db.conn.cursor()
-        c.execute("SELECT id FROM users WHERE id = ?", (user_id,))
-        if not c.fetchone():
+        db = get_db()
+        existing = db.fetchone("SELECT id FROM users WHERE id = ?", (user_id,))
+        if not existing:
             return JSONResponse(status_code=404, content={"success": False, "error": {"code": "E404", "message": "用户不存在"}})
 
-        db.conn.execute("UPDATE users SET role = ? WHERE id = ?", (req.role, user_id))
-        db.conn.commit()
+        db.execute("UPDATE users SET role = ? WHERE id = ?", (req.role, user_id))
+        db.commit()
 
         return JSONResponse(content={"success": True, "message": "角色已更新"})
     except Exception as e:
@@ -734,9 +721,8 @@ async def get_admin_points(request: Request):
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
 
     try:
-        c = db.conn.cursor()
-        c.execute("SELECT * FROM disposal_points ORDER BY created_at DESC")
-        rows = c.fetchall()
+        db = get_db()
+        rows = db.fetchall("SELECT * FROM disposal_points ORDER BY created_at DESC")
 
         points = []
         for row in rows:
@@ -761,12 +747,13 @@ async def create_point(request: Request, req: DisposalPointRequest):
     try:
         point_id = uuid.uuid4().hex[:12]
         now = time.time()
+        db = get_db()
 
-        db.conn.execute("""
+        db.execute("""
             INSERT INTO disposal_points (id, name, lat, lng, address, categories, campus_zone, is_indoor, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (point_id, req.name, req.lat, req.lng, req.address, json.dumps(req.categories, ensure_ascii=False), req.campus_zone, 1 if req.is_indoor else 0, now))
-        db.conn.commit()
+        db.commit()
 
         return JSONResponse(status_code=201, content={"success": True, "point_id": point_id, "message": "投放点创建成功"})
     except Exception as e:
@@ -782,9 +769,9 @@ async def update_point(request: Request, point_id: str, req: DisposalPointUpdate
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
 
     try:
-        c = db.conn.cursor()
-        c.execute("SELECT id FROM disposal_points WHERE id = ?", (point_id,))
-        if not c.fetchone():
+        db = get_db()
+        existing = db.fetchone("SELECT id FROM disposal_points WHERE id = ?", (point_id,))
+        if not existing:
             return JSONResponse(status_code=404, content={"success": False, "error": {"code": "E404", "message": "投放点不存在"}})
 
         updates = []
@@ -814,8 +801,8 @@ async def update_point(request: Request, point_id: str, req: DisposalPointUpdate
 
         if updates:
             params.append(point_id)
-            db.conn.execute(f"UPDATE disposal_points SET {', '.join(updates)} WHERE id = ?", params)
-            db.conn.commit()
+            db.execute(f"UPDATE disposal_points SET {', '.join(updates)} WHERE id = ?", params)
+            db.commit()
 
         return JSONResponse(content={"success": True, "message": "投放点已更新"})
     except Exception as e:
@@ -831,13 +818,13 @@ async def delete_point(request: Request, point_id: str):
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
 
     try:
-        c = db.conn.cursor()
-        c.execute("SELECT id FROM disposal_points WHERE id = ?", (point_id,))
-        if not c.fetchone():
+        db = get_db()
+        existing = db.fetchone("SELECT id FROM disposal_points WHERE id = ?", (point_id,))
+        if not existing:
             return JSONResponse(status_code=404, content={"success": False, "error": {"code": "E404", "message": "投放点不存在"}})
 
-        db.conn.execute("DELETE FROM disposal_points WHERE id = ?", (point_id,))
-        db.conn.commit()
+        db.execute("DELETE FROM disposal_points WHERE id = ?", (point_id,))
+        db.commit()
 
         return JSONResponse(content={"success": True, "message": "投放点已删除"})
     except Exception as e:
@@ -1026,15 +1013,14 @@ async def get_activity_signups(request: Request, activity_id: str):
         if not activity:
             return JSONResponse(status_code=404, content={"success": False, "error": {"code": "E404", "message": "活动不存在"}})
 
-        c = db.conn.cursor()
-        c.execute("""
+        db = get_db()
+        rows = db.fetchall("""
             SELECT s.id, s.user_id, s.created_at, u.username, u.nickname, u.avatar
             FROM activity_signups s
             JOIN users u ON s.user_id = u.id
             WHERE s.activity_id = ?
             ORDER BY s.created_at DESC
         """, (activity_id,))
-        rows = c.fetchall()
 
         signups = []
         for row in rows:

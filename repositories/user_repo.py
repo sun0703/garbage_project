@@ -5,7 +5,7 @@ import time
 import logging
 from typing import Optional, List, Dict, Any
 
-from app.db import db
+from app.database import get_db
 
 logger = logging.getLogger(__name__)
 
@@ -38,16 +38,17 @@ class UserRepository:
             成功返回 user_id(str)，失败返回 None
         """
         try:
+            db = get_db()
             user_id = uuid.uuid4().hex[:12]
             now = time.time()
-            db.conn.execute(
+            db.execute(
                 "INSERT INTO users (id, username, password_hash, nickname, avatar, "
                 "points, checkin_count, quiz_correct, quiz_total, oauth_provider, oauth_id, phone, created_at, last_login) "
                 "VALUES (?,?,?,?,?,0,0,0,0,?,?,?,?,?)",
                 (user_id, username, password_hash, nickname, avatar,
                  oauth_provider, oauth_id, phone, now, now),
             )
-            db.conn.commit()
+            db.commit()
             logger.info("用户创建成功: %s", username)
             return user_id
         except Exception as e:
@@ -65,14 +66,13 @@ class UserRepository:
             用户字典或 None
         """
         try:
-            c = db.conn.cursor()
-            c.execute(
+            db = get_db()
+            row = db.fetchone(
                 "SELECT id, username, nickname, avatar, points, checkin_count, "
                 "quiz_correct, quiz_total, oauth_provider, oauth_id, "
                 "created_at, last_login FROM users WHERE id = ?",
                 (user_id,),
             )
-            row = c.fetchone()
             return dict(row) if row else None
         except Exception as e:
             logger.error("查询用户失败 [id=%s]: %s", user_id, e)
@@ -89,9 +89,8 @@ class UserRepository:
             用户字典（含 password_hash）或 None
         """
         try:
-            c = db.conn.cursor()
-            c.execute("SELECT * FROM users WHERE id = ?", (user_id,))
-            row = c.fetchone()
+            db = get_db()
+            row = db.fetchone("SELECT * FROM users WHERE id = ?", (user_id,))
             return dict(row) if row else None
         except Exception as e:
             logger.error("查询用户失败 [id=%s]: %s", user_id, e)
@@ -108,12 +107,11 @@ class UserRepository:
             用户字典或 None
         """
         try:
-            c = db.conn.cursor()
-            c.execute(
+            db = get_db()
+            row = db.fetchone(
                 "SELECT * FROM users WHERE username = ?",
                 (username,),
             )
-            row = c.fetchone()
             return dict(row) if row else None
         except Exception as e:
             logger.error("查询用户失败 [username=%s]: %s", username, e)
@@ -130,9 +128,8 @@ class UserRepository:
             存在返回 True，否则 False
         """
         try:
-            c = db.conn.cursor()
-            c.execute("SELECT id FROM users WHERE username = ?", (username,))
-            return c.fetchone() is not None
+            db = get_db()
+            return db.fetchone("SELECT id FROM users WHERE username = ?", (username,)) is not None
         except Exception as e:
             logger.error("检查用户名存在性失败 [%s]: %s", username, e)
             return False
@@ -149,12 +146,11 @@ class UserRepository:
             用户字典或 None
         """
         try:
-            c = db.conn.cursor()
-            c.execute(
+            db = get_db()
+            row = db.fetchone(
                 "SELECT * FROM users WHERE oauth_provider = ? AND oauth_id = ?",
                 (provider, oauth_id),
             )
-            row = c.fetchone()
             return dict(row) if row else None
         except Exception as e:
             logger.error("OAuth 查询用户失败 [%s/%s]: %s", provider, oauth_id, e)
@@ -171,11 +167,12 @@ class UserRepository:
             成功返回 True
         """
         try:
-            db.conn.execute(
+            db = get_db()
+            db.execute(
                 "UPDATE users SET last_login = ? WHERE id = ?",
                 (time.time(), user_id),
             )
-            db.conn.commit()
+            db.commit()
             return True
         except Exception as e:
             logger.error("更新最后登录时间失败 [%s]: %s", user_id, e)
@@ -193,11 +190,12 @@ class UserRepository:
             成功返回 True
         """
         try:
-            db.conn.execute(
+            db = get_db()
+            db.execute(
                 "UPDATE users SET last_login = ?, avatar = ? WHERE id = ?",
                 (time.time(), avatar, user_id),
             )
-            db.conn.commit()
+            db.commit()
             return True
         except Exception as e:
             logger.error("更新用户登录信息失败 [%s]: %s", user_id, e)
@@ -215,11 +213,12 @@ class UserRepository:
             成功返回 True
         """
         try:
-            db.conn.execute(
+            db = get_db()
+            db.execute(
                 "UPDATE users SET points = points + ? WHERE id = ?",
                 (points, user_id),
             )
-            db.conn.commit()
+            db.commit()
             return True
         except Exception as e:
             logger.error("增加用户积分失败 [%s]: %s", user_id, e)
@@ -237,11 +236,12 @@ class UserRepository:
             成功返回 True
         """
         try:
-            db.conn.execute(
+            db = get_db()
+            db.execute(
                 "UPDATE users SET points = points + ?, checkin_count = checkin_count + 1 WHERE id = ?",
                 (points, user_id),
             )
-            db.conn.commit()
+            db.commit()
             return True
         except Exception as e:
             logger.error("增加打卡计数失败 [%s]: %s", user_id, e)
@@ -259,11 +259,12 @@ class UserRepository:
             成功返回 True
         """
         try:
-            db.conn.execute(
+            db = get_db()
+            db.execute(
                 "UPDATE users SET points = points + ?, quiz_correct = quiz_correct + 1, quiz_total = quiz_total + 1 WHERE id = ?",
                 (points, user_id),
             )
-            db.conn.commit()
+            db.commit()
             return True
         except Exception as e:
             logger.error("增加问答正确计数失败 [%s]: %s", user_id, e)
@@ -280,11 +281,12 @@ class UserRepository:
             成功返回 True
         """
         try:
-            db.conn.execute(
+            db = get_db()
+            db.execute(
                 "UPDATE users SET quiz_total = quiz_total + 1 WHERE id = ?",
                 (user_id,),
             )
-            db.conn.commit()
+            db.commit()
             return True
         except Exception as e:
             logger.error("增加问答总数失败 [%s]: %s", user_id, e)
@@ -301,10 +303,9 @@ class UserRepository:
             排名（从 1 开始）
         """
         try:
-            c = db.conn.cursor()
-            c.execute("SELECT COUNT(*) + 1 FROM users WHERE points > ?", (user_points,))
-            row = c.fetchone()
-            return row[0] if row else 1
+            db = get_db()
+            row = db.fetchone("SELECT COUNT(*) + 1 FROM users WHERE points > ?", (user_points,))
+            return row["COUNT(*) + 1"] if row else 1
         except Exception as e:
             logger.error("查询排名失败: %s", e)
             return 1
@@ -320,13 +321,12 @@ class UserRepository:
             用户字典（id, username, nickname, avatar, points, checkin_count, quiz_correct, quiz_total）或 None
         """
         try:
-            c = db.conn.cursor()
-            c.execute(
+            db = get_db()
+            row = db.fetchone(
                 "SELECT id, username, nickname, avatar, points, checkin_count, quiz_correct, quiz_total "
                 "FROM users WHERE id = ?",
                 (user_id,),
             )
-            row = c.fetchone()
             return dict(row) if row else None
         except Exception as e:
             logger.error("会话查询用户失败 [%s]: %s", user_id, e)
@@ -343,13 +343,12 @@ class UserRepository:
             用户字典或 None
         """
         try:
-            c = db.conn.cursor()
-            c.execute(
+            db = get_db()
+            row = db.fetchone(
                 "SELECT id, username, nickname, avatar, points, checkin_count, "
                 "quiz_correct, quiz_total, status, role, phone FROM users WHERE phone = ?",
                 (phone,),
             )
-            row = c.fetchone()
             return dict(row) if row else None
         except Exception as e:
             logger.error("查询用户失败 [phone=%s]: %s", phone, e)
@@ -366,9 +365,9 @@ class UserRepository:
             已注册返回 True，否则 False
         """
         try:
-            c = db.conn.cursor()
-            c.execute("SELECT COUNT(*) FROM users WHERE phone = ? AND phone != ''", (phone,))
-            return c.fetchone()[0] > 0
+            db = get_db()
+            row = db.fetchone("SELECT COUNT(*) FROM users WHERE phone = ? AND phone != ''", (phone,))
+            return (row["COUNT(*)"] or 0) > 0 if row else False
         except Exception as e:
             logger.error("检查手机号存在性失败 [%s]: %s", phone, e)
             return False

@@ -5,7 +5,7 @@ import time
 import logging
 from typing import Optional, Dict, Any
 
-from app.db import db
+from app.database import get_db
 
 logger = logging.getLogger(__name__)
 
@@ -27,13 +27,14 @@ class SessionRepository:
             会话 ID 字符串，失败返回 None
         """
         try:
+            db = get_db()
             session_id = uuid.uuid4().hex
             now = time.time()
-            db.conn.execute(
+            db.execute(
                 "INSERT INTO sessions (id, user_id, created_at, expires_at) VALUES (?,?,?,?)",
                 (session_id, user_id, now, now + expires_in),
             )
-            db.conn.commit()
+            db.commit()
             logger.info("会话创建成功: user=%s, session=%s", user_id, session_id[:8])
             return session_id
         except Exception as e:
@@ -51,12 +52,11 @@ class SessionRepository:
             用户 ID 或 None（过期/不存在）
         """
         try:
-            c = db.conn.cursor()
-            c.execute(
+            db = get_db()
+            row = db.fetchone(
                 "SELECT user_id FROM sessions WHERE id = ? AND expires_at > ?",
                 (session_id, time.time()),
             )
-            row = c.fetchone()
             return row["user_id"] if row else None
         except Exception as e:
             logger.error("查询会话失败 [%s]: %s", session_id, e)
@@ -73,8 +73,9 @@ class SessionRepository:
             成功返回 True
         """
         try:
-            db.conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
-            db.conn.commit()
+            db = get_db()
+            db.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+            db.commit()
             return True
         except Exception as e:
             logger.error("删除会话失败 [%s]: %s", session_id, e)
@@ -91,8 +92,9 @@ class SessionRepository:
             成功返回 True
         """
         try:
-            db.conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
-            db.conn.commit()
+            db = get_db()
+            db.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+            db.commit()
             logger.info("用户所有会话已删除: user=%s", user_id)
             return True
         except Exception as e:

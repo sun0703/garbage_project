@@ -4,7 +4,7 @@ import time
 import logging
 from typing import Optional, Tuple
 
-from app.db import db
+from app.database import get_db
 
 logger = logging.getLogger(__name__)
 
@@ -25,12 +25,13 @@ class SmsCodeRepository:
             成功返回 True
         """
         try:
+            db = get_db()
             expire_time = time.time() + expire_seconds
-            db.conn.execute(
+            db.execute(
                 "INSERT OR REPLACE INTO sms_codes (phone, code, expire_time) VALUES (?,?,?)",
                 (phone, code, expire_time),
             )
-            db.conn.commit()
+            db.commit()
             return True
         except Exception as e:
             logger.error("保存验证码失败 [phone=%s]: %s", phone, e)
@@ -47,12 +48,11 @@ class SmsCodeRepository:
             (code, expire_time) 元组，不存在或已过期返回 None
         """
         try:
-            c = db.conn.cursor()
-            c.execute(
+            db = get_db()
+            row = db.fetchone(
                 "SELECT code, expire_time FROM sms_codes WHERE phone = ?",
                 (phone,),
             )
-            row = c.fetchone()
             if not row:
                 return None
             # 过期则自动清除
@@ -75,8 +75,9 @@ class SmsCodeRepository:
             成功返回 True
         """
         try:
-            db.conn.execute("DELETE FROM sms_codes WHERE phone = ?", (phone,))
-            db.conn.commit()
+            db = get_db()
+            db.execute("DELETE FROM sms_codes WHERE phone = ?", (phone,))
+            db.commit()
             return True
         except Exception as e:
             logger.error("删除验证码失败 [phone=%s]: %s", phone, e)
@@ -90,10 +91,11 @@ class SmsCodeRepository:
             清理的记录数
         """
         try:
-            c = db.conn.cursor()
-            c.execute("DELETE FROM sms_codes WHERE expire_time < ?", (time.time(),))
-            db.conn.commit()
-            return c.rowcount
+            db = get_db()
+            cursor = db.execute("DELETE FROM sms_codes WHERE expire_time < ?", (time.time(),))
+            db.commit()
+            # cursor.rowcount 兼容 SQLite 和 PostgreSQL
+            return cursor.rowcount if hasattr(cursor, 'rowcount') else 0
         except Exception as e:
             logger.error("清理过期验证码失败: %s", e)
             return 0

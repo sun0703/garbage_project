@@ -532,7 +532,9 @@ async def update_user_settings(request: Request, req: UserSettingsRequest):
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
 
     try:
-        from app.db import db
+        from app.database import get_db
+
+        db = get_db()
         now = time.time()
         updates = []
         params = []
@@ -548,8 +550,8 @@ async def update_user_settings(request: Request, req: UserSettingsRequest):
             updates.append("updated_at = ?")
             params.append(now)
             params.append(user["id"])
-            db.conn.execute(f"UPDATE users SET {', '.join(updates)} WHERE id = ?", params)
-            db.conn.commit()
+            db.execute(f"UPDATE users SET {', '.join(updates)} WHERE id = ?", params)
+            db.commit()
 
         updated_user = UserRepository.get_user_by_id(user["id"])
         return JSONResponse(content={"success": True, "user": updated_user})

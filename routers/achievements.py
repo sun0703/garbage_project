@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 
 from repositories.user_repo import UserRepository
 from repositories.checkin_repo import CheckinRepository
-from app.db import db
+from app.database import get_db
 from routers.auth import _get_current_user
 
 logger = logging.getLogger(__name__)
@@ -69,14 +69,12 @@ def _check_achievements(user_data: dict) -> list:
 
         elif cond_type == "unique_categories":
             value = cond.get("value", 4)
-            # 检查用户是否识别过所有4类垃圾（从历史记录推断）
             try:
-                c = db.conn.cursor()
-                c.execute(
+                db = get_db()
+                row = db.fetchone(
                     "SELECT COUNT(DISTINCT category) as cnt FROM checkins WHERE user_id = ?",
                     (user_data.get("id", ""),)
                 )
-                row = c.fetchone()
                 is_unlocked = (row["cnt"] if row else 0) >= value
             except Exception:
                 is_unlocked = False

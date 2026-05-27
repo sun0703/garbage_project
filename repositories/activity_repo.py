@@ -5,7 +5,7 @@ import time
 import logging
 from typing import Optional, List, Dict, Any, Tuple
 
-from app.db import db
+from app.database import get_db
 
 logger = logging.getLogger(__name__)
 
@@ -32,23 +32,23 @@ class ActivityRepository:
             (活动列表, 总条数)
         """
         try:
-            c = db.conn.cursor()
+            db = get_db()
             offset = (page - 1) * page_size
             if status:
-                c.execute("SELECT COUNT(*) FROM activities WHERE status = ?", (status,))
-                total = c.fetchone()[0]
-                c.execute(
+                total_row = db.fetchone("SELECT COUNT(*) FROM activities WHERE status = ?", (status,))
+                total = total_row[0]
+                rows = db.fetchall(
                     "SELECT * FROM activities WHERE status = ? ORDER BY start_time DESC LIMIT ? OFFSET ?",
                     (status, page_size, offset),
                 )
             else:
-                c.execute("SELECT COUNT(*) FROM activities")
-                total = c.fetchone()[0]
-                c.execute(
+                total_row = db.fetchone("SELECT COUNT(*) FROM activities")
+                total = total_row[0]
+                rows = db.fetchall(
                     "SELECT * FROM activities ORDER BY start_time DESC LIMIT ? OFFSET ?",
                     (page_size, offset),
                 )
-            return [dict(row) for row in c.fetchall()], total
+            return rows, total
         except Exception as e:
             logger.error("获取活动列表失败: %s", e)
             return [], 0
@@ -64,9 +64,8 @@ class ActivityRepository:
             活动字典或 None
         """
         try:
-            c = db.conn.cursor()
-            c.execute("SELECT * FROM activities WHERE id = ?", (activity_id,))
-            row = c.fetchone()
+            db = get_db()
+            row = db.fetchone("SELECT * FROM activities WHERE id = ?", (activity_id,))
             return dict(row) if row else None
         except Exception as e:
             logger.error("获取活动详情失败 [%s]: %s", activity_id, e)
@@ -83,9 +82,8 @@ class ActivityRepository:
             创建者用户 ID 或 None
         """
         try:
-            c = db.conn.cursor()
-            c.execute("SELECT creator_id FROM activities WHERE id = ?", (activity_id,))
-            row = c.fetchone()
+            db = get_db()
+            row = db.fetchone("SELECT creator_id FROM activities WHERE id = ?", (activity_id,))
             return row["creator_id"] if row else None
         except Exception as e:
             logger.error("获取活动创建者失败 [%s]: %s", activity_id, e)
@@ -120,16 +118,17 @@ class ActivityRepository:
             活动 ID，失败返回 None
         """
         try:
+            db = get_db()
             activity_id = uuid.uuid4().hex[:12]
             now = time.time()
-            db.conn.execute(
+            db.execute(
                 """INSERT INTO activities (id, title, description, cover_image, location,
                    start_time, end_time, max_participants, current_participants, status, creator_id, created_at)
                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (activity_id, title, description, cover_image, location,
                  start_time, end_time, max_participants, 0, status, creator_id, now),
             )
-            db.conn.commit()
+            db.commit()
             logger.info("活动创建成功: %s (creator=%s)", activity_id, creator_id)
             return activity_id
         except Exception as e:
@@ -165,13 +164,14 @@ class ActivityRepository:
             成功返回 True
         """
         try:
-            db.conn.execute(
+            db = get_db()
+            db.execute(
                 """UPDATE activities SET title=?, description=?, cover_image=?, location=?,
                    start_time=?, end_time=?, max_participants=?, status=? WHERE id=?""",
                 (title, description, cover_image, location,
                  start_time, end_time, max_participants, status, activity_id),
             )
-            db.conn.commit()
+            db.commit()
             return True
         except Exception as e:
             logger.error("更新活动失败 [%s]: %s", activity_id, e)
@@ -188,9 +188,10 @@ class ActivityRepository:
             成功返回 True
         """
         try:
-            db.conn.execute("DELETE FROM activity_signups WHERE activity_id = ?", (activity_id,))
-            db.conn.execute("DELETE FROM activities WHERE id = ?", (activity_id,))
-            db.conn.commit()
+            db = get_db()
+            db.execute("DELETE FROM activity_signups WHERE activity_id = ?", (activity_id,))
+            db.execute("DELETE FROM activities WHERE id = ?", (activity_id,))
+            db.commit()
             logger.info("活动已删除: %s", activity_id)
             return True
         except Exception as e:
@@ -208,11 +209,12 @@ class ActivityRepository:
             成功返回 True
         """
         try:
-            db.conn.execute(
+            db = get_db()
+            db.execute(
                 "UPDATE activities SET current_participants = current_participants + 1 WHERE id = ?",
                 (activity_id,),
             )
-            db.conn.commit()
+            db.commit()
             return True
         except Exception as e:
             logger.error("增加活动参与人数失败 [%s]: %s", activity_id, e)
@@ -229,12 +231,13 @@ class ActivityRepository:
             成功返回 True
         """
         try:
-            db.conn.execute(
+            db = get_db()
+            db.execute(
                 "UPDATE activities SET current_participants = current_participants - 1 "
                 "WHERE id = ? AND current_participants > 0",
                 (activity_id,),
             )
-            db.conn.commit()
+            db.commit()
             return True
         except Exception as e:
             logger.error("减少活动参与人数失败 [%s]: %s", activity_id, e)
@@ -254,12 +257,12 @@ class ActivityRepository:
             已报名返回 True
         """
         try:
-            c = db.conn.cursor()
-            c.execute(
+            db = get_db()
+            row = db.fetchone(
                 "SELECT id FROM activity_signups WHERE activity_id = ? AND user_id = ?",
                 (activity_id, user_id),
             )
-            return c.fetchone() is not None
+            return row is not None
         except Exception as e:
             logger.error("检查报名状态失败 [%s/%s]: %s", activity_id, user_id, e)
             return False
@@ -276,13 +279,14 @@ class ActivityRepository:
             报名记录 ID，失败返回 None
         """
         try:
+            db = get_db()
             signup_id = uuid.uuid4().hex[:12]
             now = time.time()
-            db.conn.execute(
+            db.execute(
                 "INSERT INTO activity_signups (id, activity_id, user_id, created_at) VALUES (?,?,?,?)",
                 (signup_id, activity_id, user_id, now),
             )
-            db.conn.commit()
+            db.commit()
             return signup_id
         except Exception as e:
             logger.error("创建报名记录失败 [%s/%s]: %s", activity_id, user_id, e)
@@ -300,11 +304,12 @@ class ActivityRepository:
             成功返回 True
         """
         try:
-            db.conn.execute(
+            db = get_db()
+            db.execute(
                 "DELETE FROM activity_signups WHERE activity_id = ? AND user_id = ?",
                 (activity_id, user_id),
             )
-            db.conn.commit()
+            db.commit()
             return True
         except Exception as e:
             logger.error("取消报名失败 [%s/%s]: %s", activity_id, user_id, e)
@@ -324,12 +329,11 @@ class ActivityRepository:
             报名记录字典（id, status, checked_at）或 None
         """
         try:
-            c = db.conn.cursor()
-            c.execute(
+            db = get_db()
+            row = db.fetchone(
                 "SELECT id, status FROM activity_signups WHERE activity_id = ? AND user_id = ?",
                 (activity_id, user_id),
             )
-            row = c.fetchone()
             return dict(row) if row else None
         except Exception as e:
             logger.error("查询报名记录失败 [%s/%s]: %s", activity_id, user_id, e)
@@ -346,9 +350,8 @@ class ActivityRepository:
             签到时间字符串或 None
         """
         try:
-            c = db.conn.cursor()
-            c.execute("SELECT checked_at FROM activity_signups WHERE id = ?", (signup_id,))
-            row = c.fetchone()
+            db = get_db()
+            row = db.fetchone("SELECT checked_at FROM activity_signups WHERE id = ?", (signup_id,))
             return row["checked_at"] if row else None
         except Exception as e:
             logger.error("查询签到时间失败 [%s]: %s", signup_id, e)
@@ -365,12 +368,13 @@ class ActivityRepository:
             签到时间字符串，失败返回 None
         """
         try:
+            db = get_db()
             checkin_time = time.strftime("%Y-%m-%dT%H:%M:%SZ")
-            db.conn.execute(
+            db.execute(
                 "UPDATE activity_signups SET status = 'checked_in', checked_at = ? WHERE id = ?",
                 (checkin_time, signup_id),
             )
-            db.conn.commit()
+            db.commit()
             return checkin_time
         except Exception as e:
             logger.error("签到核销失败 [%s]: %s", signup_id, e)

@@ -69,22 +69,22 @@ async def get_points_history(request: Request, page: int = Query(1, ge=1), page_
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
 
     try:
-        from app.db import db
+        from app.database import get_db
 
-        c = db.conn.cursor()
+        db = get_db()
         offset = (page - 1) * page_size
 
         # 统计两个表的联合总记录数（与下方UNION ALL查询保持一致）
-        c.execute("""
+        total_row = db.fetchone("""
             SELECT COUNT(*) as count FROM (
                 SELECT id FROM checkins WHERE user_id = ?
                 UNION ALL
                 SELECT id FROM quiz_records WHERE user_id = ? AND is_correct = 1
             ) AS combined
         """, (user["id"], user["id"]))
-        total_count = c.fetchone()["count"]
+        total_count = total_row["count"]
 
-        c.execute("""
+        rows = db.fetchall("""
             SELECT 'checkin' as type, id, points_earned as points, category as reason, created_at
             FROM checkins
             WHERE user_id = ?
@@ -95,7 +95,6 @@ async def get_points_history(request: Request, page: int = Query(1, ge=1), page_
             ORDER BY created_at DESC
             LIMIT ? OFFSET ?
         """, (user["id"], user["id"], page_size, offset))
-        rows = c.fetchall()
 
         history = []
         for row in rows:

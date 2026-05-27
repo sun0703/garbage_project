@@ -3,7 +3,7 @@
 import logging
 from typing import Optional, List, Dict, Any
 
-from app.db import db
+from app.database import get_db
 
 logger = logging.getLogger(__name__)
 
@@ -19,9 +19,8 @@ class DisposalPointRepository:
             投放点列表
         """
         try:
-            c = db.conn.cursor()
-            c.execute("SELECT * FROM disposal_points")
-            return [dict(row) for row in c.fetchall()]
+            db = get_db()
+            return db.fetchall("SELECT * FROM disposal_points")
         except Exception as e:
             logger.error("获取投放点列表失败: %s", e)
             return []
@@ -37,9 +36,8 @@ class DisposalPointRepository:
             投放点字典或 None
         """
         try:
-            c = db.conn.cursor()
-            c.execute("SELECT * FROM disposal_points WHERE id = ?", (point_id,))
-            row = c.fetchone()
+            db = get_db()
+            row = db.fetchone("SELECT * FROM disposal_points WHERE id = ?", (point_id,))
             return dict(row) if row else None
         except Exception as e:
             logger.error("获取投放点详情失败 [%s]: %s", point_id, e)

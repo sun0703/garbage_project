@@ -50,22 +50,22 @@ async def get_stats_summary(request: Request):
 
         # 近30天活跃趋势
         from datetime import datetime
+        from app.database import get_db
+        db = get_db()
         trend_30d = []
         for i in range(29, -1, -1):
             day_start = time.time() - (i + 1) * 86400
             day_end = time.time() - i * 86400
-            from app.db import db as _db
-            c = _db.conn.cursor()
-            c.execute(
+            checkin_row = db.fetchone(
                 "SELECT COUNT(*) as cnt FROM checkins WHERE user_id = ? AND created_at > ? AND created_at <= ?",
                 (user["id"], day_start, day_end),
             )
-            checkin_cnt = c.fetchone()["cnt"]
-            c.execute(
+            checkin_cnt = checkin_row["cnt"] if checkin_row else 0
+            quiz_row = db.fetchone(
                 "SELECT COUNT(*) as cnt FROM quiz_records WHERE user_id = ? AND created_at > ? AND created_at <= ?",
                 (user["id"], day_start, day_end),
             )
-            quiz_cnt = c.fetchone()["cnt"]
+            quiz_cnt = quiz_row["cnt"] if quiz_row else 0
             date_label = datetime.fromtimestamp(day_start).strftime("%m/%d")
             trend_30d.append({"date": date_label, "checkin": checkin_cnt, "quiz": quiz_cnt})
 
@@ -73,20 +73,16 @@ async def get_stats_summary(request: Request):
 
         # 积分来源分布
         transaction_distribution = {"checkin": 0, "quiz": 0, "prediction": 0}
-        from app.db import db as _db
-        c = _db.conn.cursor()
-        c.execute("SELECT SUM(points_earned) as total FROM checkins WHERE user_id = ?", (user["id"],))
-        row = c.fetchone()
-        transaction_distribution["checkin"] = row["total"] if row and row["total"] else 0
-        c.execute("SELECT SUM(points_earned) as total FROM quiz_records WHERE user_id = ? AND is_correct = 1", (user["id"],))
-        row = c.fetchone()
-        transaction_distribution["quiz"] = row["total"] if row and row["total"] else 0
+        row = db.fetchone("SELECT SUM(points_earned) as total FROM checkins WHERE user_id = ?", (user["id"],))
+        transaction_distribution["checkin"] = row["total"] if row and row.get("total") else 0
+        row = db.fetchone("SELECT SUM(points_earned) as total FROM quiz_records WHERE user_id = ? AND is_correct = 1", (user["id"],))
+        transaction_distribution["quiz"] = row["total"] if row and row.get("total") else 0
         summary["transaction_distribution"] = transaction_distribution
 
         # 识别分类分布
         category_distribution = {}
-        c.execute("SELECT category, COUNT(*) as cnt FROM checkins WHERE user_id = ? AND category != '' GROUP BY category", (user["id"],))
-        for row in c.fetchall():
+        cat_rows = db.fetchall("SELECT category, COUNT(*) as cnt FROM checkins WHERE user_id = ? AND category != '' GROUP BY category", (user["id"],))
+        for row in cat_rows:
             category_distribution[row["category"]] = row["cnt"]
         summary["category_distribution"] = category_distribution
 
@@ -100,26 +96,25 @@ async def get_stats_summary(request: Request):
 async def get_leaderboard(request: Request, type: str = Query("points", description="排行榜类型：points/checkins/quiz"), limit: int = Query(10, ge=1, le=100)):
     """获取积分排行榜"""
     try:
-        from app.db import db
-
-        c = db.conn.cursor()
+        from app.database import get_db
+        db = get_db()
 
         if type == "points":
-            c.execute("""
+            rows = db.fetchall("""
                 SELECT id, username, nickname, avatar, points, checkin_count, quiz_correct, quiz_total
                 FROM users
                 ORDER BY points DESC
                 LIMIT ?
             """, (limit,))
         elif type == "checkins":
-            c.execute("""
+            rows = db.fetchall("""
                 SELECT id, username, nickname, avatar, points, checkin_count, quiz_correct, quiz_total
                 FROM users
                 ORDER BY checkin_count DESC
                 LIMIT ?
             """, (limit,))
         elif type == "quiz":
-            c.execute("""
+            rows = db.fetchall("""
                 SELECT id, username, nickname, avatar, points, checkin_count, quiz_correct, quiz_total
                 FROM users
                 WHERE quiz_total > 0
@@ -127,14 +122,12 @@ async def get_leaderboard(request: Request, type: str = Query("points", descript
                 LIMIT ?
             """, (limit,))
         else:
-            c.execute("""
+            rows = db.fetchall("""
                 SELECT id, username, nickname, avatar, points, checkin_count, quiz_correct, quiz_total
                 FROM users
                 ORDER BY points DESC
                 LIMIT ?
             """, (limit,))
-
-        rows = c.fetchall()
         leaderboard = []
         for rank, row in enumerate(rows, 1):
             user_dict = dict(row)

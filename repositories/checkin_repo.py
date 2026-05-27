@@ -5,7 +5,7 @@ import time
 import logging
 from typing import Optional, List, Dict, Any, Tuple
 
-from app.db import db
+from app.database import get_db
 
 logger = logging.getLogger(__name__)
 
@@ -24,13 +24,13 @@ class CheckinRepository:
             已打卡返回 True
         """
         try:
-            c = db.conn.cursor()
+            db = get_db()
             today_start = time.time() - (time.time() % 86400)
-            c.execute(
+            row = db.fetchone(
                 "SELECT id FROM checkins WHERE user_id = ? AND created_at > ?",
                 (user_id, today_start),
             )
-            return c.fetchone() is not None
+            return row is not None
         except Exception as e:
             logger.error("检查今日打卡失败 [%s]: %s", user_id, e)
             return False
@@ -60,14 +60,15 @@ class CheckinRepository:
             打卡记录 ID，失败返回 None
         """
         try:
+            db = get_db()
             checkin_id = uuid.uuid4().hex[:12]
             now = time.time()
-            db.conn.execute(
+            db.execute(
                 "INSERT INTO checkins (id, user_id, point_id, lat, lng, category, points_earned, photo_hash, created_at) "
                 "VALUES (?,?,?,?,?,?,?,?,?)",
                 (checkin_id, user_id, point_id, lat, lng, category, points_earned, photo_hash, now),
             )
-            db.conn.commit()
+            db.commit()
             return checkin_id
         except Exception as e:
             logger.error("创建打卡记录失败 [%s]: %s", user_id, e)
@@ -84,13 +85,12 @@ class CheckinRepository:
             今日打卡记录字典或 None
         """
         try:
-            c = db.conn.cursor()
+            db = get_db()
             today_start = time.time() - (time.time() % 86400)
-            c.execute(
+            row = db.fetchone(
                 "SELECT * FROM checkins WHERE user_id = ? AND created_at > ?",
                 (user_id, today_start),
             )
-            row = c.fetchone()
             return dict(row) if row else None
         except Exception as e:
             logger.error("获取今日打卡状态失败 [%s]: %s", user_id, e)
@@ -111,15 +111,14 @@ class CheckinRepository:
             (记录列表, 总条数)
         """
         try:
-            c = db.conn.cursor()
+            db = get_db()
             offset = (page - 1) * page_size
-            c.execute("SELECT COUNT(*) FROM checkins WHERE user_id = ?", (user_id,))
-            total = c.fetchone()[0]
-            c.execute(
+            count_row = db.fetchone("SELECT COUNT(*) as cnt FROM checkins WHERE user_id = ?", (user_id,))
+            total = int(count_row["cnt"]) if count_row else 0
+            records = db.fetchall(
                 "SELECT * FROM checkins WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
                 (user_id, page_size, offset),
             )
-            records = [dict(row) for row in c.fetchall()]
             return records, total
         except Exception as e:
             logger.error("获取打卡历史失败 [%s]: %s", user_id, e)
@@ -137,12 +136,11 @@ class CheckinRepository:
             打卡记录字典或 None
         """
         try:
-            c = db.conn.cursor()
-            c.execute(
+            db = get_db()
+            row = db.fetchone(
                 "SELECT * FROM checkins WHERE id = ? AND user_id = ?",
                 (checkin_id, user_id),
             )
-            row = c.fetchone()
             return dict(row) if row else None
         except Exception as e:
             logger.error("查询打卡记录失败 [%s/%s]: %s", checkin_id, user_id, e)
@@ -160,7 +158,7 @@ class CheckinRepository:
             连续打卡天数
         """
         try:
-            c = db.conn.cursor()
+            db = get_db()
             consecutive = 0
             now = time.time()
             today_start = now - (now % 86400) + 8 * 3600  # UTC+8 当天0点
@@ -168,11 +166,10 @@ class CheckinRepository:
             for i in range(lookback_days):
                 day_start = today_start - i * 86400
                 day_end = day_start + 86400
-                c.execute(
+                row = db.fetchone(
                     "SELECT COUNT(*) as cnt FROM checkins WHERE user_id = ? AND created_at >= ? AND created_at < ?",
                     (user_id, day_start, day_end),
                 )
-                row = c.fetchone()
                 if row and row["cnt"] > 0:
                     consecutive += 1
                 else:
@@ -193,14 +190,13 @@ class CheckinRepository:
             (总打卡次数, 总获得积分)
         """
         try:
-            c = db.conn.cursor()
-            c.execute(
-                "SELECT COUNT(*), SUM(points_earned) FROM checkins WHERE user_id = ?",
+            db = get_db()
+            row = db.fetchone(
+                "SELECT COUNT(*) as total_cnt, SUM(points_earned) as total_points FROM checkins WHERE user_id = ?",
                 (user_id,),
             )
-            row = c.fetchone()
-            total_checkins = row[0] or 0
-            total_points_earned = row[1] or 0
+            total_checkins = int(row["total_cnt"]) if row and row["total_cnt"] is not None else 0
+            total_points_earned = int(row["total_points"]) if row and row["total_points"] is not None else 0
             return total_checkins, total_points_earned
         except Exception as e:
             logger.error("获取打卡统计失败 [%s]: %s", user_id, e)

@@ -5,7 +5,7 @@ import time
 import logging
 from typing import Optional, List, Dict, Any
 
-from app.db import db
+from app.database import get_db
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +23,8 @@ class QuizRepository:
             题目列表
         """
         try:
-            c = db.conn.cursor()
-            c.execute("SELECT * FROM quiz_questions")
-            return [dict(row) for row in c.fetchall()]
+            db = get_db()
+            return db.fetchall("SELECT * FROM quiz_questions")
         except Exception as e:
             logger.error("获取题库失败: %s", e)
             return []
@@ -41,9 +40,11 @@ class QuizRepository:
             题目字典或 None
         """
         try:
-            c = db.conn.cursor()
-            c.execute("SELECT * FROM quiz_questions WHERE id = ?", (question_id,))
-            row = c.fetchone()
+            db = get_db()
+            row = db.fetchone(
+                "SELECT * FROM quiz_questions WHERE id = ?",
+                (question_id,),
+            )
             return dict(row) if row else None
         except Exception as e:
             logger.error("获取题目失败 [%s]: %s", question_id, e)
@@ -62,13 +63,13 @@ class QuizRepository:
             题目 ID 列表
         """
         try:
-            c = db.conn.cursor()
+            db = get_db()
             today_start = time.time() - (time.time() % 86400)
-            c.execute(
+            rows = db.fetchall(
                 "SELECT question_id FROM quiz_records WHERE user_id = ? AND created_at > ?",
                 (user_id, today_start),
             )
-            return [row["question_id"] for row in c.fetchall()]
+            return [row["question_id"] for row in rows]
         except Exception as e:
             logger.error("获取今日已答题失败 [%s]: %s", user_id, e)
             return []
@@ -94,14 +95,15 @@ class QuizRepository:
             记录 ID，失败返回 None
         """
         try:
+            db = get_db()
             record_id = uuid.uuid4().hex[:12]
             now = time.time()
-            db.conn.execute(
+            db.execute(
                 "INSERT INTO quiz_records (id, user_id, question_id, selected, is_correct, points_earned, created_at) "
                 "VALUES (?,?,?,?,?,?,?)",
                 (record_id, user_id, question_id, selected, int(is_correct), points_earned, now),
             )
-            db.conn.commit()
+            db.commit()
             return record_id
         except Exception as e:
             logger.error("创建答题记录失败 [%s]: %s", user_id, e)

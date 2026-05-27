@@ -19,6 +19,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.db import db
+from app.database import get_db as get_database
 from routers.auth import _get_current_user, SESSION_COOKIE_NAME
 
 logger = logging.getLogger(__name__)
@@ -1101,3 +1102,86 @@ async def admin_delete_activity(request: Request, activity_id: str):
     except Exception as e:
         logger.error("删除活动失败: %s", e)
         return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "删除活动失败"}})
+
+
+# ==================== 数据导出接口 ====================
+
+@router.get("/export/users")
+async def export_users(request: Request):
+    """
+    导出用户数据为 CSV 文件
+
+    需要管理员权限。返回 CSV 文件下载。
+    """
+    admin = _require_admin(request)
+    if not admin:
+        return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
+
+    try:
+        from services.export_service import export_users_csv
+        database = get_database()
+        csv_content, filename = export_users_csv(database)
+        return Response(
+            content=csv_content,
+            media_type="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}",
+            },
+        )
+    except Exception as e:
+        logger.error("导出用户数据失败: %s", e)
+        return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "导出失败"}})
+
+
+@router.get("/export/checkins")
+async def export_checkins(request: Request):
+    """
+    导出打卡数据为 CSV 文件
+
+    需要管理员权限。返回 CSV 文件下载。
+    """
+    admin = _require_admin(request)
+    if not admin:
+        return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
+
+    try:
+        from services.export_service import export_checkins_csv
+        database = get_database()
+        csv_content, filename = export_checkins_csv(database)
+        return Response(
+            content=csv_content,
+            media_type="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}",
+            },
+        )
+    except Exception as e:
+        logger.error("导出打卡数据失败: %s", e)
+        return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "导出失败"}})
+
+
+@router.get("/export/quiz-records")
+async def export_quiz_records(request: Request):
+    """
+    导出答题记录为 CSV 文件
+
+    需要管理员权限。返回 CSV 文件下载。
+    """
+    admin = _require_admin(request)
+    if not admin:
+        return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先登录"}})
+
+    try:
+        from services.export_service import export_quiz_records_csv
+        database = get_database()
+        csv_content, filename = export_quiz_records_csv(database)
+        return Response(
+            content=csv_content,
+            media_type="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}",
+            },
+        )
+    except Exception as e:
+        logger.error("导出答题记录失败: %s", e)
+        return JSONResponse(status_code=500, content={"success": False, "error": {"code": "E500", "message": "导出失败"}})

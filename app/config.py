@@ -47,6 +47,17 @@ class Settings:
 
         # ==================== 数据库配置 ====================
         self.database_path: str = os.getenv("DATABASE_PATH", "data/app.db")
+        # PostgreSQL 连接串（生产环境，Docker Compose 自动注入）
+        self.database_url: str = os.getenv("DATABASE_URL", "")
+
+        # ==================== Redis 配置 ====================
+        self.redis_url: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        self.redis_password: str = os.getenv("REDIS_PASSWORD", "")
+
+        # ==================== 监控配置 ====================
+        self.enable_metrics: bool = os.getenv("ENABLE_METRICS", "true").lower() == "true"
+        self.sentry_dsn: str = os.getenv("SENTRY_DSN", "")
+        self.log_format: str = os.getenv("LOG_FORMAT", "text")  # text 或 json
 
         # ==================== 模型配置 ====================
         self.model_path: Path = Path(os.getenv("MODEL_PATH", str(BASE_DIR / "models" / "garbage_yolov8m_best.pt")))

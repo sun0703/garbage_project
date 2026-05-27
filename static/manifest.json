@@ -1,0 +1,21 @@
+{
+  "name": "校园垃圾分类AI助手",
+  "short_name": "EcoSort",
+  "description": "基于AI的校园生活垃圾智能分类识别系统，拍照即可识别垃圾类别",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#007bff",
+  "orientation": "portrait-primary",
+  "lang": "zh-CN",
+  "categories": ["education", "utilities"],
+  "icons": [
+    {
+      "src": "/static/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ],
+  "screenshots": [],
+  "prefer_related_applications": false
+}

@@ -20,26 +20,26 @@ from fastapi.staticfiles import StaticFiles
 # ==================== 配置管理导入 ====================
 from app.config import settings
 from app.constants import BASE_DIR, MODEL_PATH, VOCAB_PATH, STATIC_DIR, INDEX_HTML_PATH
-from app.db import db
+from app.database import init_database, get_db
 
-# ==================== 日志配置（同时输出到控制台和文件） ====================
+# ==================== 日志配置（支持 text/json 双格式） ====================
 log_dir = Path(__file__).parent.parent / "logs"
 log_dir.mkdir(exist_ok=True)
 
-logging.basicConfig(
-    level=getattr(logging, settings.log_level.upper(), logging.INFO),
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    handlers=[
-        logging.StreamHandler(),
-        logging.handlers.RotatingFileHandler(
-            log_dir / "app.log",
-            maxBytes=10 * 1024 * 1024,
-            backupCount=5,
-            encoding="utf-8",
-        ),
-    ],
+from app.logging_config import setup_logging
+setup_logging(log_level=settings.log_level, log_format=settings.log_format)
+
+# 文件日志处理器（追加到已配置的控制台日志）
+import logging.handlers
+_file_handler = logging.handlers.RotatingFileHandler(
+    log_dir / "app.log",
+    maxBytes=10 * 1024 * 1024,
+    backupCount=5,
+    encoding="utf-8",
 )
+_file_handler.setFormatter(logging.getLogger().handlers[0].formatter if logging.getLogger().handlers else None)
+logging.getLogger().addHandler(_file_handler)
+
 logger = logging.getLogger(__name__)
 
 # ==================== 多模态融合分类器导入 ====================
@@ -88,6 +88,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ==================== Prometheus 监控中间件 ====================
+if settings.enable_metrics:
+    try:
+        from app.metrics import MetricsMiddleware, get_metrics, get_metrics_content_type
+        from app.metrics import model_loaded_status, db_connection_status
+
+        # ASGI 中间件方式挂载（在 Starlette 中间件栈最外层）
+        app.add_middleware(MetricsMiddleware)
+
+        @app.get("/api/metrics", include_in_schema=False)
+        async def metrics_endpoint():
+            """Prometheus 指标采集端点"""
+            return Response(content=get_metrics(), media_type=get_metrics_content_type())
+
+        logger.info("Prometheus 监控指标已启用 (/api/metrics)")
+    except ImportError:
+        logger.warning("prometheus_client 未安装，监控指标不可用")
 
 # 全局限流器实例：每IP每分钟最多30次请求
 _rate_limiter = RateLimiter(default_max_requests=30, default_window_seconds=60)
@@ -158,13 +176,32 @@ async def rate_limit_middleware(request: Request, call_next):
 
 
 @app.middleware("http")
-async def no_cache_static_middleware(request: Request, call_next):
-    """对所有 /static 响应添加禁用缓存头，确保前端代码修改立即生效"""
+async def static_cache_middleware(request: Request, call_next):
+    """
+    静态资源缓存策略中间件
+
+    开发环境：禁用缓存，确保修改立即生效
+    生产环境：CSS/JS/图片等设置长期缓存，API 禁用缓存
+    """
     response = await call_next(request)
-    if request.url.path.startswith("/static"):
-        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-        response.headers["Pragma"] = "no-cache"
-        response.headers["Expires"] = "0"
+    path = request.url.path
+
+    if path.startswith("/static/"):
+        if settings.reload:
+            # 开发模式：禁用缓存
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        else:
+            # 生产模式：按文件类型设置缓存
+            if path.endswith((".css", ".js")):
+                response.headers["Cache-Control"] = "public, max-age=604800"  # 7天
+            elif path.endswith((".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg", ".webp")):
+                response.headers["Cache-Control"] = "public, max-age=2592000"  # 30天
+            elif path.endswith((".woff", ".woff2", ".ttf", ".eot")):
+                response.headers["Cache-Control"] = "public, max-age=31536000, immutable"  # 1年
+            else:
+                response.headers["Cache-Control"] = "public, max-age=86400"  # 1天
     return response
 
 
@@ -232,13 +269,8 @@ def startup_event() -> None:
         except Exception as e:
             logger.warning("处理步骤数据加载失败: %s", e)
 
-    db.connect()
-    db.init_tables()
-    db.migrate()
-    db.add_indexes()
-    db.seed_disposal_points()
-    db.seed_quiz_questions()
-    db.seed_activities()
+    # 使用数据库抽象层初始化（自动选择 SQLite/PostgreSQL）
+    init_database()
 
     if STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")

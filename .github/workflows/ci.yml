@@ -2,10 +2,10 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: ['**']  # 触发所有分支的push
+    branches: [main]
   pull_request:
-    branches: ['**']  # 触发所有分支的PR
-  workflow_dispatch:  # 允许手动触发
+    branches: [main]
+  workflow_dispatch:
 
 jobs:
   # ==================== 代码质量检查 ====================
@@ -30,13 +30,15 @@ jobs:
         with:
           python-version: "3.11"
       - name: 安装系统依赖（OpenCV 必需）
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgl1 libglib2.0-0
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgl1-mesa-glx libglib2.0-0
       - name: 安装Python依赖
         run: |
           pip install --no-cache-dir -r requirements.txt
           pip install --no-cache-dir pytest pytest-cov httpx
       - name: 运行测试
         run: pytest --cov=. --cov-report=xml --cov-report=term -v -s
+        env:
+          DATABASE_PATH: ":memory:"
       - name: 上传覆盖率报告
         uses: actions/upload-artifact@v4
         with:
@@ -45,9 +47,55 @@ jobs:
 
   # ==================== Docker 构建验证 ====================
   build:
-    needs: [lint, test]  # 确保代码检查和测试完成后再构建
+    needs: [lint, test]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: 构建 Docker 镜像
-        run: docker build -t waste-classifier:latest -f docker/Dockerfile .
+        run: docker build -t ecosort:${{ github.sha }} -f docker/Dockerfile .
+      - name: 镜像安全扫描（Trivy）
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "ecosort:${{ github.sha }}"
+          format: "table"
+          exit-code: "0"
+          severity: "CRITICAL,HIGH"
+        continue-on-error: true
+
+  # ==================== 自动部署（仅 main 分支） ====================
+  deploy:
+    needs: [build]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - name: 通过 SSH 部署到生产服务器
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/ecosort
+            git pull origin main
+            docker compose -f docker/docker-compose.yml build
+            docker compose -f docker/docker-compose.yml up -d
+            docker image prune -f
+            echo "部署完成: $(date)"
+
+  # ==================== 数据库备份（定时任务） ====================
+  backup:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - name: 备份 PostgreSQL 数据库
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            BACKUP_FILE="ecosort_$(date +%Y%m%d_%H%M%S).sql.gz"
+            docker exec ecosort-db pg_dump -U ecosort ecosort | gzip > /opt/ecosort/backups/$BACKUP_FILE
+            # 保留最近 30 天的备份
+            find /opt/ecosort/backups -name "*.sql.gz" -mtime +30 -delete
+            echo "备份完成: $BACKUP_FILE"

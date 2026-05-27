@@ -9,8 +9,8 @@ import uuid
 import traceback
 from pathlib import Path
 
-from fastapi import APIRouter
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import APIRouter, Request
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from app.constants import GARBAGE_40CLASSES, WASTE_CATEGORIES, INDEX_HTML_PATH
 from app import backend_state
@@ -592,11 +592,69 @@ async def batch_predict_waste(request: BatchPredictRequest) -> JSONResponse:
     })
 
 
+# ==================== 分享功能接口 ====================
+
+@router.post("/api/share/text")
+async def generate_share_text(request: Request) -> JSONResponse:
+    """
+    生成识别结果的文字分享内容
+
+    请求体：
+    {
+        "category": "可回收物",
+        "item_name": "塑料瓶",
+        "confidence": 0.95,
+        "guidance": "请投入蓝色可回收物桶"
+    }
+    """
+    try:
+        body = await request.json()
+        category = body.get("category", "未知")
+        item_name = body.get("item_name", "物品")
+        confidence = body.get("confidence", 0)
+        guidance = body.get("guidance", "")
+
+        # 生成分享文本
+        confidence_pct = int(confidence * 100)
+        share_text = (
+            f"🔍 我用「校园垃圾分类AI助手」识别了一个物品\n"
+            f"📦 物品：{item_name}\n"
+            f"♻️ 分类：{category}\n"
+            f"📊 置信度：{confidence_pct}%\n"
+        )
+        if guidance:
+            share_text += f"💡 投放指引：{guidance}\n"
+        share_text += "\n🔗 快来试试吧！"
+
+        return JSONResponse(content={
+            "success": True,
+            "data": {
+                "share_text": share_text,
+                "share_url": f"/?shared={category}",
+            },
+        })
+    except Exception as e:
+        logger.error("生成分享内容失败: %s", e)
+        return JSONResponse(status_code=500, content={
+            "success": False,
+            "error": {"code": "E500", "message": "生成分享内容失败"},
+        })
+
+
 # ==================== 健康检查接口 ====================
 
 @router.get("/api/health")
 async def health_check() -> JSONResponse:
-    """健康检查接口（含多模态融合系统状态）"""
+    """
+    增强版健康检查接口
+
+    检查项：
+    - AI 模型加载状态
+    - 数据库连接状态
+    - Redis 连接状态（如已配置）
+    - 多模态融合系统状态
+    - 推理缓存状态
+    """
     # 获取多模态融合系统信息
     multimodal_status = None
     if backend_state.multimodal_available and backend_state.multimodal_classifier:
@@ -618,13 +676,50 @@ async def health_check() -> JSONResponse:
             "reason": "模块未加载" if not backend_state.multimodal_available else "分类器未初始化",
         }
 
+    # 数据库连接检查
+    db_status = "unknown"
+    try:
+        from app.database import get_db
+        db = get_db()
+        db.fetchone("SELECT 1 as test")
+        db_status = "connected"
+    except Exception as e:
+        db_status = f"error: {str(e)[:50]}"
+
+    # Redis 连接检查（可选）
+    redis_status = "not_configured"
+    try:
+        from app.config import settings
+        if settings.redis_url and settings.redis_url != "redis://localhost:6379/0":
+            import redis as redis_lib
+            r = redis_lib.from_url(settings.redis_url, socket_connect_timeout=2)
+            r.ping()
+            redis_status = "connected"
+    except ImportError:
+        redis_status = "library_not_installed"
+    except Exception as e:
+        redis_status = f"error: {str(e)[:50]}"
+
+    # 推理缓存状态
+    cache_stats = {}
+    if backend_state.inference_cache:
+        cache_stats = backend_state.inference_cache.stats()
+
+    # 综合健康判定
+    is_healthy = (
+        (backend_state.vision_engine is not None) and
+        db_status == "connected"
+    )
+
     return JSONResponse(
         content={
-            "status": "healthy",
+            "status": "healthy" if is_healthy else "degraded",
             "model_loaded": backend_state.vision_engine.is_loaded if backend_state.vision_engine else False,
             "model_type": "专用垃圾分类模型" if (backend_state.vision_engine and backend_state.vision_engine.is_waste_model) else "智能演示模式（图像特征分析）",
             "vocab_loaded": len(backend_state.search_engine.vocab) > 0 if backend_state.search_engine else False,
-            "uptime_info": "running",
+            "database": db_status,
+            "redis": redis_status,
+            "cache": cache_stats,
             "multimodal_fusion": multimodal_status,
         }
     )

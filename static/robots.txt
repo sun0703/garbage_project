@@ -1,0 +1,11 @@
+# ==================== 校园垃圾分类AI助手 - robots.txt ====================
+# 允许搜索引擎爬取公开页面，禁止爬取 API 和管理后台
+
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+Disallow: /static/js/pages/admin/
+
+# Sitemap 位置
+Sitemap: https://ecosort.example.com/sitemap.xml

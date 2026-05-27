@@ -160,6 +160,14 @@ class Database:
         """)
 
         c.execute("""
+            CREATE TABLE IF NOT EXISTS sms_codes (
+                phone TEXT PRIMARY KEY,
+                code TEXT NOT NULL,
+                expire_time REAL NOT NULL
+            )
+        """)
+
+        c.execute("""
             CREATE TABLE IF NOT EXISTS feedback (
                 id TEXT PRIMARY KEY,
                 user_id TEXT NOT NULL,
@@ -240,6 +248,7 @@ class Database:
             "CREATE INDEX IF NOT EXISTS idx_users_oauth ON users(oauth_provider, oauth_id)",
             "CREATE INDEX IF NOT EXISTS idx_activity_signups_user ON activity_signups(user_id)",
             "CREATE INDEX IF NOT EXISTS idx_activities_status ON activities(status)",
+            "CREATE INDEX IF NOT EXISTS idx_sms_codes_expire ON sms_codes(expire_time)",
         ]
         for sql in indexes:
             try:

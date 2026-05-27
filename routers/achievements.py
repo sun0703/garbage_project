@@ -11,6 +11,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from repositories.user_repo import UserRepository
+from repositories.checkin_repo import CheckinRepository
+from app.db import db
 from routers.auth import _get_current_user
 
 logger = logging.getLogger(__name__)
@@ -58,7 +60,6 @@ def _check_achievements(user_data: dict) -> list:
             field = cond.get("field", "")
             value = cond.get("value", 0)
             if field == "checkin":
-                from repositories.checkin_repo import CheckinRepository
                 consecutive = CheckinRepository.get_consecutive_days(user_data.get("id", ""), 30)
                 is_unlocked = consecutive >= value
 
@@ -70,7 +71,6 @@ def _check_achievements(user_data: dict) -> list:
             value = cond.get("value", 4)
             # 检查用户是否识别过所有4类垃圾（从历史记录推断）
             try:
-                from app.db import db
                 c = db.conn.cursor()
                 c.execute(
                     "SELECT COUNT(DISTINCT category) as cnt FROM checkins WHERE user_id = ?",

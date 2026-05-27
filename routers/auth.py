@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from repositories.user_repo import UserRepository
 from repositories.session_repo import SessionRepository
+from repositories.sms_code_repo import SmsCodeRepository
 from app.models import RegisterRequest, LoginRequest, PhoneLoginRequest
 
 logger = logging.getLogger(__name__)
@@ -26,9 +27,6 @@ router = APIRouter(prefix="/api/auth", tags=["用户认证"])
 class UserSettingsRequest(BaseModel):
     nickname: str = ""
     avatar: str = ""
-
-# ==================== 内存验证码存储（MVP阶段） ====================
-_sms_codes: dict = {}  # {phone: (code, expire_time)}
 
 # ==================== 会话常量 ====================
 SESSION_COOKIE_NAME = "session_id"
@@ -210,8 +208,8 @@ async def send_sms_code(req: SmsCodeRequest):
 
     # 生成6位随机验证码
     code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
-    # 存入内存，有效期5分钟
-    _sms_codes[phone] = (code, time.time() + 300)
+    # 持久化存储到数据库，有效期5分钟
+    SmsCodeRepository.save_code(phone, code, expire_seconds=300)
 
     # MVP阶段：直接返回验证码（生产环境不返回）
     return JSONResponse(content={
@@ -239,22 +237,17 @@ async def phone_login(req: PhoneLoginRequest):
     phone = req.phone
     code = req.code
 
-    # 校验验证码
-    stored = _sms_codes.get(phone)
+    # 校验验证码（从数据库读取，已过期自动清除）
+    stored = SmsCodeRepository.get_code(phone)
     if not stored:
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "请先获取验证码"}})
 
     stored_code, expire_time = stored
-    if time.time() > expire_time:
-        # 验证码已过期，清除
-        _sms_codes.pop(phone, None)
-        return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "验证码已过期，请重新获取"}})
-
     if stored_code != code:
         return JSONResponse(status_code=401, content={"success": False, "error": {"code": "E401", "message": "验证码错误"}})
 
     # 验证码校验通过，清除已用验证码
-    _sms_codes.pop(phone, None)
+    SmsCodeRepository.delete_code(phone)
 
     # 查找手机号对应的用户
     user = UserRepository.get_user_by_phone(phone)

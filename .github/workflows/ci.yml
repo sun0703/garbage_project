@@ -2,9 +2,10 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [main, develop]
+    branches: ['**']  # 触发所有分支的push
   pull_request:
-    branches: [main]
+    branches: ['**']  # 触发所有分支的PR
+  workflow_dispatch:  # 允许手动触发
 
 jobs:
   # ==================== 代码质量检查 ====================
@@ -44,7 +45,6 @@ jobs:
 
   # ==================== Docker 构建验证 ====================
   build:
-    needs: [lint, test]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -132,18 +132,20 @@ export class AdminShell {
                 <h2 style="text-align:center;margin-bottom:24px;font-size:20px;color:var(--text-primary)">
                     \u{1F510} 管理员登录
                 </h2>
+                <form onsubmit="return false;" autocomplete="on">
                 <div class="admin-form-group">
                     <input id="adminLoginUser" class="admin-input"
-                           placeholder="用户名" value="">
+                           placeholder="用户名" value="" autocomplete="username">
                 </div>
                 <div class="admin-form-group">
                     <input id="adminLoginPwd" class="admin-input"
-                           type="password" placeholder="密码" value="">
+                           type="password" placeholder="密码" value="" autocomplete="current-password">
                 </div>
-                <button id="adminLoginBtn" class="admin-btn admin-btn-primary" style="width:100%;padding:12px">
+                <button type="submit" id="adminLoginBtn" class="admin-btn admin-btn-primary" style="width:100%;padding:12px">
                     登 录
                 </button>
                 <p id="adminLoginError" style="color:#dc3545;font-size:13px;text-align:center;margin-top:12px;display:none"></p>
+                </form>
             </div>
         `;
 

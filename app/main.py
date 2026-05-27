@@ -272,6 +272,10 @@ def startup_event() -> None:
     # 使用数据库抽象层初始化（自动选择 SQLite/PostgreSQL）
     init_database()
 
+    # 桥接旧 db 全局对象到新数据库抽象层（兼容旧代码）
+    from app.db import _bridge_to_new_database
+    _bridge_to_new_database()
+
     if STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 

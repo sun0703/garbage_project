@@ -2308,7 +2308,7 @@ ol {
 .history-drawer-overlay {
   position: fixed;
   inset: 0;
-  z-index: 200;
+  z-index: 9996;
   background: rgba(0,0,0,0.3);
   opacity: 0;
   visibility: hidden;
@@ -2319,53 +2319,20 @@ ol {
   visibility: visible;
 }
 
+/* 注意: .history-drawer 及其子元素的完整样式定义在 components.css 中 */
+/* 此处仅保留兼容性引用和增强修复 */
 .history-drawer {
-  position: fixed;
-  top: 0;
-  right: -320px;
-  width: 300px;
-  max-width: 85vw;
-  height: 100vh;
-  z-index: 201;
-  background: #fff;
-  box-shadow: -4px 0 24px rgba(0,0,0,0.12);
-  display: flex;
-  flex-direction: column;
-  transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 9997 !important;
+  visibility: hidden;
+  opacity: 0;
 }
 .history-drawer.open {
-  right: 0;
-}
-
-.history-drawer__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid #f0f0f0;
-}
-.history-drawer__header h3 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: #111827;
+  visibility: visible !important;
+  opacity: 1 !important;
 }
 .history-drawer__close {
-  width: 32px;
-  height: 32px;
-  border: none;
-  background: #f5f5f5;
-  border-radius: 8px;
-  font-size: 18px;
-  color: #666;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.2s;
-}
-.history-drawer__close:hover {
-  background: #eee;
+  position: relative;
+  z-index: 1;
 }
 
 .history-drawer__body {

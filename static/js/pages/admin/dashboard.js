@@ -70,11 +70,15 @@ export class AdminDashboard {
             this._renderHotItems(data.hot_items || data.popular_items || []);
         } catch (err) {
             console.error('[AdminDashboard] 数据加载失败:', err);
-            this.container.querySelector('#adminStatsGrid').innerHTML = `
-                <div style="grid-column:1/-1;text-align:center;padding:40px;color:#999">
-                    ⚠️ 数据加载失败，请检查后端服务
-                </div>
-            `;
+            const statsGrid = this.container.querySelector('#adminStatsGrid');
+            if (statsGrid) {
+                const isAuthError = err.code === 'UNAUTH' || err.statusCode === 401;
+                statsGrid.innerHTML = `
+                    <div style="grid-column:1/-1;text-align:center;padding:40px;color:#999">
+                        ${isAuthError ? '🔒 登录已过期，请重新登录' : '⚠️ 数据加载失败，请检查后端服务'}
+                    </div>
+                `;
+            }
         }
     }
 

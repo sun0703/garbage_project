@@ -345,3 +345,28 @@ class Database:
 
 
 db = Database()
+
+
+def _bridge_to_new_database():
+    """
+    桥接旧 db 全局对象到新的 database 抽象层
+
+    当 app/database.py 的 init_database() 被调用后，
+    旧代码通过 from app.db import db 获取的对象需要指向新的后端。
+    此函数将旧 db 的连接替换为 app/database.py 管理的连接。
+    """
+    try:
+        from app.database import get_db as _get_new_db
+        new_db = _get_new_db()
+        if isinstance(new_db, SQLiteDatabase):
+            # SQLite 后端：直接复用新系统的连接
+            global db
+            db._conn = new_db._conn
+            logger.info("旧 db 对象已桥接到新数据库抽象层 (SQLite)")
+        # PostgreSQL 后端：旧代码的 SQLite 特有方法不兼容，
+        # 但基础 CRUD 通过 execute/fetchone/fetchall 接口兼容
+    except Exception as e:
+        logger.warning("数据库桥接失败，使用独立连接: %s", e)
+
+
+from app.database import SQLiteDatabase

@@ -679,6 +679,31 @@ cd docker
 docker-compose up --build
 ```
 
+### Cloudflare Tunnel 公网访问
+
+使用 Cloudflare Tunnel 将本地服务暴露到公网，无需公网 IP：
+
+```bash
+# 1. 安装 cloudflared（Windows）
+winget install Cloudflare.cloudflared
+
+# 2. 登录 Cloudflare 账号（浏览器授权）
+cloudflared tunnel login
+
+# 3. 创建隧道
+cloudflared tunnel create trashai
+
+# 4. 绑定域名
+cloudflared tunnel route dns trashai trashai.qzz.io
+
+# 5. 启动隧道（保持终端运行）
+cloudflared tunnel run --url http://localhost:8001 trashai
+```
+
+访问地址：**https://trashai.qzz.io**
+
+> Cloudflare Tunnel 优势：免费、稳定、自动 HTTPS、DDoS 防护、无需暴露本地端口
+
 ---
 
 ## AI 分类策略

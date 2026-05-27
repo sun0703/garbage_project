@@ -68,12 +68,20 @@ export class StatsPage {
 
     init() {
         this.container = document.getElementById('page-stats');
+        if (!this.container) {
+            console.error('[StatsPage] 容器 #page-stats 不存在');
+            return;
+        }
         this._render();
         this._loadData();
     }
 
     _render() {
         const content = this.container.querySelector('.page__content');
+        if (!content) {
+            console.error('[StatsPage] .page__content 容器不存在');
+            return;
+        }
         content.innerHTML = `
             <div class="stats-header">
                 <h2 class="stats-title">📊 数据统计</h2>
@@ -167,9 +175,23 @@ export class StatsPage {
             }
         } catch (e) {
             console.error('加载统计数据失败:', e);
-            this._renderAchievementsFallback();
             const content = this.container.querySelector('.page__content');
-            if (content) content.innerHTML = '<p class="no-data" style="padding:40px">加载统计数据失败，请先登录</p>';
+            if (content) {
+                const isAuthError = e.code === 'UNAUTH' || e.statusCode === 401 || (e.message && e.message.includes('登录'));
+                if (isAuthError) {
+                    content.innerHTML = `
+                        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 20px;text-align:center;">
+                            <div style="font-size:48px;margin-bottom:16px;">🔒</div>
+                            <h3 style="margin:0 0 8px;font-size:18px;color:#1A1A2E;">需要登录</h3>
+                            <p style="margin:0 0 24px;color:#95A0AA;font-size:14px;">登录后查看您的识别统计、成就和排行榜数据</p>
+                            <a href="#/profile" class="btn btn-primary" style="text-decoration:none;">登录 / 注册</a>
+                        </div>
+                    `;
+                } else {
+                    content.innerHTML = `<p class="no-data" style="padding:40px;text-align:center;">加载数据失败，请稍后重试</p>`;
+                }
+            }
+            this._renderAchievementsFallback();
         }
     }
 

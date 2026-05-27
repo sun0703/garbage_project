@@ -878,26 +878,32 @@ export class HomePage {
                     <button class="modal-tab" data-tab="phone-login">手机号登录</button>
                 </div>
                 <div id="loginForm" class="modal-form">
+                    <form onsubmit="return false;" autocomplete="on">
                     <div class="form-group"><label>用户名</label><input type="text" id="loginUsername" class="form-input" placeholder="请输入用户名" autocomplete="username"></div>
                     <div class="form-group"><label>密码</label><input type="password" id="loginPassword" class="form-input" placeholder="请输入密码" autocomplete="current-password"></div>
-                    <button class="btn btn-primary btn-block" id="submitLogin">登录</button>
+                    <button type="submit" class="btn btn-primary btn-block" id="submitLogin">登录</button>
                     <p class="form-error" id="loginError" style="display:none"></p>
+                    </form>
                 </div>
                 <div id="registerForm" class="modal-form" style="display:none">
+                    <form onsubmit="return false;" autocomplete="on">
                     <div class="form-group"><label>用户名</label><input type="text" id="regUsername" class="form-input" placeholder="3-20个字符" autocomplete="username"></div>
                     <div class="form-group"><label>密码</label><input type="password" id="regPassword" class="form-input" placeholder="6-32个字符" autocomplete="new-password"></div>
                     <div class="form-group"><label>昵称</label><input type="text" id="regNickname" class="form-input" placeholder="选填" autocomplete="nickname"></div>
-                    <button class="btn btn-primary btn-block" id="submitRegister">注册</button>
+                    <button type="submit" class="btn btn-primary btn-block" id="submitRegister">注册</button>
                     <p class="form-error" id="regError" style="display:none"></p>
+                    </form>
                 </div>
                 <div id="phoneLoginForm" class="modal-form" style="display:none">
+                    <form onsubmit="return false;" autocomplete="on">
                     <div class="form-group"><label>手机号</label><input type="tel" id="phoneLoginPhone" class="form-input" placeholder="请输入手机号" maxlength="11" autocomplete="tel"></div>
                     <div class="form-group" style="display:flex;gap:8px;align-items:flex-end;">
                         <div style="flex:1;"><label>验证码</label><input type="text" id="phoneLoginCode" class="form-input" placeholder="请输入验证码" maxlength="6" autocomplete="one-time-code"></div>
-                        <button class="btn btn-secondary" id="sendSmsCodeBtn" style="white-space:nowrap;min-width:100px;">发送验证码</button>
+                        <button type="button" class="btn btn-secondary" id="sendSmsCodeBtn" style="white-space:nowrap;min-width:100px;">发送验证码</button>
                     </div>
-                    <button class="btn btn-primary btn-block" id="submitPhoneLogin">登录 / 注册</button>
+                    <button type="submit" class="btn btn-primary btn-block" id="submitPhoneLogin">登录 / 注册</button>
                     <p class="form-error" id="phoneLoginError" style="display:none"></p>
+                    </form>
                 </div>
                 <button class="modal-close" id="closeModal">&times;</button>
             </div>

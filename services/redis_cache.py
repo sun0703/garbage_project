@@ -87,9 +87,8 @@ class RedisCacheService:
                 return
             except Exception:
                 pass
-        # TODO: 降级时应该只删单条而不是清空整个缓存
         if self._fallback:
-            self._fallback.clear()
+            self._fallback.delete(key)
 
     def clear(self) -> None:
         """清空ecosort:前缀的缓存"""

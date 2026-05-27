@@ -77,6 +77,14 @@ class InferenceCache:
         except Exception as e:
             logger.warning("缓存写入异常: %s", e)
 
+    def delete(self, key: str) -> bool:
+        """删除指定缓存键，存在则删除并返回True，不存在返回False"""
+        if key in self._cache:
+            del self._cache[key]
+            logger.info("🗑️ 缓存删除: %s", key[:20])
+            return True
+        return False
+
     def clear(self) -> None:
         """清空所有缓存"""
         self._cache.clear()

@@ -1,6 +1,6 @@
 """
 预测相关路由模块
-包含图像识别、多模态融合预测、批量预测、健康检查等接口
+图像识别、多模态融合预测、批量预测、健康检查等接口
 """
 
 import logging
@@ -30,18 +30,14 @@ async def root() -> HTMLResponse:
     html_path = Path(INDEX_HTML_PATH)
     if html_path.exists():
         return HTMLResponse(content=html_path.read_text(encoding="utf-8"))
-    return HTMLResponse(
-        content="<h1>前端页面未找到</h1>",
-        status_code=404,
-    )
+    return HTMLResponse(content="<h1>前端页面未找到</h1>", status_code=404)
 
 
 @router.post("/api/predict")
 async def predict_waste(request: PredictRequest) -> JSONResponse:
-    """
-    图像分类识别接口（增强版）
-    支持智能演示模式，基于图像特征分析提高分类准确性
-    支持分阶段耗时记录（预处理/推理/后处理）
+    """图像分类识别接口
+
+    支持智能演示模式、图像特征分析、分阶段耗时记录。
     """
     start_time = time.time()
     timing = {"preprocess_ms": 0, "inference_ms": 0, "postprocess_ms": 0}
@@ -58,7 +54,7 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
                 if cached_result:
                     total_ms = int((time.time() - start_time) * 1000)
                     req_id = uuid.uuid4().hex[:12]
-                    logger.info("🎯 缓存命中: %s (响应时间=%dms)", cache_key[:20], total_ms)
+                    logger.info("缓存命中: %s (响应时间=%dms)", cache_key[:20], total_ms)
                     return JSONResponse(content={
                         "success": True,
                         "result": cached_result,
@@ -111,26 +107,16 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
         inference_ms = int((time.time() - start_time) * 1000)
         req_id = uuid.uuid4().hex[:12]
 
-        # ===== 智能策略选择 =====
-        # 40类专用模型：直接使用YOLO检测结果（无需特征分析）
-        # COCO/通用模型：使用混合策略（YOLO + 特征分析）
-
+        # 40类专用模型直接使用YOLO结果；COCO/通用模型使用混合策略
         if backend_state.vision_engine.is_pt_model and backend_state.vision_engine.num_classes >= 40:
-            # 40类专用垃圾分类模型 - 直接使用结果
-            logger.info("🎯 使用40类专用模型结果 (ID=%s, 名称=%s, 置信度=%.1f%%)",
-                       result.get("original_class_id"),
-                       result.get("original_class_name"),
-                       result.get("confidence", 0) * 100)
-
             original_class_id = result.get("original_class_id", -1)
 
-            # 将40类ID映射到中国4类垃圾系统（优化版 - 添加置信度校准）
             if original_class_id in GARBAGE_40CLASSES:
                 class_mapping = GARBAGE_40CLASSES[original_class_id]
-                category_4class = class_mapping["category"]  # 0-3 对应4类
+                category_4class = class_mapping["category"]
                 class_name_cn = class_mapping["name_cn"]
 
-                # ⭐ 置信度校准（新增）：基于类别难度和检测质量调整
+                # 置信度校准
                 raw_confidence = result.get("confidence", 0.0)
                 adjusted_confidence = _calibrate_confidence_40class(
                     raw_confidence,
@@ -141,61 +127,20 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
 
                 result["class_index"] = category_4class
                 result["original_class_name"] = class_name_cn
-                result["confidence"] = round(adjusted_confidence, 4)  # 使用校准后的置信度
-                result["reasoning"] = f"YOLOv8-40类模型[优化]: {class_name_cn} → {WASTE_CATEGORIES[category_4class]['name']} (原始={raw_confidence:.1%}, 校准后={adjusted_confidence:.1%})"
+                result["confidence"] = round(adjusted_confidence, 4)
+                result["reasoning"] = f"YOLOv8-40类模型: {class_name_cn} -> {WASTE_CATEGORIES[category_4class]['name']} (原始={raw_confidence:.1%}, 校准后={adjusted_confidence:.1%})"
                 result["is_demo_mode"] = False
 
-                logger.info("✅ 40类映射[优化]: ID=%d → %s (类别=%d), 原始置信度=%.1f%% → 校准后=%.1f%%",
+                logger.info("40类映射: ID=%d -> %s (类别=%d), 原始置信度=%.1f%% -> 校准后=%.1f%%",
                            original_class_id, class_name_cn, category_4class,
                            raw_confidence * 100, adjusted_confidence * 100)
             else:
-                # ============================================================
-                # YOLO未检测到有效目标（class_index=-1 或未知类别）
-                # → 进入降级模式处理流程
-                #
-                # 【当前降级策略 - 阶段五】
-                # 使用 ImageFeatureAnalyzer 进行图像特征分析，基于颜色、透明度、
-                # 金属光泽、长宽比等视觉特征进行启发式分类。
-                # 此模式标记为 is_demo_mode=True，向前端明确标识为非模型推理结果。
-                #
-                # 【未来技术方向 - 阶段六预留】ONNX Runtime Web (WASM) 前端本地推理
-                # ┌─────────────────────────────────────────────────────────────┐
-                # │ 技术方案概述:                                                │
-                # │   将 ONNX 格式的轻量级垃圾分类模型部署到浏览器端运行          │
-                # │   使用 onnxruntime-web 库（基于 WebAssembly / WebGL 加速）    │
-                # │                                                             │
-                # │ 核心优势:                                                    │
-                # │   1. 完全离线运行 - 无需后端 GPU/服务器资源                   │
-                # │   2. 低延迟推理 - 消除网络传输开销（<100ms 本地推理）           │
-                # │   3. 隐私保护 - 图像数据不上传服务器                          │
-                # │   4. 可扩展性 - 支持多模型并行加载（分类+检测）                 │
-                # │                                                             │
-                # │ 实现架构:                                                    │
-                # │   前端 (static/js/)                                          │
-                # │     ├── models/waste-classifier.onnx   # 轻量分类模型 (~5MB) │
-                # │     ├── utils/onnx-engine.js         # ONNX 推理引擎封装      │
-                # │     └── components/wasm-predictor.js  # WASM 推理组件         │
-                # │                                                             │
-                # │   后端 (main.py)                                             │
-                # │     ├── GET  /api/models/latest       # 模型版本检查接口      │
-                # │     └── POST /api/models/upload       # 模型热更新接口        │
-                # │                                                             │
-                # │ 降级链路设计:                                                │
-                # │   YOLOv8 服务端推理 → 特征分析(当前) → WASM 本地推理(未来)    │
-                # │   每层降级都记录 reasoning 字段，便于前端展示和日志追踪        │
-                # └─────────────────────────────────────────────────────────────┘
-                #
-                # 【框架预留说明】
-                # 以下代码块已预留 WASM 推理入口点注释，后续实现时只需：
-                # 1. 在此分支前增加 WASM 可用性检测（navigator.onnxruntime）
-                # 2. 调用 WasmPredictor.predict(imageBlob) 获取结果
-                # 3. 将 WASM 结果合并到 result 字典中，设置 is_demo_mode=False, source='wasm'
-                # ============================================================
-                logger.warning("⚠️ YOLO未检测到有效目标 (ID=%d, 置信度=%.1f%%), 降级到特征分析模式",
+                # YOLO未检测到有效目标，降级到特征分析模式
+                logger.warning("YOLO未检测到有效目标 (ID=%d, 置信度=%.1f%%), 降级到特征分析模式",
                                original_class_id, result.get("confidence", 0) * 100)
 
                 features = ImageFeatureAnalyzer.analyze(image)
-                logger.info("📊 特征分析: 亮度=%s, 透明度=%s, 金属=%s, 长宽比=%.2f",
+                logger.info("特征分析: 亮度=%s, 透明度=%s, 金属=%s, 长宽比=%.2f",
                            features.get('brightness'),
                            features.get('transparency'),
                            features.get('is_metallic'),
@@ -211,11 +156,11 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
                 result["item_type"] = item_type
                 result["is_demo_mode"] = True
 
-                logger.info("✅ 特征分析降级完成: 类别=%d, 类型=%s, 置信度=%.1f%%, %s",
+                logger.info("特征分析降级完成: 类别=%d, 类型=%s, 置信度=%.1f%%, %s",
                            smart_class_index, item_type, demo_confidence * 100, reasoning)
 
         else:
-            # 旧版COCO/ONNX模型 - 使用混合策略v3.1
+            # 旧版COCO/ONNX模型 - 混合策略
             original_class_id = result.get("original_class_id")
 
             HIGH_CONFIDENCE_CONTAINER_CLASSES = {39, 40, 41, 45}
@@ -229,11 +174,11 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
             )
 
             if not use_yolo_result:
-                logger.info("🔬 启用增强特征分析模式 (YOLO ID=%s, 置信度=%.1f%%)",
+                logger.info("启用增强特征分析模式 (YOLO ID=%s, 置信度=%.1f%%)",
                            original_class_id, result.get("confidence", 0) * 100)
 
                 features = ImageFeatureAnalyzer.analyze(image)
-                logger.info("📊 特征: 亮度=%s, 透明度=%s, 金属=%s, 长宽比=%.2f",
+                logger.info("特征: 亮度=%s, 透明度=%s, 金属=%s, 长宽比=%.2f",
                            features.get('brightness'),
                            features.get('transparency'),
                            features.get('is_metallic'),
@@ -250,10 +195,10 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
                 result["item_type"] = item_type
                 result["is_demo_mode"] = True
 
-                logger.info("✅ 特征分析完成: 类别=%d, 类型=%s, 置信度=%.1f%%, %s",
+                logger.info("特征分析完成: 类别=%d, 类型=%s, 置信度=%.1f%%, %s",
                            smart_class_index, item_type, demo_confidence * 100, reasoning)
             else:
-                logger.info("✅ 使用YOLO检测结果 (ID=%s, 名称=%s, 置信度=%.1f%%)",
+                logger.info("使用YOLO检测结果 (ID=%s, 名称=%s, 置信度=%.1f%%)",
                            original_class_id, result.get("original_class_name"),
                            result.get("confidence", 0) * 100)
 
@@ -273,17 +218,9 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
         }
 
         if result.get("is_demo_mode"):
-            # 降级模式提示：明确告知用户当前使用的是特征分析模式，并说明未来优化方向
-            # 包含：当前模式说明、准确度预期、改进建议、WASM 本地推理预告
             response_data["demo_notice"] = (
-                "🔬 智能演示模式（基于图像特征分析）\n"
-                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                "• 当前采用颜色/透明度/形状等视觉特征进行启发式分类\n"
-                "• 识别准确度低于专用 AI 模型，仅供参考\n"
-                "• 复杂物品（如多层包装）可能存在误判\n"
-                "• 建议：拍摄清晰正面照片可提高识别准确性\n"
-                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                "🚀 即将支持：浏览器本地 AI 推理（ONNX WASM），无需网络即可获得专业级识别精度"
+                "当前为智能演示模式（基于图像特征分析），识别准确度低于专用AI模型，仅供参考。"
+                "建议拍摄清晰正面照片以提高识别准确性。"
             )
 
         if backend_state.history_store:
@@ -304,7 +241,7 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
                 logger.warning("缓存写入异常（不影响主流程）: %s", e)
 
         timing["postprocess_ms"] = int((time.time() - postprocess_start) * 1000)
-        logger.info("⏱️ 耗时统计: 预处理=%dms, 推理=%dms, 后处理=%dms, 总计=%dms [req=%s]",
+        logger.info("耗时统计: 预处理=%dms, 推理=%dms, 后处理=%dms, 总计=%dms [req=%s]",
                     timing["preprocess_ms"], timing["inference_ms"],
                     timing["postprocess_ms"], inference_ms, req_id)
 
@@ -333,16 +270,11 @@ async def predict_waste(request: PredictRequest) -> JSONResponse:
         )
 
 
-# ==================== 多模态融合预测接口 ====================
 @router.post("/api/predict/multimodal")
 async def predict_multimodal(request: PredictRequest) -> JSONResponse:
-    """
-    多模态融合预测接口（YOLO + SAHI + 双层级联）
+    """多模态融合预测接口（YOLO + SAHI + 双层级联）
 
-    与 /api/predict 的区别：
-    - 使用三模型融合决策（YOLO检测 + SAHI切片增强 + 级联精细化）
-    - 返回各模型的独立结果和融合后的最终结果
-    - 一致性校验：多模型投票，降低误判率
+    返回各模型独立结果和融合后的最终结果，多模型投票降低误判率。
     """
     start_time = time.time()
     req_id = uuid.uuid4().hex[:12]
@@ -359,7 +291,7 @@ async def predict_multimodal(request: PredictRequest) -> JSONResponse:
 
     try:
         image, image_data = decode_base64_image(request.image)
-        logger.info("🔍 [多模态] 图片解码成功, 尺寸: %s", image.size)
+        logger.info("[多模态] 图片解码成功, 尺寸: %s", image.size)
 
     except ValueError as e:
         return JSONResponse(status_code=400, content={
@@ -378,7 +310,6 @@ async def predict_multimodal(request: PredictRequest) -> JSONResponse:
         final = result.final_prediction
         fusion_details = result.fusion_details
 
-        # 构建响应数据
         response_data = {
             "success": True,
             "result": {
@@ -416,7 +347,7 @@ async def predict_multimodal(request: PredictRequest) -> JSONResponse:
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
 
-        logger.info("✅ [多模态] 预测完成: %s (%s), 置信度=%.1f%%, 一致性=%.0f%%, 耗时=%dms",
+        logger.info("[多模态] 预测完成: %s (%s), 置信度=%.1f%%, 一致性=%.0f%%, 耗时=%dms",
                    final.fine_class_name_cn, final.category_name,
                    final.confidence * 100, result.consistency_score * 100,
                    result.total_inference_time_ms)
@@ -436,14 +367,9 @@ async def predict_multimodal(request: PredictRequest) -> JSONResponse:
         )
 
 
-# ==================== 批量识别接口 ====================
-
 @router.post("/api/batch_predict")
 async def batch_predict_waste(request: BatchPredictRequest) -> JSONResponse:
-    """
-    批量图像分类识别接口
-    支持单次最多5张图片并行推理
-    """
+    """批量图像分类识别，单次最多5张图片"""
     start_time = time.time()
     req_id = uuid.uuid4().hex[:12]
 
@@ -473,13 +399,10 @@ async def batch_predict_waste(request: BatchPredictRequest) -> JSONResponse:
         try:
             image, image_data = decode_base64_image(img_str)
         except Exception:
-            results.append({
-                "index": idx,
-                "error": "图片解码失败",
-            })
+            results.append({"index": idx, "error": "图片解码失败"})
             continue
 
-        # ===== 批量识别中的单张图片缓存检查 =====
+        # 缓存检查
         current_cache_key = None
         cached_item = None
         if backend_state.inference_cache:
@@ -487,7 +410,6 @@ async def batch_predict_waste(request: BatchPredictRequest) -> JSONResponse:
                 current_cache_key = backend_state.inference_cache._make_key(image_data)
                 cached_result = backend_state.inference_cache.get(current_cache_key)
                 if cached_result:
-                    # 缓存命中：直接使用缓存结果，跳过模型推理
                     logger.info("批量识别-第%d张 缓存命中: %s", idx + 1, current_cache_key[:20])
                     cached_item = {
                         "index": idx,
@@ -499,12 +421,11 @@ async def batch_predict_waste(request: BatchPredictRequest) -> JSONResponse:
                         "confidence": cached_result.get("confidence", 0),
                         "guidance": cached_result.get("guidance", ""),
                         "is_demo_mode": cached_result.get("is_demo_mode", False),
-                        "inference_time_ms": 0,  # 缓存命中，推理时间为0
+                        "inference_time_ms": 0,
                         "cache_hit": True,
                     }
                     results.append(cached_item)
 
-                    # 写入历史记录（缓存命中的图片也记录）
                     if backend_state.history_store:
                         backend_state.history_store.add({
                             "category": cached_item["category"],
@@ -515,7 +436,7 @@ async def batch_predict_waste(request: BatchPredictRequest) -> JSONResponse:
                             "guidance": cached_item["guidance"],
                             "is_demo_mode": cached_item["is_demo_mode"],
                         })
-                    continue  # 跳过后续的模型推理逻辑
+                    continue
             except Exception as e:
                 logger.warning("批量识别-第%d张 缓存检查异常，将执行正常推理: %s", idx + 1, e)
 
@@ -557,14 +478,12 @@ async def batch_predict_waste(request: BatchPredictRequest) -> JSONResponse:
             }
             results.append(item)
 
-            # ===== 推理结果写入缓存（批量识别） =====
             if backend_state.inference_cache and current_cache_key:
                 try:
                     backend_state.inference_cache.set(current_cache_key, item)
                 except Exception as e:
                     logger.warning("批量识别-第%d张 缓存写入异常（不影响主流程）: %s", idx + 1, e)
 
-            # 写入历史
             if backend_state.history_store:
                 backend_state.history_store.add({
                     "category": item["category"],
@@ -578,10 +497,7 @@ async def batch_predict_waste(request: BatchPredictRequest) -> JSONResponse:
 
         except Exception as e:
             logger.error("批量推理-第%d张出错: %s", idx, e)
-            results.append({
-                "index": idx,
-                "error": str(e),
-            })
+            results.append({"index": idx, "error": str(e)})
 
     total_ms = int((time.time() - start_time) * 1000)
     return JSONResponse(content={
@@ -592,21 +508,9 @@ async def batch_predict_waste(request: BatchPredictRequest) -> JSONResponse:
     })
 
 
-# ==================== 分享功能接口 ====================
-
 @router.post("/api/share/text")
 async def generate_share_text(request: Request) -> JSONResponse:
-    """
-    生成识别结果的文字分享内容
-
-    请求体：
-    {
-        "category": "可回收物",
-        "item_name": "塑料瓶",
-        "confidence": 0.95,
-        "guidance": "请投入蓝色可回收物桶"
-    }
-    """
+    """生成识别结果的文字分享内容"""
     try:
         body = await request.json()
         category = body.get("category", "未知")
@@ -614,17 +518,16 @@ async def generate_share_text(request: Request) -> JSONResponse:
         confidence = body.get("confidence", 0)
         guidance = body.get("guidance", "")
 
-        # 生成分享文本
         confidence_pct = int(confidence * 100)
         share_text = (
-            f"🔍 我用「校园垃圾分类AI助手」识别了一个物品\n"
-            f"📦 物品：{item_name}\n"
-            f"♻️ 分类：{category}\n"
-            f"📊 置信度：{confidence_pct}%\n"
+            f"我用「校园垃圾分类AI助手」识别了一个物品\n"
+            f"物品：{item_name}\n"
+            f"分类：{category}\n"
+            f"置信度：{confidence_pct}%\n"
         )
         if guidance:
-            share_text += f"💡 投放指引：{guidance}\n"
-        share_text += "\n🔗 快来试试吧！"
+            share_text += f"投放指引：{guidance}\n"
+        share_text += "\n快来试试吧！"
 
         return JSONResponse(content={
             "success": True,
@@ -641,21 +544,12 @@ async def generate_share_text(request: Request) -> JSONResponse:
         })
 
 
-# ==================== 健康检查接口 ====================
-
 @router.get("/api/health")
 async def health_check() -> JSONResponse:
-    """
-    增强版健康检查接口
+    """健康检查接口
 
-    检查项：
-    - AI 模型加载状态
-    - 数据库连接状态
-    - Redis 连接状态（如已配置）
-    - 多模态融合系统状态
-    - 推理缓存状态
+    检查项：AI模型、数据库、Redis、多模态融合系统、推理缓存
     """
-    # 获取多模态融合系统信息
     multimodal_status = None
     if backend_state.multimodal_available and backend_state.multimodal_classifier:
         try:
@@ -663,9 +557,7 @@ async def health_check() -> JSONResponse:
             multimodal_status = {
                 "available": True,
                 "architecture": system_info.get("architecture", "unknown"),
-                "layers": {
-                    k: v for k, v in system_info.get("layers", {}).items()
-                },
+                "layers": {k: v for k, v in system_info.get("layers", {}).items()},
                 "total_classes": system_info.get("total_fine_grained_classes", 0),
             }
         except Exception:
@@ -705,7 +597,6 @@ async def health_check() -> JSONResponse:
     if backend_state.inference_cache:
         cache_stats = backend_state.inference_cache.stats()
 
-    # 综合健康判定
     is_healthy = (
         (backend_state.vision_engine is not None) and
         db_status == "connected"

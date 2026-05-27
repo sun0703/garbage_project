@@ -1,3 +1,5 @@
+import { icon } from '../../utils/icons.js';
+
 export class AdminDashboard {
     container = null;
     _api = null;
@@ -16,26 +18,26 @@ export class AdminDashboard {
     _render() {
         this.container.innerHTML = `
             <h2 style="font-size:20px;font-weight:700;color:var(--text-primary);margin-bottom:20px">
-                📊 数据仪表盘
+                ${icon('barChart', 22)} 数据仪表盘
             </h2>
 
             <div class="admin-stats-grid" id="adminStatsGrid">
-                ${this._renderStatCard('👥', '—', '今日活跃用户')}
-                ${this._renderStatCard('📱', '—', '注册用户总数')}
-                ${this._renderStatCard('🔍', '—', '今日识别次数')}
-                ${this._renderStatCard('📍', '—', '今日打卡次数')}
+                ${this._renderStatCard(icon('users', 24), '—', '今日活跃用户')}
+                ${this._renderStatCard(icon('smartphone', 24), '—', '注册用户总数')}
+                ${this._renderStatCard(icon('search', 24), '—', '今日识别次数')}
+                ${this._renderStatCard(icon('mapPin', 24), '—', '今日打卡次数')}
             </div>
 
             <div class="dashboard-charts-row">
                 <div class="admin-card dashboard-chart-card">
-                    <h3 class="admin-card__title">📈 近30天活跃趋势</h3>
+                    <h3 class="admin-card__title">${icon('trendingUp', 18)} 近30天活跃趋势</h3>
                     <div class="admin-chart-wrap">
                         <canvas id="adminTrendChart"></canvas>
                     </div>
                 </div>
 
                 <div class="admin-card dashboard-chart-card">
-                    <h3 class="admin-card__title">🗑️ 识别分类分布</h3>
+                    <h3 class="admin-card__title">${icon('trash', 18)} 识别分类分布</h3>
                     <div class="admin-chart-wrap admin-chart-wrap--pie">
                         <canvas id="adminCategoryChart"></canvas>
                     </div>
@@ -43,7 +45,7 @@ export class AdminDashboard {
             </div>
 
             <div class="admin-card">
-                <h3 class="admin-card__title">🏆 热门识别物品 TOP10</h3>
+                <h3 class="admin-card__title">${icon('trophy', 18)} 热门识别物品 TOP10</h3>
                 <div class="hot-items-list" id="hotItemsList">
                     <p class="admin-loading">⏳ 加载中...</p>
                 </div>
@@ -75,7 +77,7 @@ export class AdminDashboard {
                 const isAuthError = err.code === 'UNAUTH' || err.statusCode === 401;
                 statsGrid.innerHTML = `
                     <div style="grid-column:1/-1;text-align:center;padding:40px;color:#999">
-                        ${isAuthError ? '🔒 登录已过期，请重新登录' : '⚠️ 数据加载失败，请检查后端服务'}
+                        ${isAuthError ? `${icon('lock', 16)} 登录已过期，请重新登录` : `${icon('alertTriangle', 16)} 数据加载失败，请检查后端服务`}
                     </div>
                 `;
             }
@@ -219,7 +221,7 @@ export class AdminDashboard {
         }
 
         container.innerHTML = items.slice(0, 10).map((item, idx) => {
-            const medals = ['🥇', '🥈', '🥉'];
+            const medals = [icon('medal', 20), icon('medal', 20), icon('medal', 20)];
             const rank = idx < 3 ? medals[idx] : `${idx + 1}.`;
             const count = item.count || item.predictions || item.times || 0;
 

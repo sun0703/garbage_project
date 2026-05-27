@@ -1,62 +1,63 @@
 import { api } from '../api.js';
 import { escapeHtml } from '../utils/escape.js';
+import { icon } from '../utils/icons.js';
 
 const ACHIEVEMENT_DEFINITIONS = [
     {
         id: 'first_prediction',
         name: '初次识别',
         desc: '完成首次垃圾识别',
-        icon: '🌱',
-        unlocked_icon: '🌿'
+        icon: icon('sprout', 20),
+        unlocked_icon: icon('leaf', 20)
     },
     {
         id: 'ten_predictions',
         name: '识别达人',
         desc: '累计识别10次垃圾',
-        icon: '🔍',
-        unlocked_icon: '🔎'
+        icon: icon('search', 20),
+        unlocked_icon: icon('search', 20)
     },
     {
         id: 'fifty_predictions',
         name: '火眼金睛',
         desc: '累计识别50次垃圾',
-        icon: '👁️',
-        unlocked_icon: '👁️'
+        icon: icon('eye', 20),
+        unlocked_icon: icon('eye', 20)
     },
     {
         id: 'first_checkin',
         name: '首次打卡',
         desc: '完成首次环保打卡',
-        icon: '📍',
-        unlocked_icon: '📍'
+        icon: icon('mapPin', 20),
+        unlocked_icon: icon('mapPin', 20)
     },
     {
         id: 'seven_day_streak',
         name: '连续7天',
         desc: '连续打卡7天',
-        icon: '🔥',
-        unlocked_icon: '🔥'
+        icon: icon('flame', 20),
+        unlocked_icon: icon('flame', 20)
     },
     {
         id: 'thirty_day_streak',
         name: '坚持一个月',
         desc: '连续打卡30天',
-        icon: '🏆',
-        unlocked_icon: '🏆'
+        icon: icon('trophy', 20),
+        unlocked_icon: icon('trophy', 20)
     },
     {
         id: 'quiz_master',
         name: '答题高手',
         desc: '累计答对50道题',
-        icon: '🧠',
-        unlocked_icon: '🧠'
+        icon: icon('brain', 20),
+        unlocked_icon: icon('brain', 20)
     },
     {
         id: 'points_100',
         name: '百分达人',
         desc: '积分达到100分',
-        icon: '💎',
-        unlocked_icon: '💎'
+        icon: icon('diamond', 20),
+        unlocked_icon: icon('diamond', 20)
     }
 ];
 
@@ -84,62 +85,62 @@ export class StatsPage {
         }
         content.innerHTML = `
             <div class="stats-header">
-                <h2 class="stats-title">📊 数据统计</h2>
+                <h2 class="stats-title">${icon('barChart', 22)} 数据统计</h2>
             </div>
 
             <div class="stats-summary-grid" id="statsSummaryGrid">
                 <div class="stats-summary-card">
-                    <span class="stats-summary-icon">🔍</span>
+                    <span class="stats-summary-icon">${icon('search', 24)}</span>
                     <span class="stats-summary-value" id="statPredictions">-</span>
                     <span class="stats-summary-label">累计识别</span>
                 </div>
                 <div class="stats-summary-card">
-                    <span class="stats-summary-icon">📍</span>
+                    <span class="stats-summary-icon">${icon('mapPin', 24)}</span>
                     <span class="stats-summary-value" id="statCheckins">-</span>
                     <span class="stats-summary-label">累计打卡</span>
                 </div>
                 <div class="stats-summary-card">
-                    <span class="stats-summary-icon">🧠</span>
+                    <span class="stats-summary-icon">${icon('brain', 24)}</span>
                     <span class="stats-summary-value" id="statQuizSummary">-</span>
                     <span class="stats-summary-label">答题(答对/总数)</span>
                 </div>
                 <div class="stats-summary-card">
-                    <span class="stats-summary-icon">💎</span>
+                    <span class="stats-summary-icon">${icon('diamond', 24)}</span>
                     <span class="stats-summary-value" id="statTotalPoints">-</span>
                     <span class="stats-summary-label">总积分</span>
                 </div>
             </div>
 
             <div class="stats-section card">
-                <h3 class="stats-section-title">🏅 我的成就</h3>
+                <h3 class="stats-section-title">${icon('award', 18)} 我的成就</h3>
                 <div class="achievements-grid" id="achievementsGrid">
                     <p class="no-data">加载中...</p>
                 </div>
             </div>
 
             <div class="stats-section card">
-                <h3 class="stats-section-title">📈 近30天活跃趋势</h3>
+                <h3 class="stats-section-title">${icon('trendingUp', 18)} 近30天活跃趋势</h3>
                 <div class="chart-wrap">
                     <canvas id="trendChart" height="220"></canvas>
                 </div>
             </div>
 
             <div class="stats-section card">
-                <h3 class="stats-section-title">🎯 积分来源分布</h3>
+                <h3 class="stats-section-title">${icon('target', 18)} 积分来源分布</h3>
                 <div class="chart-wrap chart-wrap--pie">
                     <canvas id="distChart" height="200"></canvas>
                 </div>
             </div>
 
             <div class="stats-section card">
-                <h3 class="stats-section-title">🗑️ 识别分类分布</h3>
+                <h3 class="stats-section-title">${icon('trash', 18)} 识别分类分布</h3>
                 <div class="chart-wrap chart-wrap--pie">
                     <canvas id="categoryDistChart" height="200"></canvas>
                 </div>
             </div>
 
             <div class="stats-section card">
-                <h3 class="stats-section-title">🏆 积分排行榜</h3>
+                <h3 class="stats-section-title">${icon('trophy', 18)} 积分排行榜</h3>
                 <div class="leaderboard-list" id="leaderboardList">
                     <p class="no-data">加载中...</p>
                 </div>
@@ -181,7 +182,7 @@ export class StatsPage {
                 if (isAuthError) {
                     content.innerHTML = `
                         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 20px;text-align:center;">
-                            <div style="font-size:48px;margin-bottom:16px;">🔒</div>
+                            <div style="font-size:48px;margin-bottom:16px;">${icon('lock', 48)}</div>
                             <h3 style="margin:0 0 8px;font-size:18px;color:#1A1A2E;">需要登录</h3>
                             <p style="margin:0 0 24px;color:#95A0AA;font-size:14px;">登录后查看您的识别统计、成就和排行榜数据</p>
                             <a href="#/profile" class="btn btn-primary" style="text-decoration:none;">登录 / 注册</a>
@@ -238,7 +239,7 @@ export class StatsPage {
                         <span class="achievement-desc">${escapeHtml(def.desc)}</span>
                         ${!isUnlocked && target > 0 ? `<span class="achievement-progress">${progress}/${target}</span>` : ''}
                     </div>
-                    ${isUnlocked ? '<span class="achievement-badge">✓</span>' : '<span class="achievement-lock">🔒</span>'}
+                    ${isUnlocked ? '<span class="achievement-badge">✓</span>' : `<span class="achievement-lock">${icon('lock', 16)}</span>`}
                 </div>
             `;
         });
@@ -262,7 +263,7 @@ export class StatsPage {
                         <span class="achievement-name">${escapeHtml(def.name)}</span>
                         <span class="achievement-desc">${escapeHtml(def.desc)}</span>
                     </div>
-                    <span class="achievement-lock">🔒</span>
+                    <span class="achievement-lock">${icon('lock', 16)}</span>
                 </div>
             `;
         });
@@ -427,7 +428,7 @@ export class StatsPage {
         const el = document.getElementById('leaderboardList');
         if (!el) return;
 
-        const medals = ['🥇', '🥈', '🥉'];
+        const medals = [icon('medal', 20), icon('medal', 20), icon('medal', 20)];
         el.innerHTML = list.map((u, i) => `
             <div class="lb-row">
                 <span class="lb-rank">${i < 3 ? medals[i] : `${i + 1}.`}</span>

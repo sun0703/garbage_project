@@ -2,13 +2,14 @@ import { store } from '../store.js';
 import { api } from '../api.js';
 import { escapeHtml } from '../utils/escape.js';
 import { showToast } from '../utils/ui.js';
+import { icon } from '../utils/icons.js';
 
 const LEVELS = [
-    { level: 1, name: '环保新人', icon: '🌱', threshold: 0 },
-    { level: 2, name: '环保达人', icon: '🌿', threshold: 50 },
-    { level: 3, name: '分类专家', icon: '🌳', threshold: 200 },
-    { level: 4, name: '绿色先锋', icon: '🏆', threshold: 500 },
-    { level: 5, name: '校园大使', icon: '👑', threshold: 1000 },
+    { level: 1, name: '环保新人', icon: icon('sprout', 20), threshold: 0 },
+    { level: 2, name: '环保达人', icon: icon('leaf', 20), threshold: 50 },
+    { level: 3, name: '分类专家', icon: icon('treePine', 20), threshold: 200 },
+    { level: 4, name: '绿色先锋', icon: icon('trophy', 20), threshold: 500 },
+    { level: 5, name: '校园大使', icon: icon('crown', 20), threshold: 1000 },
 ];
 
 function calcLevel(points) {
@@ -57,7 +58,7 @@ export class ProfilePage {
 
             <div class="profile-level-bar card hidden" id="profileLevelBar">
                 <div class="level-bar-header">
-                    <span class="level-badge" id="levelBadge">🌱 Lv.1</span>
+                    <span class="level-badge" id="levelBadge">${icon('sprout', 16)} Lv.1</span>
                     <span class="level-name" id="levelName">环保新人</span>
                     <span class="level-progress-text" id="levelProgressText">0/50</span>
                 </div>
@@ -83,19 +84,19 @@ export class ProfilePage {
 
             <div class="profile-quick-grid hidden" id="profileQuickGrid">
                 <div class="quick-item" data-action="points">
-                    <div class="quick-item-icon">💎</div>
+                    <div class="quick-item-icon">${icon('diamond', 24)}</div>
                     <span class="quick-item-label">积分明细</span>
                 </div>
                 <div class="quick-item" data-action="checkin">
-                    <div class="quick-item-icon">📍</div>
+                    <div class="quick-item-icon">${icon('mapPin', 24)}</div>
                     <span class="quick-item-label">打卡记录</span>
                 </div>
                 <div class="quick-item" data-action="quiz">
-                    <div class="quick-item-icon">🧠</div>
+                    <div class="quick-item-icon">${icon('brain', 24)}</div>
                     <span class="quick-item-label">答题记录</span>
                 </div>
                 <div class="quick-item" data-action="settings">
-                    <div class="quick-item-icon">⚙️</div>
+                    <div class="quick-item-icon">${icon('settings', 24)}</div>
                     <span class="quick-item-label">设置</span>
                 </div>
             </div>

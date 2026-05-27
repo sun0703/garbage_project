@@ -4,6 +4,7 @@ import { showToast } from '../utils/ui.js';
 
 const DEFAULT_SETTINGS = {
     mode: 'fast',
+    theme: 'system',           // 主题模式：'light' | 'dark' | 'system'
     show_on_leaderboard: true,
     notifications: {
         checkin_reminder: true,
@@ -30,6 +31,21 @@ export class SettingsPage {
             <div class="settings-header">
                 <button class="btn btn-ghost settings-back" id="settingsBackBtn">← 返回</button>
                 <h2 class="settings-title">⚙️ 偏好设置</h2>
+            </div>
+
+            <div class="settings-section card">
+                <h3 class="settings-section__title">外观设置</h3>
+                <div class="settings-option">
+                    <div class="settings-option__info">
+                        <span class="settings-option__label">主题模式</span>
+                        <span class="settings-option__desc">选择浅色/深色/跟随系统</span>
+                    </div>
+                    <select class="settings-select" id="settingsTheme">
+                        <option value="system">跟随系统</option>
+                        <option value="light">浅色模式</option>
+                        <option value="dark">深色模式</option>
+                    </select>
+                </div>
             </div>
 
             <div class="settings-section card">
@@ -153,6 +169,11 @@ export class SettingsPage {
     }
 
     _applySettingsToUI() {
+        const themeSelect = document.getElementById('settingsTheme');
+        if (themeSelect) {
+            themeSelect.value = this._settings.theme || 'system';
+        }
+
         const modeSelect = document.getElementById('settingsMode');
         if (modeSelect) {
             modeSelect.value = this._settings.mode || 'fast';
@@ -183,6 +204,7 @@ export class SettingsPage {
 
     _collectSettingsFromUI() {
         return {
+            theme: document.getElementById('settingsTheme')?.value || 'system',
             mode: document.getElementById('settingsMode')?.value || 'fast',
             show_on_leaderboard: document.getElementById('settingsLeaderboard')?.checked ?? true,
             notifications: {
@@ -203,6 +225,9 @@ export class SettingsPage {
             localStorage.setItem('ecosort_settings', JSON.stringify(newSettings));
             this._settings = newSettings;
             this._hasChanges = false;
+
+            /* 应用主题切换 */
+            applyTheme(newSettings.theme);
 
             try {
                 await api.updateUserSettings(newSettings);
@@ -258,4 +283,29 @@ export function getUserSettings() {
         }
     }
     return { ...DEFAULT_SETTINGS };
+}
+
+/**
+ * 应用主题到 document.documentElement
+ * @param {string} theme - 'light' | 'dark' | 'system'
+ */
+export function applyTheme(theme) {
+    const root = document.documentElement;
+    if (theme === 'dark') {
+        root.setAttribute('data-theme', 'dark');
+    } else if (theme === 'light') {
+        root.setAttribute('data-theme', 'light');
+    } else {
+        /* system: 移除显式设置，让 CSS @media (prefers-color-scheme) 生效 */
+        root.removeAttribute('data-theme');
+    }
+}
+
+/**
+ * 初始化主题 - 从 localStorage 读取并应用
+ * 应在 app.js 启动时调用
+ */
+export function initTheme() {
+    const settings = getUserSettings();
+    applyTheme(settings.theme || 'system');
 }

@@ -19,6 +19,7 @@ import { Router } from './router.js';
 import { store, Store, DEFAULT_STATE } from './store.js';
 import { api, ApiClient, ApiError } from './api.js';
 import { config } from './config.js';
+import { initTheme } from './pages/settings.js';
 
 /*
  * 全局UI组件导入（安全加载模式）
@@ -276,20 +277,23 @@ function bootstrap() {
     }
     window.__APP_BOOTSTRAPPED__ = true;
 
-    /* 第一步：绑定全局错误捕获（仅绑定一次） */
+    /* 第一步：初始化主题（尽早执行，避免闪烁） */
+    initTheme();
+
+    /* 第二步：绑定全局错误捕获（仅绑定一次） */
     window.addEventListener('error', handleGlobalError);
     window.addEventListener('unhandledrejection', handleUnhandledRejection);
 
-    /* 第二步：渲染全局UI组件（NavBar / TabBar）*/
+    /* 第三步：渲染全局UI组件（NavBar / TabBar）*/
     initGlobalComponents();
 
-    /* 第三步：注册所有路由规则（含页面生命周期管理） */
+    /* 第四步：注册所有路由规则（含页面生命周期管理） */
     registerAllRoutes(router);
 
-    /* 第四步：启动路由系统（触发首屏渲染） */
+    /* 第五步：启动路由系统（触发首屏渲染） */
     router.start();
 
-    /* 第五步：暴露全局调试接口 */
+    /* 第六步：暴露全局调试接口 */
     if (APP_CONFIG.exposeDebugAPI) {
         window.__app__ = Object.freeze({
             router,

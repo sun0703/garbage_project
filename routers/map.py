@@ -19,7 +19,7 @@ from app.models import CheckinRequest
 
 logger = logging.getLogger(__name__)
 
-AMAP_KEY = os.getenv("AMAP_KEY", "a8d85a19acf3e4cb6edba949241ce1c7")
+AMAP_KEY = os.getenv("AMAP_KEY", "")
 
 _PI = 3.14159265358979324
 _A = 6378245.0

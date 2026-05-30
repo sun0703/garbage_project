@@ -1,5 +1,5 @@
 /**
- * main.css - 校园垃圾分类SPA主样式表
+ * main.css - 垃圾分类SPA主样式表
  * 设计风格: Soft UI Evolution（环保生态风格，毛玻璃效果）
  * 布局模式: Mobile-First Card Layout (max-width: 480px居中)
  * 字体栈: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
@@ -562,11 +562,12 @@ ol {
 /* 主容器 - 最大宽度480px居中，适配移动端优先 */
 .container {
   width: 100%;
-  max-width: var(--container-max);    /* 移动端优先的最大宽度限制 */
-  margin: 0 auto;                      /* 水平居中 */
-  padding: 0 16px;                     /* 左右内边距 */
-  position: relative;                  /* 为绝对定位子元素提供定位上下文 */
-  z-index: 1;                          /* 确保在装饰光斑之上 */
+  max-width: var(--container-max);
+  margin: 0 auto;
+  padding-left: 16px;
+  padding-right: 16px;
+  position: relative;
+  z-index: 1;
 }
 
 /* 容器变体 - 无内边距版本（用于全宽场景） */
@@ -657,7 +658,8 @@ ol {
   }
 
   .container {
-    padding: 0 12px;                   /* 缩小左右边距 */
+    padding-left: 12px;
+    padding-right: 12px;
   }
 
   .page__title {
@@ -672,8 +674,9 @@ ol {
   }
 
   .container {
-    max-width: 600px;                  /* 平板上放宽容器 */
-    padding: 0 32px;
+    max-width: 600px;
+    padding-left: 32px;
+    padding-right: 32px;
   }
 
   .page__title {
@@ -695,8 +698,9 @@ ol {
 /* 桌面端/平板横屏 (1024px及以上) */
 @media screen and (min-width: 1024px) {
   .container {
-    max-width: var(--container-max);   /* 桌面端保持移动端宽度，模拟App体验 */
-    padding: 0 24px;
+    max-width: var(--container-max);
+    padding-left: 24px;
+    padding-right: 24px;
   }
 
   /* 桌面端body添加微妙的两侧阴影，突出中央容器效果 */
@@ -1362,13 +1366,13 @@ ol {
   background: #e8e8e8;
 }
 
-.campus-items-list {
+.special-items-list {
   list-style: none;
   padding: 0;
   margin: 0;
 }
 
-.campus-item {
+.special-item {
   display: flex;
   align-items: flex-start;
   gap: 8px;
@@ -1377,18 +1381,18 @@ ol {
   font-size: 13px;
 }
 
-.campus-item:last-child {
+.special-item:last-child {
   border-bottom: none;
 }
 
-.campus-item-name {
+.special-item-name {
   flex-shrink: 0;
   font-weight: 600;
   color: var(--text-primary, #1a1a2e);
   min-width: 80px;
 }
 
-.campus-item-tip {
+.special-item-tip {
   color: var(--text-muted, #666);
   line-height: 1.4;
 }
@@ -2054,7 +2058,9 @@ ol {
 
 .map-container {
   width: 100%;
-  height: 300px;
+  height: calc(100vh - var(--nav-height, 56px) - 140px);
+  min-height: 350px;
+  max-height: 600px;
   border-radius: 12px;
   overflow: hidden;
   margin-bottom: 12px;
@@ -2872,7 +2878,8 @@ body:has(.history-drawer.open) .nav-bar {
 
 @media (max-width: 360px) {
   .map-container {
-    height: 240px;
+    min-height: 280px;
+    max-height: 500px;
   }
 
   .profile-stats {
@@ -2891,11 +2898,6 @@ body:has(.history-drawer.open) .nav-bar {
 /* ============================================
    新增样式 - 从 github 版本追加
    ============================================ */
-
-/* 首页特殊：header 从顶部开始，无需 nav 预留 */
-#page-home .page__content {
-  padding-top: 0;
-}
 
 /* 首页头部动画增强 */
 .home-header {
@@ -3337,7 +3339,6 @@ body:has(.history-drawer.open) .nav-bar {
    ============================================ */
 
 #page-home {
-  display: block;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
@@ -3352,7 +3353,7 @@ body:has(.history-drawer.open) .nav-bar {
   padding-right: 0;
 }
 
-#page-home .container { padding: 20px 16px; margin-bottom: 0; }
+#page-home .container { padding: calc(var(--nav-height) + 12px) 16px 20px; margin-bottom: 0; }
 
 #page-home .header { text-align: center; padding: 28px 0 20px; animation: fadeInDown 0.6s ease both; }
 #page-home .header-inner { display: inline-flex; align-items: center; gap: 10px; justify-content: center; }
@@ -3393,6 +3394,95 @@ body:has(.history-drawer.open) .nav-bar {
 #page-home .upload-area.has-image .sub-text { display: none; }
 
 #page-home .hidden-input { display: none; }
+
+/* ---- 拍照/上传操作按钮 ---- */
+#page-home .upload-actions { display: flex; gap: 10px; justify-content: center; margin: 16px 0 8px; }
+#page-home .btn-camera, #page-home .btn-upload-file {
+  height: 42px; padding: 0 20px; border-radius: 9999px;
+  font-size: 14px; font-weight: 600; cursor: pointer;
+  display: flex; align-items: center; gap: 6px;
+  transition: all 0.25s cubic-bezier(0.4,0,0.2,1);
+  border: none;
+}
+#page-home .btn-camera {
+  background: linear-gradient(135deg, #2D9B5E, #3DB974); color: white;
+  box-shadow: 0 3px 12px rgba(45,155,94,0.25);
+}
+#page-home .btn-camera:hover { opacity: 0.92; transform: translateY(-1px); box-shadow: 0 5px 16px rgba(45,155,94,0.32); }
+#page-home .btn-camera:active { transform: scale(0.97); }
+#page-home .btn-upload-file {
+  background: white; color: #5A6776;
+  border: 1.5px solid rgba(45,155,94,0.15);
+  box-shadow: 0 2px 8px rgba(45,155,94,0.06);
+}
+#page-home .btn-upload-file:hover { background: #F0F7F4; border-color: #2D9B5E; color: #2D9B5E; }
+#page-home .btn-camera svg { stroke: white; stroke-width: 2; fill: none; }
+#page-home .btn-upload-file svg { stroke: currentColor; stroke-width: 2; fill: none; }
+
+/* ---- 摄像头预览区域 ---- */
+#page-home .camera-preview {
+  position: relative; width: 100%; border-radius: var(--radius-lg);
+  overflow: hidden; background: #000;
+  animation: cameraFadeIn 0.35s ease both;
+}
+@keyframes cameraFadeIn { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
+
+#page-home .camera-preview video {
+  width: 100%; max-height: 400px; object-fit: cover;
+  display: block; transform: scaleX(1); /* 修复某些安卓设备的镜像问题 */
+}
+
+#page-home .camera-controls {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  padding: 16px 20px; display: flex; justify-content: space-between; align-items: center;
+  background: linear-gradient(transparent, rgba(0,0,0,0.7));
+}
+#page-home .camera-close-btn {
+  background: rgba(255,255,255,0.15); color: white; border: 1px solid rgba(255,255,255,0.25) !important;
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  height: 40px !important; font-size: 13px !important; padding: 0 16px !important;
+}
+#page-home .camera-close-btn:hover { background: rgba(255,255,255,0.25) !important; }
+#page-home .camera-capture-btn {
+  height: 48px !important; padding: 0 28px !important; font-size: 15px !important;
+  background: white !important; color: #1A1A2E !important;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3) !important;
+}
+#page-home .camera-capture-btn:hover { opacity: 0.95 !important; transform: scale(1.03) !important; }
+#page-home .camera-capture-btn:active { transform: scale(0.97) !important; }
+#page-home .camera-capture-btn svg { fill: #1A1A2E !important; stroke: none !important; }
+
+/* ---- 地图定位提示 ---- */
+.map-locating-toast {
+  position: fixed; top: 80px; left: 50%; transform: translateX(-50%);
+  z-index: 20000; padding: 12px 24px; border-radius: 9999px;
+  background: rgba(33,150,243,0.95); color: white; font-size: 14px; font-weight: 500;
+  box-shadow: 0 4px 16px rgba(33,150,243,0.35);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  animation: locatingPulse 1.8s ease-in-out infinite;
+  pointer-events: none;
+}
+.map-locating-toast span { display: flex; align-items: center; gap: 8px; }
+@keyframes locatingPulse {
+  0%, 100% { opacity: 1; transform: translateX(-50%) scale(1); }
+  50% { opacity: 0.85; transform: translateX(-50%) scale(1.02); }
+}
+
+.map-data-notice {
+  text-align: center;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: #888;
+  background: rgba(245,247,250,0.9);
+  border-top: 1px solid rgba(0,0,0,0.04);
+}
+.map-data-notice span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
 
 #page-home .divider { display: flex; align-items: center; margin: 18px 0; color: #95A0AA; font-size: 12px; font-weight: 500; }
 #page-home .divider::before, #page-home .divider::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgba(45,155,94,0.12), transparent); }
@@ -3470,7 +3560,7 @@ body:has(.history-drawer.open) .nav-bar {
 #page-home.nav-hidden .nav-bar { display: none; }
 
 @media (max-width: 380px) {
-  #page-home .container { padding: 16px 12px; }
+  #page-home .container { padding: calc(var(--nav-height) + 12px) 12px 16px; }
   #page-home .card { padding: 20px 16px; }
   #page-home .header h1 { font-size: 18px; }
   #page-home .item-name { font-size: 22px; }

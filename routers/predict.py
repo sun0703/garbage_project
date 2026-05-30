@@ -515,7 +515,7 @@ async def generate_share_text(request: Request) -> JSONResponse:
 
         confidence_pct = int(confidence * 100)
         share_text = (
-            f"我用「校园垃圾分类AI助手」识别了一个物品\n"
+            f"我用「垃圾分类AI助手」识别了一个物品\n"
             f"物品：{item_name}\n"
             f"分类：{category}\n"
             f"置信度：{confidence_pct}%\n"

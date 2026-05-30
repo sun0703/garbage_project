@@ -257,13 +257,13 @@ export class ResultCard extends BaseComponent {
     const data = customData || this._currentData;
 
     if (!data) {
-      return '我正在使用「校园垃圾分类AI助手」进行智能垃圾分类！';
+      return '我正在使用「垃圾分类AI助手」进行智能垃圾分类！';
     }
 
     const confPercent = Math.round((data.confidence || 0) * 100);
 
     const lines = [
-      `🗑 【校园垃圾分类AI助手】识别结果`,
+      `🗑 【垃圾分类AI助手】识别结果`,
       ``,
       `📦 物品名称：${data.label_cn || '未知物品'}`,
       `📂 垃圾分类：${data.category || '未知分类'}`,
@@ -283,7 +283,7 @@ export class ResultCard extends BaseComponent {
       lines.push(``, `🔍 ${data.reasoning}`);
     }
 
-    lines.push(``, `—— 来自校园垃圾分类AI助手 ——`);
+    lines.push(``, `—— 来自垃圾分类AI助手 ——`);
 
     return lines.join('\n');
   }

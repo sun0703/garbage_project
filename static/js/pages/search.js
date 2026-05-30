@@ -136,6 +136,7 @@ export class SearchPage {
     
     _render() {
         this.container.innerHTML = `
+            <div class="page__content container">
             <!-- 导航栏 -->
             <div class="search-nav">
                 <button class="nav-back-btn" id="searchBackBtn">
@@ -170,6 +171,7 @@ export class SearchPage {
             <div id="searchResultsArea">
                 <!-- F-2.2.4 搜索历史区域（初始展示，搜索后隐藏） -->
                 <div id="searchHistoryArea" class="search-history-area"></div>
+            </div>
             </div>
         `;
     }

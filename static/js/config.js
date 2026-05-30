@@ -12,7 +12,7 @@ export const config = {
     },
 
     app: {
-        name: '校园垃圾分类助手',
+        name: '垃圾分类助手',
         version: '1.0.0',
         defaultMode: 'quick',
         maxHistoryCount: 50, // 超过这个数就裁掉旧的

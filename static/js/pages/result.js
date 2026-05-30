@@ -103,6 +103,7 @@ export class ResultPage {
         const isDemoMode = this._resultData?.is_demo_mode || false;
 
         this.container.innerHTML = `
+            <div class="page__content container">
             <!-- 导航栏 -->
             <div class="result-nav">
                 <button class="nav-back-btn" id="resultBackBtn">
@@ -165,6 +166,7 @@ export class ResultPage {
                         返回首页
                     </button>
                 </div>
+            </div>
             </div>
         `;
     }
@@ -295,7 +297,7 @@ export class ResultPage {
         const confidence = data.confidence ? Math.round(data.confidence * 100) : 0;
         const guidance = data.guidance || '';
 
-        let text = `【校园垃圾分类AI助手】\n`;
+        let text = `【垃圾分类AI助手】\n`;
         text += `━━━━━━━━━━━━━━━\n`;
         text += `📦 物品名称：${label}\n`;
         text += `🏷️ 分类归属：${category}\n`;

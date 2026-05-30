@@ -84,6 +84,7 @@ export class HistoryPage {
      */
     _render() {
         this.container.innerHTML = `
+            <div class="page__content container">
             <!-- 导航栏 -->
             <div class="history-nav">
                 <button class="nav-back-btn" id="historyBackBtn">
@@ -124,6 +125,7 @@ export class HistoryPage {
             <!-- 历史记录列表容器 -->
             <div id="historyListContainer" class="history-list-container">
                 <!-- 动态填充：记录列表或空状态 -->
+            </div>
             </div>
         `;
     }

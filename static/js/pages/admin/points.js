@@ -208,7 +208,7 @@ export class AdminPoints {
                 <div class="admin-form-group">
                     <label>投放点名称 <span style="color:#dc3545">*</span></label>
                     <input class="admin-input" id="pointEditName" value="${escapeHtml(point?.name || '')}"
-                           placeholder="例如：东区教学楼投放点">
+                           placeholder="例如：社区中心投放点">
                 </div>
                 <div class="admin-form-group">
                     <label>区域 <span style="color:#dc3545">*</span></label>

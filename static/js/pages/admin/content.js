@@ -549,7 +549,7 @@ export class AdminContent {
                     </div>
                     <div class="admin-form-group">
                         <label>场景</label>
-                        <input class="admin-input" id="confusingCreateScene" placeholder="如：食堂/宿舍">
+                        <input class="admin-input" id="confusingCreateScene" placeholder="如：家庭/食堂">
                     </div>
                 </div>
                 <div class="admin-form-group">

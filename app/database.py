@@ -219,7 +219,7 @@ def _init_tables(db: DatabaseBackend) -> None:
             lng REAL NOT NULL,
             address TEXT DEFAULT '',
             categories TEXT DEFAULT '[]',
-            campus_zone TEXT DEFAULT '',
+            zone TEXT DEFAULT '',
             is_indoor INTEGER DEFAULT 0,
             open_hours TEXT DEFAULT '',
             created_at REAL NOT NULL
@@ -349,7 +349,7 @@ def _add_indexes(db: DatabaseBackend) -> None:
         "CREATE INDEX IF NOT EXISTS idx_checkins_date ON checkins(created_at)",
         "CREATE INDEX IF NOT EXISTS idx_quiz_records_user_id ON quiz_records(user_id)",
         "CREATE INDEX IF NOT EXISTS idx_quiz_records_date ON quiz_records(created_at)",
-        "CREATE INDEX IF NOT EXISTS idx_disposal_points_campus ON disposal_points(campus_zone)",
+        "CREATE INDEX IF NOT EXISTS idx_disposal_points_zone ON disposal_points(zone)",
         "CREATE INDEX IF NOT EXISTS idx_users_oauth ON users(oauth_provider, oauth_id)",
         "CREATE INDEX IF NOT EXISTS idx_activity_signups_user ON activity_signups(user_id)",
         "CREATE INDEX IF NOT EXISTS idx_activities_status ON activities(status)",
@@ -378,24 +378,24 @@ def _seed_disposal_points(db: DatabaseBackend) -> None:
         return
 
     points = [
-        {"id": "dp001", "name": "一食堂南门投放点", "lat": 30.7585, "lng": 103.9345, "address": "一食堂南门出口右侧", "categories": ["可回收物", "厨余垃圾", "其他垃圾"], "campus_zone": "西区", "is_indoor": 0},
-        {"id": "dp002", "name": "图书馆一楼大厅投放点", "lat": 30.7595, "lng": 103.9355, "address": "图书馆一楼大厅东侧", "categories": ["可回收物", "其他垃圾", "有害垃圾"], "campus_zone": "中心区", "is_indoor": 1},
-        {"id": "dp003", "name": "教学楼A栋投放点", "lat": 30.7605, "lng": 103.9365, "address": "教学楼A栋一楼走廊", "categories": ["可回收物", "其他垃圾"], "campus_zone": "东区", "is_indoor": 1},
-        {"id": "dp004", "name": "学生宿舍1号楼投放点", "lat": 30.7575, "lng": 103.9335, "address": "宿舍1号楼入口旁", "categories": ["可回收物", "厨余垃圾", "其他垃圾", "有害垃圾"], "campus_zone": "西区", "is_indoor": 0},
-        {"id": "dp005", "name": "操场西侧投放点", "lat": 30.7610, "lng": 103.9320, "address": "操场西侧看台下方", "categories": ["可回收物", "其他垃圾"], "campus_zone": "西区", "is_indoor": 0},
-        {"id": "dp006", "name": "实验楼投放点", "lat": 30.7600, "lng": 103.9380, "address": "实验楼B栋一楼", "categories": ["可回收物", "有害垃圾", "其他垃圾"], "campus_zone": "东区", "is_indoor": 1},
-        {"id": "dp007", "name": "二食堂北门投放点", "lat": 30.7570, "lng": 103.9370, "address": "二食堂北门出口左侧", "categories": ["可回收物", "厨余垃圾", "其他垃圾"], "campus_zone": "东区", "is_indoor": 0},
-        {"id": "dp008", "name": "行政楼投放点", "lat": 30.7590, "lng": 103.9390, "address": "行政楼一楼大厅", "categories": ["可回收物", "其他垃圾", "有害垃圾"], "campus_zone": "中心区", "is_indoor": 1},
-        {"id": "dp009", "name": "学生宿舍5号楼投放点", "lat": 30.7565, "lng": 103.9350, "address": "宿舍5号楼入口旁", "categories": ["可回收物", "厨余垃圾", "其他垃圾", "有害垃圾"], "campus_zone": "西区", "is_indoor": 0},
-        {"id": "dp010", "name": "体育馆投放点", "lat": 30.7615, "lng": 103.9340, "address": "体育馆入口处", "categories": ["可回收物", "其他垃圾"], "campus_zone": "西区", "is_indoor": 0},
+        {"id": "dp001", "name": "社区回收站A", "lat": 46.5935, "lng": 125.1410, "address": "朝阳区社区回收站A", "categories": ["可回收物", "厨余垃圾", "其他垃圾"], "zone": "朝阳区", "is_indoor": 0},
+        {"id": "dp002", "name": "市民服务中心投放点", "lat": 46.5960, "lng": 125.1445, "address": "中心区市民服务中心", "categories": ["可回收物", "其他垃圾", "有害垃圾"], "zone": "中心区", "is_indoor": 1},
+        {"id": "dp003", "name": "商业广场投放点", "lat": 46.5975, "lng": 125.1455, "address": "浦东新区商业广场", "categories": ["可回收物", "其他垃圾"], "zone": "浦东新区", "is_indoor": 1},
+        {"id": "dp004", "name": "居民小区南门投放点", "lat": 46.5920, "lng": 125.1400, "address": "朝阳区居民小区南门", "categories": ["可回收物", "厨余垃圾", "其他垃圾", "有害垃圾"], "zone": "朝阳区", "is_indoor": 0},
+        {"id": "dp005", "name": "公园西门投放点", "lat": 46.5985, "lng": 125.1395, "address": "海淀区公园西门", "categories": ["可回收物", "其他垃圾"], "zone": "海淀区", "is_indoor": 0},
+        {"id": "dp006", "name": "写字楼大堂投放点", "lat": 46.5970, "lng": 125.1470, "address": "浦东新区写字楼大堂", "categories": ["可回收物", "有害垃圾", "其他垃圾"], "zone": "浦东新区", "is_indoor": 1},
+        {"id": "dp007", "name": "社区菜场投放点", "lat": 46.5925, "lng": 125.1460, "address": "徐汇区社区菜场", "categories": ["可回收物", "厨余垃圾", "其他垃圾"], "zone": "徐汇区", "is_indoor": 0},
+        {"id": "dp008", "name": "政务中心投放点", "lat": 46.5955, "lng": 125.1480, "address": "中心区政务中心", "categories": ["可回收物", "其他垃圾", "有害垃圾"], "zone": "中心区", "is_indoor": 1},
+        {"id": "dp009", "name": "居民小区北门投放点", "lat": 46.5910, "lng": 125.1430, "address": "朝阳区居民小区北门", "categories": ["可回收物", "厨余垃圾", "其他垃圾", "有害垃圾"], "zone": "朝阳区", "is_indoor": 0},
+        {"id": "dp010", "name": "体育中心投放点", "lat": 46.5990, "lng": 125.1420, "address": "海淀区体育中心", "categories": ["可回收物", "其他垃圾"], "zone": "海淀区", "is_indoor": 0},
     ]
 
     now = time.time()
     for p in points:
         db.execute(
-            "INSERT INTO disposal_points (id, name, lat, lng, address, categories, campus_zone, is_indoor, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO disposal_points (id, name, lat, lng, address, categories, zone, is_indoor, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
             (p["id"], p["name"], p["lat"], p["lng"], p["address"],
-             json.dumps(p["categories"], ensure_ascii=False), p["campus_zone"], p["is_indoor"], now)
+             json.dumps(p["categories"], ensure_ascii=False), p["zone"], p["is_indoor"], now)
         )
     db.commit()
     logger.info("投放点种子数据已插入: %d 条", len(points))
@@ -417,7 +417,7 @@ def _seed_quiz_questions(db: DatabaseBackend) -> None:
         {"id": "q007", "question": "外卖餐盒（有剩饭）如何正确处理？", "options": ["整体投入厨余垃圾", "整体投入其他垃圾", "剩饭入厨余，清洗餐盒入可回收物", "整体投入可回收物"], "answer": 2, "explanation": "应将剩饭和餐盒分离：剩饭属于厨余垃圾，清洗后的餐盒属于可回收物。", "category": "可回收物", "difficulty": 2},
         {"id": "q008", "question": "破碎的灯管属于什么垃圾？", "options": ["可回收物", "厨余垃圾", "有害垃圾", "其他垃圾"], "answer": 2, "explanation": "灯管含有汞等有害物质，即使破碎也属于有害垃圾，需小心包裹后投放。", "category": "有害垃圾", "difficulty": 2},
         {"id": "q009", "question": "大骨头（猪腿骨）属于什么垃圾？", "options": ["厨余垃圾", "其他垃圾", "可回收物", "有害垃圾"], "answer": 1, "explanation": "大骨头质地坚硬，不易腐烂降解，属于其他垃圾而非厨余垃圾。", "category": "其他垃圾", "difficulty": 2},
-        {"id": "q010", "question": "校园中最常见的分类错误是什么？", "options": ["将塑料瓶投入其他垃圾", "将用过的纸巾投入可回收物", "将电池投入其他垃圾", "以上都是常见错误"], "answer": 3, "explanation": "以上三种都是校园中常见的分类错误，需要特别注意。", "category": "综合", "difficulty": 2},
+        {"id": "q010", "question": "日常生活中最常见的分类错误是什么？", "options": ["将塑料瓶投入其他垃圾", "将用过的纸巾投入可回收物", "将电池投入其他垃圾", "以上都是常见错误"], "answer": 3, "explanation": "以上三种都是日常生活中常见的分类错误，需要特别注意。", "category": "综合", "difficulty": 2},
         {"id": "q011", "question": "快递纸箱应该如何处理？", "options": ["直接投入可回收物", "拆除胶带后折叠投入可回收物", "投入其他垃圾", "投入厨余垃圾"], "answer": 1, "explanation": "快递纸箱应先拆除胶带和面单，折叠后投入可回收物。", "category": "可回收物", "difficulty": 2},
         {"id": "q012", "question": "指甲油属于什么垃圾？", "options": ["可回收物", "厨余垃圾", "有害垃圾", "其他垃圾"], "answer": 2, "explanation": "指甲油含有有机溶剂等化学成分，属于有害垃圾。", "category": "有害垃圾", "difficulty": 3},
         {"id": "q013", "question": "湿纸巾属于什么垃圾？", "options": ["可回收物", "厨余垃圾", "有害垃圾", "其他垃圾"], "answer": 3, "explanation": "湿纸巾材质不易降解且被污染，属于其他垃圾。", "category": "其他垃圾", "difficulty": 2},
@@ -444,9 +444,9 @@ def _seed_activities(db: DatabaseBackend) -> None:
 
     now = time.time()
     activities = [
-        {"id": "act001", "title": "校园环保周——垃圾分类挑战赛", "description": "为期一周的垃圾分类知识竞赛和实践活动，参与即可获得环保积分！每日完成分类打卡，积分排名前10名将获得精美环保礼品。", "location": "图书馆报告厅", "start_time": now + 86400, "end_time": now + 86400 * 7, "max_participants": 200, "organizer": "校环保协会"},
-        {"id": "act002", "title": "宿舍楼垃圾分类志愿者招募", "description": "招募垃圾分类引导志愿者，每天在宿舍楼投放点引导同学正确分类。服务满5小时可获得志愿服务证明。", "location": "各宿舍楼投放点", "start_time": now + 43200, "end_time": now + 86400 * 14, "max_participants": 50, "organizer": "学生会生活部"},
-        {"id": "act003", "title": "旧物回收市集", "description": "将闲置物品带到市集交换或捐赠，减少浪费从身边做起。可回收物包括旧书、旧衣、电子产品等。", "location": "学生活动中心广场", "start_time": now + 172800, "end_time": now + 172800 + 28800, "max_participants": 300, "organizer": "绿色校园联盟"},
+        {"id": "act001", "title": "社区环保周——垃圾分类挑战赛", "description": "为期一周的垃圾分类知识竞赛和实践活动，参与即可获得环保积分！每日完成分类打卡，积分排名前10名将获得精美环保礼品。", "location": "社区活动中心", "start_time": now + 86400, "end_time": now + 86400 * 7, "max_participants": 200, "organizer": "社区环保协会"},
+        {"id": "act002", "title": "社区垃圾分类志愿者招募", "description": "招募垃圾分类引导志愿者，每天在社区投放点引导居民正确分类。服务满5小时可获得志愿服务证明。", "location": "各社区投放点", "start_time": now + 43200, "end_time": now + 86400 * 14, "max_participants": 50, "organizer": "社区环保志愿队"},
+        {"id": "act003", "title": "旧物回收市集", "description": "将闲置物品带到市集交换或捐赠，减少浪费从身边做起。可回收物包括旧书、旧衣、电子产品等。", "location": "社区文化广场", "start_time": now + 172800, "end_time": now + 172800 + 28800, "max_participants": 300, "organizer": "绿色社区联盟"},
     ]
 
     for a in activities:

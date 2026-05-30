@@ -1,5 +1,5 @@
 /**
- * components.css - 校园垃圾分类SPA组件样式库
+ * components.css - 垃圾分类SPA组件样式库
  * 设计风格: Soft UI Evolution（环保生态风格，毛玻璃效果）
  * 组件规范: 完整状态管理（hover/focus/active/disabled/loading）
  * 动画时长: 150-300ms，使用CSS变量统一控制
@@ -2635,6 +2635,38 @@ button,
 @media screen and (min-width: 768px) {
   .achievements-grid-inner {
     grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+
+/* ============================================
+   二十六、移动端触摸目标优化 (WCAG 2.5.8)
+   - 确保所有可交互元素≥44x44px
+   - 符合Apple HIG / Google Material标准
+   ============================================ */
+
+@media screen and (max-width: 768px) {
+  /* 图标按钮最小触摸区域 */
+  .btn-icon,
+  .nav-bar__btn,
+  .toast__close,
+  .history-drawer__close,
+  .map-nav-modal-close,
+  .voice-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* 小号按钮触摸增强 */
+  .btn--sm {
+    min-height: 40px;
+    padding: 10px 18px;
+  }
+
+  /* 搜索页返回按钮等 */
+  .btn-ghost {
+    min-height: 40px;
+    padding: 10px 16px;
   }
 }
 

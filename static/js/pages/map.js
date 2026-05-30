@@ -28,9 +28,11 @@ export class MapPage {
                 <div class="map-filters">
                     <select id="mapZoneFilter" class="map-filter-select">
                         <option value="">全部区域</option>
-                        <option value="西区">西区</option>
-                        <option value="东区">东区</option>
+                        <option value="朝阳区">朝阳区</option>
+                        <option value="浦东新区">浦东新区</option>
                         <option value="中心区">中心区</option>
+                        <option value="海淀区">海淀区</option>
+                        <option value="徐汇区">徐汇区</option>
                     </select>
                     <select id="mapCatFilter" class="map-filter-select">
                         <option value="">全部分类</option>
@@ -42,6 +44,9 @@ export class MapPage {
                 </div>
             </div>
             <div id="mapContainer" class="map-container"></div>
+            <div class="map-data-notice">
+                <span>📍 正在定位并搜索附近真实投放点...</span>
+            </div>
             <div id="pointList" class="point-list"></div>
         `;
     }
@@ -99,13 +104,308 @@ export class MapPage {
         const mapEl = document.getElementById('mapContainer');
         if (!mapEl) return;
 
-        this._map = L.map(mapEl).setView([30.759, 103.935], 16);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap',
-            maxZoom: 19
-        }).addTo(this._map);
+        this._map = L.map(mapEl).setView([35.86, 104.19], 5);
 
-        setTimeout(() => this._map.invalidateSize(), 300);
+        this._tileSources = [
+            {
+                name: '高德卫星混合',
+                url: 'https://webst0{s}.is.autonavi.com/maptile/appmaptile?x={x}&y={y}&z={z}&lang=zh_cn&size=1&scale=1&style=6',
+                attribution: '&copy; <a href="https://www.amap.com/">高德地图</a>',
+                options: { maxZoom: 18, subdomains: ['1', '2', '3', '4'] }
+            },
+            {
+                name: '高德路网',
+                url: 'https://wprd0{s}.is.autonavi.com/appmaptile?x={x}&y={y}&z={z}&lang=zh_cn&size=1&scl=1&style=8',
+                attribution: '&copy; 高德地图',
+                options: { maxZoom: 18, subdomains: ['1', '2', '3', '4'] }
+            },
+            {
+                name: 'CartoDB(国际备用)',
+                url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+                attribution: '&copy; OSM &copy; CARTO',
+                options: { subdomains: 'abcd', maxZoom: 19 }
+            }
+        ];
+        this._currentTileSourceIndex = 0;
+        this._currentTileLayer = null;
+        this._loadedTileCount = 0;
+        this._addTileLayer();
+
+        this._locateUser();
+
+        setTimeout(() => { if (this._map) this._map.invalidateSize(); }, 300);
+    }
+
+    _addTileLayer() {
+        if (this._currentTileLayer) {
+            this._map.removeLayer(this._currentTileLayer);
+            this._currentTileLayer.off();
+        }
+
+        const source = this._tileSources[this._currentTileSourceIndex];
+        this._loadedTileCount = 0;
+
+        this._currentTileLayer = L.tileLayer(source.url, source.options);
+
+        this._currentTileLayer.on('tileload', () => {
+            this._loadedTileCount++;
+        });
+
+        this._currentTileLayer.on('load', () => {
+            console.log(`[MapPage] 瓦片源 "${source.name}" 加载完成，共 ${this._loadedTileCount} 张瓦片`);
+        });
+
+        this._currentTileLayer.addTo(this._map);
+        console.log(`[MapPage] 使用瓦片源: ${source.name}`);
+
+        setTimeout(() => {
+            if (this._loadedTileCount === 0 && this._currentTileSourceIndex < this._tileSources.length - 1) {
+                console.warn(`[MapPage] 瓦片源 "${source.name}" 超时无瓦片加载(${this._loadedTileCount}张)，切换到下一个...`);
+                this._currentTileSourceIndex++;
+                this._addTileLayer();
+            } else if (this._loadedTileCount > 0) {
+                console.log(`[MapPage] 瓦片源 "${source.name}" 正常工作，已加载 ${this._loadedTileCount} 张`);
+            } else if (this._loadedTileCount === 0) {
+                console.warn('[MapPage] 所有瓦片源均不可用，显示离线底图');
+                this._showOfflineMap();
+            }
+        }, 4000);
+    }
+
+    _showOfflineMap() {
+        const container = document.getElementById('mapContainer');
+        if (!container || !this._map) return;
+        
+        const offlinePane = this._map.createPane('offlinePane');
+        offlinePane.style.zIndex = 200;
+
+        L.imageOverlay('', this._map.getBounds(), { pane: 'offlinePane' });
+
+        const bgLayer = L.gridLayer({
+            pane: 'offlinePane',
+            createTile: (coords) => {
+                const tile = document.createElement('div');
+                tile.style.cssText = `
+                    width:256px;height:256px;background:#e8ecf1;
+                    display:flex;align-items:center;justify-content:center;
+                    font-size:10px;color:#bbb;border:1px solid rgba(0,0,0,0.04);
+                `;
+                tile.innerHTML = `<span>${coords.z}/${coords.x}/${coords.y}</span>`;
+                return tile;
+            }
+        });
+        bgLayer.addTo(this._map);
+
+        const noticeEl = document.querySelector('.map-data-notice');
+        if (noticeEl) {
+            noticeEl.innerHTML = '<span>⚠️ 地图瓦片加载失败（网络限制）— 坐标和投放点标记仍可正常使用 | 手机访问时地图将正常显示</span>';
+            noticeEl.style.cssText += 'background:#fff3cd;color:#856404;font-weight:500;';
+        }
+    }
+
+    /* 使用浏览器Geolocation API定位用户 */
+    _locateUser() {
+        if (!navigator.geolocation) {
+            console.warn('[MapPage] 浏览器不支持地理定位');
+            return;
+        }
+
+        const loadingToast = document.createElement('div');
+        loadingToast.className = 'map-locating-toast';
+        loadingToast.innerHTML = '<span>📍 正在定位...</span>';
+        document.body.appendChild(loadingToast);
+
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const { latitude, longitude } = position.coords;
+                const accuracy = position.coords.accuracy || 0;
+                console.log(`[MapPage] 定位成功: ${latitude}, ${longitude} (精度: ${Math.round(accuracy)}m)`);
+
+                if (this._map) {
+                    this._map.setView([latitude, longitude], 17);
+
+                    if (this._userMarker) this._map.removeLayer(this._userMarker);
+                    if (this._accuracyCircle) this._map.removeLayer(this._accuracyCircle);
+
+                    this._accuracyCircle = L.circle([latitude, longitude], {
+                        radius: accuracy,
+                        color: '#2196F3',
+                        fillColor: '#2196F3',
+                        fillOpacity: 0.15,
+                        weight: 1
+                    }).addTo(this._map);
+
+                    this._userMarker = L.marker([latitude, longitude], {
+                        icon: L.divIcon({
+                            className: 'user-location-marker',
+                            html: '<div style="background:#2196F3;width:16px;height:16px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);cursor:move;"></div>',
+                            iconSize: [16, 16],
+                            iconAnchor: [8, 8]
+                        }),
+                        draggable: true
+                    }).addTo(this._map);
+
+                    const updatePopup = () => {
+                        const pos = this._userMarker.getLatLng();
+                        this._userMarker.bindPopup(`
+                            <b>📍 我的位置</b><br>
+                            <small>精度: ±${Math.round(accuracy)}m</small><br>
+                            <small style="color:#888;">可拖拽蓝点校正位置</small><br>
+                            <small>${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}</small>
+                        `).openPopup();
+                        if (this._accuracyCircle) this._accuracyCircle.setLatLng(pos);
+                    };
+
+                    this._userMarker.on('dragend', updatePopup);
+                    updatePopup();
+
+                    this._fetchNearbyPoints(latitude, longitude);
+                }
+
+                loadingToast.remove();
+            },
+            (error) => {
+                let errorMsg = '定位失败';
+                switch(error.code) {
+                    case error.PERMISSION_DENIED:
+                        errorMsg = '用户拒绝了定位请求'; break;
+                    case error.POSITION_UNAVAILABLE:
+                        errorMsg = '无法获取位置信息'; break;
+                    case error.TIMEOUT:
+                        errorMsg = '定位超时'; break;
+                }
+                console.warn(`[MapPage] ${errorMsg}`, error);
+                loadingToast.innerHTML = `<span>⚠️ ${errorMsg}</span>`;
+                setTimeout(() => loadingToast.remove(), 2000);
+            },
+            {
+                enableHighAccuracy: true,
+                timeout: 15000,
+                maximumAge: 0
+            }
+        );
+    }
+
+    async _fetchNearbyPoints(lat, lng) {
+        this._nearbyMarkers = this._nearbyMarkers || [];
+
+        let amapSuccess = false;
+        try {
+            const resp = await fetch(`/api/map/amap-nearby?lat=${lat}&lng=${lng}&radius=2000`);
+            const data = await resp.json();
+            if (data.success && data.points.length > 0) {
+                amapSuccess = true;
+                console.log(`[MapPage] 高德POI查询到 ${data.points.length} 个真实投放点`);
+                data.points.forEach(p => {
+                    const marker = L.marker([p.lat, p.lng], {
+                        icon: L.divIcon({
+                            className: 'amap-real-marker',
+                            html: `<div style="background:#FF5722;width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3);"></div>`,
+                            iconSize: [14, 14], iconAnchor: [7, 7]
+                        })
+                    }).addTo(this._map).bindPopup(`
+                        <b>${p.type_label}</b><br>
+                        <strong>${p.name}</strong><br>
+                        <small style="color:#666">${p.address || '附近'}</small><br>
+                        ${p.distance ? `<small style="color:#2196F3">距你 ${p.distance}m</small><br>` : ''}
+                        <span style="color:#FF5722;font-size:11px">✅ 高德地图真实数据</span>
+                    `);
+                    this._nearbyMarkers.push(marker);
+                });
+
+                const noticeEl = document.querySelector('.map-data-notice');
+                if (noticeEl) {
+                    noticeEl.innerHTML = `<span>🔴 ${data.points.length}个真实投放点(高德地图) | 🔵 蓝点可拖拽校正</span>`;
+                }
+            } else if (data.success && data.points.length === 0) {
+                console.log('[MapPage] 高德POI该区域暂无垃圾桶数据');
+                amapSuccess = true;
+            }
+        } catch (e) {
+            console.warn('[MapPage] 高德POI查询失败:', e.message);
+        }
+
+        if (!amapSuccess) {
+            await this._fetchOsmPoints(lat, lng);
+        }
+
+        const localResp = await fetch(`/api/map/points`);
+        const localData = await localResp.json();
+        if (localData.success && localData.points.length > 0) {
+            localData.points.forEach(p => {
+                const marker = L.marker([p.lat, p.lng], {
+                    icon: L.divIcon({
+                        className: 'reference-marker',
+                        html: `<div style="background:#9E9E9E;width:10px;height:10px;border-radius:50%;border:2px solid #fff;opacity:0.6;"></div>`,
+                        iconSize: [10, 10], iconAnchor: [5, 5]
+                    })
+                }).addTo(this._map).bindPopup(`<b>📌 ${p.name}</b><br><small style="color:#888">参考位置（非精确）</small><br><small>${p.address}</small>`);
+                this._nearbyMarkers.push(marker);
+            });
+        }
+    }
+
+    async _fetchOsmPoints(lat, lng) {
+        const overpassQuery = `
+            [out:json][timeout:15];
+            (
+              node["amenity"~"waste_basket|waste_disposal|recycling"](around:3000,${lat},${lng});
+              way["amenity"~"waste_basket|waste_disposal|recycling"](around:3000,${lat},${lng});
+            );
+            out body center;
+        `;
+
+        try {
+            const resp = await fetch('https://overpass-api.de/api/interpreter', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'data=' + encodeURIComponent(overpassQuery)
+            });
+            const text = await resp.text();
+            if (!text || text[0] !== '{') {
+                console.warn('[MapPage] OSM返回非JSON（可能网络不可达）');
+                return;
+            }
+            const data = JSON.parse(text);
+
+            if (data.elements && data.elements.length > 0) {
+                console.log(`[MapPage] OSM查询到 ${data.elements.length} 个真实投放点(fallback)`);
+                data.elements.forEach(elem => {
+                    const tags = elem.tags || {};
+                    const pLat = elem.lat || (elem.center?.lat || 0);
+                    const pLng = elem.lon || (elem.center?.lon || 0);
+                    const name = tags.name || { waste_basket: '垃圾桶', waste_disposal: '垃圾站', recycling: '回收点' }[tags.amenity] || '投放点';
+                    const typeLabel = { waste_basket: '🗑️ 垃圾桶', waste_disposal: '🏭 垃圾站', recycling: '♻️ 回收点' }[tags.amenity] || '📍 投放点';
+
+                    const marker = L.marker([pLat, pLng], {
+                        icon: L.divIcon({
+                            className: 'osm-real-marker',
+                            html: `<div style="background:#FF9800;width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3);"></div>`,
+                            iconSize: [14, 14], iconAnchor: [7, 7]
+                        })
+                    }).addTo(this._map).bindPopup(`
+                        <b>${typeLabel}</b><br>
+                        <strong>${name}</strong><br>
+                        <small style="color:#666">${tags['addr:street'] || tags['addr:housenumber'] ? (tags['addr:street']||'') + (tags['addr:housenumber']||'') : '位置未知'}</small><br>
+                        <span style="color:#FF9800;font-size:11px">⚠️ OSM备选数据（高德不可用时的降级）</span>
+                    `);
+                    this._nearbyMarkers.push(marker);
+                });
+
+                const noticeEl = document.querySelector('.map-data-notice');
+                if (noticeEl) {
+                    noticeEl.innerHTML = `<span>🟠 ${data.elements.length}个投放点(OSM备选) | 🔵 蓝点可拖拽校正</span>`;
+                }
+            } else {
+                console.log('[MapPage] 该区域OSM暂无垃圾桶数据');
+                const noticeEl = document.querySelector('.map-data-notice');
+                if (noticeEl) {
+                    noticeEl.innerHTML = `<span>⚠️ 附近暂无垃圾桶数据 | 🔵 蓝点可拖拽校正</span>`;
+                }
+            }
+        } catch (e) {
+            console.warn('[MapPage] OSM前端查询失败:', e.message);
+        }
     }
 
     async _loadPoints() {
@@ -196,7 +496,7 @@ export class MapPage {
             <div class="point-card card" data-point-id="${p.id}" data-lat="${p.lat}" data-lng="${p.lng}">
                 <div class="point-card-header">
                     <h3 class="point-card-name">${escapeHtml(p.name)}</h3>
-                    <span class="point-card-zone">${escapeHtml(p.campus_zone)}</span>
+                    <span class="point-card-zone">${escapeHtml(p.zone)}</span>
                 </div>
                 <p class="point-card-address">${escapeHtml(p.address)}</p>
                 <div class="point-card-cats">
@@ -406,5 +706,6 @@ export class MapPage {
             this._map = null;
         }
         this._markers = [];
+        this._nearbyMarkers = [];
     }
 }

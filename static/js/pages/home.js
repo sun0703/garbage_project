@@ -89,6 +89,9 @@ export class HomePage {
             this._voiceButton = null;
         }
 
+        /* 释放摄像头资源 */
+        this._closeCamera();
+
         if (this.container) {
             this.container.innerHTML = '';
         }
@@ -115,6 +118,7 @@ export class HomePage {
 
     _render() {
         this.container.innerHTML = `
+            <div class="page__content container">
             <!-- 页面标题区 -->
             <div class="home-header">
                 <div class="home-header__logo">
@@ -122,7 +126,7 @@ export class HomePage {
                         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
                     </svg>
                 </div>
-                <h1 class="home-header__title">校园垃圾分类AI助手</h1>
+                <h1 class="home-header__title">垃圾分类AI助手</h1>
                 <p class="home-header__subtitle">拍照识别 · 语音搜索 · 智能分类</p>
                 <p style="margin-top:6px;"><a href="javascript:void(0)" id="homeLoginLink" style="color:#2D9B5E;font-size:13px;font-weight:500;text-decoration:none;">登录 / 注册</a> <span id="homeLoginStatus" style="font-size:12px;color:#95A0AA;"></span></p>
             </div>
@@ -149,11 +153,44 @@ export class HomePage {
                     <img id="homePreviewImg" alt="预览图" class="upload-area__preview">
                 </div>
 
+                <div class="upload-actions">
+                    <button class="btn btn-camera" id="homeCameraBtn" title="打开摄像头拍照">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                            <circle cx="12" cy="13" r="4"/>
+                        </svg>
+                        拍照识别
+                    </button>
+                    <button class="btn btn-upload-file" id="homeUploadBtn" title="从相册选择图片">
+                        <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="17 8 12 3 7 8"/>
+                            <line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
+                        选择图片
+                    </button>
+                </div>
+
+                <!-- 摄像头预览区域（默认隐藏） -->
+                <div class="camera-preview hidden" id="homeCameraPreview">
+                    <video id="homeCameraVideo" autoplay playsinline></video>
+                    <canvas id="homeCameraCanvas" class="hidden"></canvas>
+                    <div class="camera-controls">
+                        <button class="btn btn-secondary camera-close-btn" id="homeCameraCloseBtn">✕ 关闭</button>
+                        <button class="btn btn-primary camera-capture-btn" id="homeCameraCaptureBtn">
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="white">
+                                <circle cx="12" cy="12" r="10"/>
+                                <circle cx="12" cy="12" r="6" fill="#fff"/>
+                            </svg>
+                            拍照
+                        </button>
+                    </div>
+                </div>
+
                 <input type="file"
                        id="homeFileInput"
                        class="hidden-input"
-                       accept="image/*"
-                       capture="environment">
+                       accept="image/*">
 
                 <div class="loading-overlay hidden" id="homeLoadingOverlay">
                     <div class="spinner"></div>
@@ -237,6 +274,7 @@ export class HomePage {
                     <a href="#/history" class="history-drawer__more">查看全部历史</a>
                 </div>
             </aside>
+            </div>
         `;
     }
 
@@ -252,6 +290,16 @@ export class HomePage {
         this.errorMsgEl = document.getElementById('homeErrorMsg');
         this.resultSection = document.getElementById('homeResultSection');
         this.searchResultSection = document.getElementById('homeSearchResultSection');
+
+        /* 摄像头相关DOM */
+        this.cameraBtn = document.getElementById('homeCameraBtn');
+        this.uploadBtn = document.getElementById('homeUploadBtn');
+        this.cameraPreview = document.getElementById('homeCameraPreview');
+        this.cameraVideo = document.getElementById('homeCameraVideo');
+        this.cameraCanvas = document.getElementById('homeCameraCanvas');
+        this.cameraCloseBtn = document.getElementById('homeCameraCloseBtn');
+        this.cameraCaptureBtn = document.getElementById('homeCameraCaptureBtn');
+        this._cameraStream = null;
     }
 
     /* ---- 事件绑定 ---- */
@@ -419,6 +467,115 @@ export class HomePage {
         if (loginLink) {
             loginLink.addEventListener('click', this._boundHandlers.loginLink);
         }
+
+        /* ---- 摄像头拍照功能 ---- */
+        if (this.cameraBtn) {
+            this.cameraBtn.addEventListener('click', () => this._openCamera());
+        }
+        if (this.uploadBtn) {
+            this.uploadBtn.addEventListener('click', () => this.fileInput?.click());
+        }
+        if (this.cameraCloseBtn) {
+            this.cameraCloseBtn.addEventListener('click', () => this._closeCamera());
+        }
+        if (this.cameraCaptureBtn) {
+            this.cameraCaptureBtn.addEventListener('click', () => this._capturePhoto());
+        }
+    }
+
+    /* 打开摄像头 */
+    async _openCamera() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            showToast('您的浏览器不支持摄像头功能', 'warning');
+            return;
+        }
+
+        try {
+            /* 请求后置摄像头（优先），允许切换到前置 */
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+                audio: false
+            });
+
+            this._cameraStream = stream;
+
+            if (this.cameraVideo && this.cameraPreview) {
+                this.cameraVideo.srcObject = stream;
+                this.cameraPreview.classList.remove('hidden');
+                this.uploadArea?.classList.add('hidden');
+
+                /* 滚动到摄像头预览区域 */
+                this.cameraPreview.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        } catch (error) {
+            let msg = '无法访问摄像头';
+            if (error.name === 'NotAllowedError') {
+                msg = '请授权使用摄像头权限';
+            } else if (error.name === 'NotFoundError') {
+                msg = '未检测到摄像头设备';
+            } else if (error.name === 'NotReadableError') {
+                msg = '摄像头被其他应用占用';
+            }
+            console.error('[HomePage] 摄像头打开失败:', error);
+            showToast(msg, 'warning', 3000);
+        }
+    }
+
+    /* 关闭摄像头 */
+    _closeCamera() {
+        if (this._cameraStream) {
+            this._cameraStream.getTracks().forEach(track => track.stop());
+            this._cameraStream = null;
+        }
+
+        if (this.cameraVideo) {
+            this.cameraVideo.srcObject = null;
+        }
+
+        if (this.cameraPreview) {
+            this.cameraPreview.classList.add('hidden');
+        }
+
+        if (this.uploadArea) {
+            this.uploadArea.classList.remove('hidden');
+        }
+    }
+
+    /* 拍照并处理图片 */
+    _capturePhoto() {
+        if (!this.cameraVideo || !this.cameraCanvas || !this._cameraStream) {
+            showToast('摄像头未就绪', 'warning');
+            return;
+        }
+
+        const video = this.cameraVideo;
+        const canvas = this.cameraCanvas;
+
+        /* 设置canvas尺寸与视频一致 */
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        /* 将canvas转为Blob文件 */
+        canvas.toBlob((blob) => {
+            if (!blob) {
+                showToast('拍照失败，请重试', 'error');
+                return;
+            }
+
+            const file = new File([blob], `camera_${Date.now()}.jpg`, { type: 'image/jpeg' });
+            console.log(`[HomePage] 拍照成功: ${file.name}, 大小: ${(file.size / 1024).toFixed(1)}KB`);
+
+            /* 关闭摄像头预览 */
+            this._closeCamera();
+
+            /* 处理图片（复用现有流程） */
+            this._prepareImage(file);
+
+            showToast('拍照成功！正在处理...', 'success', 1500);
+        }, 'image/jpeg', 0.92);
     }
 
     /* ---- 文件处理 ---- */

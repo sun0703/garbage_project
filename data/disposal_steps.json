@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "description": "校园生活垃圾投放步骤指南 - 每个物品的详细投放步骤和注意事项",
+  "description": "生活垃圾投放步骤指南 - 每个物品的详细投放步骤和注意事项",
   "steps": {
     "苹果核": {
       "disposal_steps": [

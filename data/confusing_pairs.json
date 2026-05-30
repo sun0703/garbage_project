@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "description": "校园垃圾分类易混淆物品对比数据",
+  "description": "垃圾分类易混淆物品对比数据",
   "pairs": [
     {
       "id": 1,

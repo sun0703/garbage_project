@@ -55,6 +55,7 @@ export class ItemDetailPage {
 
     _render() {
         this.container.innerHTML = `
+            <div class="page__content container">
             <div class="item-detail-nav">
                 <button class="nav-back-btn" id="itemBackBtn">
                     <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none">
@@ -70,6 +71,7 @@ export class ItemDetailPage {
                     <div class="skeleton-card"></div>
                     <div class="skeleton-card"></div>
                 </div>
+            </div>
             </div>
         `;
     }

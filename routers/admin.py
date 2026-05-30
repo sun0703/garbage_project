@@ -64,7 +64,7 @@ class DisposalPointRequest(BaseModel):
     lng: float
     address: str = ""
     categories: list = []
-    campus_zone: str = ""
+    zone: str = ""
     is_indoor: bool = False
 
 
@@ -74,7 +74,7 @@ class DisposalPointUpdateRequest(BaseModel):
     lng: Optional[float] = None
     address: Optional[str] = None
     categories: Optional[list] = None
-    campus_zone: Optional[str] = None
+    zone: Optional[str] = None
     is_indoor: Optional[bool] = None
 
 
@@ -639,7 +639,7 @@ async def add_confusing_pair(request: Request, req: ConfusingPairRequest):
             with open(confusing_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
         else:
-            data = {"version": "1.0", "description": "校园垃圾分类易混淆物品对比数据", "pairs": []}
+            data = {"version": "1.0", "description": "垃圾分类易混淆物品对比数据", "pairs": []}
 
         pairs = data.get("pairs", [])
         # 生成新ID
@@ -744,9 +744,9 @@ async def create_point(request: Request, req: DisposalPointRequest):
         db = get_db()
 
         db.execute("""
-            INSERT INTO disposal_points (id, name, lat, lng, address, categories, campus_zone, is_indoor, created_at)
+            INSERT INTO disposal_points (id, name, lat, lng, address, categories, zone, is_indoor, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (point_id, req.name, req.lat, req.lng, req.address, json.dumps(req.categories, ensure_ascii=False), req.campus_zone, 1 if req.is_indoor else 0, now))
+        """, (point_id, req.name, req.lat, req.lng, req.address, json.dumps(req.categories, ensure_ascii=False), req.zone, 1 if req.is_indoor else 0, now))
         db.commit()
 
         return JSONResponse(status_code=201, content={"success": True, "point_id": point_id, "message": "投放点创建成功"})
@@ -786,9 +786,9 @@ async def update_point(request: Request, point_id: str, req: DisposalPointUpdate
         if req.categories is not None:
             updates.append("categories = ?")
             params.append(json.dumps(req.categories, ensure_ascii=False))
-        if req.campus_zone is not None:
-            updates.append("campus_zone = ?")
-            params.append(req.campus_zone)
+        if req.zone is not None:
+            updates.append("zone = ?")
+            params.append(req.zone)
         if req.is_indoor is not None:
             updates.append("is_indoor = ?")
             params.append(1 if req.is_indoor else 0)

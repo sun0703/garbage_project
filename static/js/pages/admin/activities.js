@@ -134,7 +134,7 @@ export class AdminActivities {
                 <h3 class="admin-modal__title">创建活动</h3>
                 <div class="admin-form-group">
                     <label>活动标题 <span style="color:#dc3545">*</span></label>
-                    <input class="admin-input" id="actCreateTitle" placeholder="如：校园垃圾分类宣传周">
+                    <input class="admin-input" id="actCreateTitle" placeholder="如：垃圾分类宣传周">
                 </div>
                 <div class="admin-form-group">
                     <label>活动描述</label>

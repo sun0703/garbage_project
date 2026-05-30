@@ -11,7 +11,7 @@ const LEVELS = [
     { level: 2, name: '环保达人', icon: icon('leaf', 20), threshold: 50 },
     { level: 3, name: '分类专家', icon: icon('treePine', 20), threshold: 200 },
     { level: 4, name: '绿色先锋', icon: icon('trophy', 20), threshold: 500 },
-    { level: 5, name: '校园大使', icon: icon('crown', 20), threshold: 1000 },
+    { level: 5, name: '环保大使', icon: icon('crown', 20), threshold: 1000 },
 ];
 
 function calcLevel(points) {

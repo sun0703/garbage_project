@@ -23,7 +23,7 @@ const FALLBACK_CATEGORIES = [
             {name: '蛋壳', tip: '鸡蛋壳、鸭蛋壳'},
             {name: '茶叶渣', tip: '沥干水分'}
         ],
-        campus_special_items: [
+        special_items: [
             {name: '食堂剩饭剩菜', tip: '沥干汤汁后投入厨余垃圾桶'},
             {name: '奶茶中的珍珠', tip: '珍珠倒入厨余，杯子归其他垃圾'}
         ],
@@ -44,7 +44,7 @@ const FALLBACK_CATEGORIES = [
             {name: '易拉罐', tip: '踩扁后投放'},
             {name: '旧衣物', tip: '清洗打包后投放'}
         ],
-        campus_special_items: [
+        special_items: [
             {name: '快递纸箱', tip: '拆开压扁后投入蓝色可回收桶'},
             {name: '教材书本', tip: '保持整洁，可捐赠或投入可回收桶'}
         ],
@@ -65,7 +65,7 @@ const FALLBACK_CATEGORIES = [
             {name: '陶瓷碎片', tip: '包裹后投放'},
             {name: '大骨头', tip: '猪腿骨、牛骨'}
         ],
-        campus_special_items: [
+        special_items: [
             {name: '外卖餐盒(有残留)', tip: '清空食物残渣后投入灰色桶'},
             {name: '奶茶杯(有残留)', tip: '珍珠倒入厨余，杯子归其他垃圾'}
         ],
@@ -86,7 +86,7 @@ const FALLBACK_CATEGORIES = [
             {name: '过期药品', tip: '药品及包装'},
             {name: '水银温度计', tip: '小心轻放'}
         ],
-        campus_special_items: [
+        special_items: [
             {name: '充电宝/锂电池', tip: '投入红色有害垃圾桶，防止短路'},
             {name: '废墨盒/硒鼓', tip: '打印机耗材投入有害垃圾桶'}
         ],
@@ -147,6 +147,7 @@ export class GuidePage {
 
     _render() {
         this.container.innerHTML = `
+            <div class="page__content container">
             <div class="guide-nav">
                 <button class="nav-back-btn" id="guideBackBtn">
                     <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none">
@@ -164,8 +165,8 @@ export class GuidePage {
                     </svg>
                 </div>
                 <div class="guide-intro-text">
-                    <h3>校园垃圾分类标准</h3>
-                    <p>了解四类垃圾的正确分类方法，共同维护校园环境</p>
+                    <h3>垃圾分类标准</h3>
+                    <p>了解四类垃圾的正确分类方法，共同维护生活环境</p>
                 </div>
             </div>
 
@@ -200,6 +201,7 @@ export class GuidePage {
 
             <div class="guide-footer">
                 <p>数据来源：国家标准《生活垃圾分类标志》GB/T 19095-2019</p>
+            </div>
             </div>
         `;
     }
@@ -252,7 +254,7 @@ export class GuidePage {
         const binColor = escapeHtml(category.bin_color || category.binColor || '');
         const disposalTips = category.disposal_tips || [];
         const commonItems = category.common_items || category.examples || [];
-        const campusItems = category.campus_special_items || [];
+        const specialItems = category.special_items || [];
         const wrongItems = category.wrong_items || [];
 
         const tipsHTML = disposalTips.map(tip => `
@@ -272,10 +274,10 @@ export class GuidePage {
             `;
         }).join('');
 
-        const campusItemsHTML = campusItems.map(item => `
-            <li class="campus-item">
-                <span class="campus-item-name">${escapeHtml(item.name)}</span>
-                <span class="campus-item-tip">${escapeHtml(item.tip)}</span>
+        const specialItemsHTML = specialItems.map(item => `
+            <li class="special-item">
+                <span class="special-item-name">${escapeHtml(item.name)}</span>
+                <span class="special-item-tip">${escapeHtml(item.tip)}</span>
             </li>
         `).join('');
 
@@ -329,12 +331,12 @@ export class GuidePage {
                     </div>
                     ` : ''}
 
-                    ${campusItems.length > 0 ? `
+                    ${specialItems.length > 0 ? `
                     <div class="guide-section">
                         <h4 class="guide-section-title">
-                            <span class="section-icon">🏫</span>校园特有物品
+                            <span class="section-icon">📋</span>特殊分类物品
                         </h4>
-                        <ul class="campus-items-list">${campusItemsHTML}</ul>
+                        <ul class="special-items-list">${specialItemsHTML}</ul>
                     </div>
                     ` : ''}
 

@@ -120,6 +120,7 @@ export class PreviewPage {
     /* ---- 渲染 ---- */
     _render() {
         this.container.innerHTML = `
+            <div class="page__content container">
             <!-- 页面导航栏 -->
             <div class="preview-nav">
                 <button class="nav-back-btn" id="previewBackBtn">
@@ -165,6 +166,7 @@ export class PreviewPage {
             <!-- 提示信息 -->
             <div class="preview-tip">
                 <p>确认图片清晰后点击「开始识别」，AI 将自动分析垃圾分类</p>
+            </div>
             </div>
         `;
     }

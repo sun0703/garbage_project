@@ -17,7 +17,7 @@ router = APIRouter()
 
 @router.get("/api/guide/standard")
 async def get_guide_standard() -> JSONResponse:
-    """获取校园垃圾分类标准"""
+    """获取垃圾分类标准"""
     data = load_json_data(BASE_DIR / "data" / "guide_standard.json")
     if data is None:
         return error_response("E004", "分类标准数据文件不存在", 404)

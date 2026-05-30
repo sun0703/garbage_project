@@ -1,4 +1,4 @@
-"""校园垃圾分类后端主程序"""
+"""垃圾分类后端主程序"""
 
 import json
 import logging
@@ -70,7 +70,7 @@ from services.asr_correction import set_search_engine
 from app import backend_state
 
 app = FastAPI(
-    title="校园垃圾分类AI助手",
+    title="垃圾分类AI助手",
     description="基于YOLOv8n-cls的智能垃圾分类识别系统",
     version="1.1.0",
 )

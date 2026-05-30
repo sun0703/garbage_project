@@ -8,7 +8,7 @@ export class NavBar extends BaseComponent {
    * 构造函数 - 初始化导航栏配置
    * @param {Object} [options={}] - 配置选项
    * @param {HTMLElement|string} [options.container] - 挂载容器（用于init()方法）
-   * @param {string} [options.title='校园垃圾分类'] - 默认标题文字
+   * @param {string} [options.title='垃圾分类'] - 默认标题文字
    * @param {boolean} [options.showHistoryBtn=true] - 是否显示历史按钮
    * @param {Function} [options.onHistoryClick] - 历史按钮点击回调
    */
@@ -16,7 +16,7 @@ export class NavBar extends BaseComponent {
     super({
       container: options.container,
       props: {
-        title: options.title || '校园垃圾分类',
+        title: options.title || '垃圾分类',
         showHistoryBtn: options.showHistoryBtn !== false,
         onHistoryClick: options.onHistoryClick || null
       },
@@ -131,7 +131,7 @@ export class NavBar extends BaseComponent {
    * @returns {void}
    */
   set_title(newTitle) {
-    this.props.title = newTitle || '校园垃圾分类';
+    this.props.title = newTitle || '垃圾分类';
 
     if (this._titleElement) {
       this._titleElement.textContent = this.props.title;

@@ -223,7 +223,7 @@ class SystemMonitor:
             t_gpu = threading.Thread(target=self.monitor_gpu, daemon=True)
             t_gpu.name = "GPUMonitor"
             t_gpu.start()
-            threads.append(t_mem)
+            threads.append(t_gpu)
 
         if threads:
             logger.info(f"已启动 {len(threads)} 个监控线程")

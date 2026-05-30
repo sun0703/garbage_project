@@ -460,6 +460,9 @@
 
 /* HTML根元素设置 */
 html {
+  margin: 0;
+  padding: 0;
+  overflow-x: clip;                  /* 禁止横向溢出产生滚动条 */
   font-size: 16px;                    /* 基准字体大小，用于rem单位换算 */
   line-height: 1.5;                   /* 行高基准 */
   -webkit-text-size-adjust: 100%;     /* iOS横屏时禁止字体自动缩放 */
@@ -469,6 +472,8 @@ html {
 
 /* Body主体样式 - 多层渐变背景 + 装饰光斑 */
 body {
+  margin: 0;                           /* 重置浏览器默认外边距，避免布局偏移 */
+  padding: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
                "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue",
                Arial, sans-serif;     /* 系统字体栈优先 */
@@ -476,7 +481,7 @@ body {
   color: var(--text-primary);
   background-color: var(--bg-base);
   min-height: 100vh;                  /* 最小高度撑满视口 */
-  overflow-x: hidden;                 /* 禁止横向溢出 */
+  overflow-x: clip;                 /* 禁止横向溢出 */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
@@ -2618,7 +2623,7 @@ ol {
 .history-drawer-overlay {
   position: fixed;
   inset: 0;
-  z-index: 9996;
+  z-index: 10000;
   background: rgba(0,0,0,0.3);
   opacity: 0;
   visibility: hidden;
@@ -2632,13 +2637,24 @@ ol {
 /* 注意: .history-drawer 及其子元素的完整样式定义在 components.css 中 */
 /* 此处仅保留兼容性引用和增强修复 */
 .history-drawer {
-  z-index: 9997 !important;
+  z-index: 10001 !important;
   visibility: hidden;
   opacity: 0;
+  width: 0 !important;
+  overflow: hidden !important;
+  pointer-events: none;
 }
 .history-drawer.open {
   visibility: visible !important;
   opacity: 1 !important;
+  width: min(340px, 85vw) !important;
+  overflow: visible !important;
+  pointer-events: auto;
+}
+
+/* 抽屉打开时，导航栏禁用指针事件避免遮挡关闭按钮 */
+body:has(.history-drawer.open) .nav-bar {
+  pointer-events: none !important;
 }
 .history-drawer__close {
   position: relative;
@@ -3319,6 +3335,22 @@ ol {
    示例.html 精准复刻 - #page-home 专属
    所有规则使用 #page-home 前缀以覆盖 components.css
    ============================================ */
+
+#page-home {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding-left: calc((100vw - min(var(--container-max), 100%)) / 2);
+  padding-right: calc((100vw - min(var(--container-max), 100%)) / 2);
+}
+
+#page-home > .history-drawer,
+#page-home > .history-drawer-overlay,
+#page-home > .history-drawer-toggle {
+  padding-left: 0;
+  padding-right: 0;
+}
 
 #page-home .container { padding: 20px 16px; margin-bottom: 0; }
 

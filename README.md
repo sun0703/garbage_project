@@ -655,54 +655,64 @@ pip install -r requirements.txt
 
 ### 模型准备
 
+> ⚠️ **重要**: 模型权重文件（`.pt`、`.pth`、`.onnx`）已通过 `.gitignore` 排除，**不会包含在 Git 仓库中**，克隆后需自行下载放置。
+
 将训练好的 YOLOv8 模型放入 `models/` 目录:
 
 - `models/garbage_yolov8m_best.pt` — 40 类垃圾分类专用模型（需自行下载放置于此）
-- `models/yolov8n.pt` — YOLOv8n 预训练权重（自动降级备用，需自行下载）
+- `models/best v2.pt` — V2 粗分类模型（双层架构 Layer 1）
+- `models/yolov8n.pt` — YOLOv8n 预训练权重（自动降级备用）
 
-### 启动服务
+### 本地开发启动
 
 ```bash
+# 启动服务（默认端口 8001）
 python -m app.main
+
+# 如需关闭热重载（避免文件变动导致频繁重启）
+$env:RELOAD="false"; python -m app.main   # Windows PowerShell
+RELOAD=false python -m app.main            # Linux/macOS
 ```
-
-默认监听 `http://localhost:8001`,可通过环境变量 `PORT` 或修改 [app/config.py](app/config.py) 自定义端口。
-
-### 访问
 
 浏览器打开 `http://localhost:8001` 即可使用 SPA 前端界面。
 
-### Docker 部署
+> API 文档（Swagger）：`http://localhost:8001/docs`
+
+### Cloudflare Tunnel 本地开发公网访问
+
+将本地服务通过域名 `https://trashai.qzz.io` 暴露到公网：
 
 ```bash
-cd docker
-docker-compose up --build
-```
+# 1. 安装 cloudflared
+winget install Cloudflare.cloudflared    # Windows
+brew install cloudflare/cloudflare/cloudflared  # macOS
+# Linux: 从 https://github.com/cloudflare/cloudflared/releases 下载
 
-### Cloudflare Tunnel 公网访问
-
-使用 Cloudflare Tunnel 将本地服务暴露到公网，无需公网 IP：
-
-```bash
-# 1. 安装 cloudflared（Windows）
-winget install Cloudflare.cloudflared
-
-# 2. 登录 Cloudflare 账号（浏览器授权）
+# 2. 登录 Cloudflare 账号（首次需要浏览器授权）
 cloudflared tunnel login
 
-# 3. 创建隧道
+# 3. 创建隧道并绑定域名（首次需要）
 cloudflared tunnel create trashai
-
-# 4. 绑定域名
 cloudflared tunnel route dns trashai trashai.qzz.io
 
-# 5. 启动隧道（保持终端运行）
+# 4. 启动隧道（将域名流量转发到本地 8001 端口）
 cloudflared tunnel run --url http://localhost:8001 trashai
 ```
 
 访问地址：**https://trashai.qzz.io**
 
-> Cloudflare Tunnel 优势：免费、稳定、自动 HTTPS、DDoS 防护、无需暴露本地端口
+> Cloudflare Tunnel 优势：免费 HTTPS、DDoS 防护、无需公网 IP 和端口映射，本地开发即可对外展示。
+
+### Docker 部署
+
+```bash
+cd docker
+docker compose up --build
+```
+
+Docker Compose 编排详见 [docker/docker-compose.yml](docker/docker-compose.yml)，包含 Nginx + PostgreSQL + Redis 全套服务。
+
+> 注意：Docker 部署前需将 SSL 证书放入 `docker/ssl/` 目录，并确保域名 DNS 已解析到服务器 IP。
 
 ---
 

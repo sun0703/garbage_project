@@ -580,12 +580,12 @@ export class VoiceButton {
             z-index: 9999;
             max-width: 80%;
             text-align: center;
-            animation: fadeInUp 0.3s ease;
+            animation: toastFadeInUp 0.3s ease;
         `;
         document.body.appendChild(toast);
 
         setTimeout(() => {
-            toast.style.animation = 'fadeOutDown 0.3s ease';
+            toast.style.animation = 'toastFadeOutDown 0.3s ease';
             setTimeout(() => toast.remove(), 280);
         }, 2500);
     }
@@ -762,12 +762,12 @@ const VOICE_BTN_STYLES = `
 }
 
 /* Toast 动画 */
-@keyframes fadeInUp {
+@keyframes toastFadeInUp {
     from { opacity: 0; transform: translateX(-50%) translateY(10px); }
     to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
-@keyframes fadeOutDown {
+@keyframes toastFadeOutDown {
     from { opacity: 1; transform: translateX(-50%) translateY(0); }
     to { opacity: 0; transform: translateX(-50%) translateY(10px); }
 }

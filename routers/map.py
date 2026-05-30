@@ -20,6 +20,9 @@ from app.models import CheckinRequest
 logger = logging.getLogger(__name__)
 
 AMAP_KEY = os.getenv("AMAP_KEY", "")
+if not AMAP_KEY:
+    logger.error("环境变量 AMAP_KEY 未设置，高德地图 API 功能将不可用")
+
 
 _PI = 3.14159265358979324
 _A = 6378245.0
@@ -108,6 +111,10 @@ async def get_disposal_points(zone: str = "", category: str = ""):
 async def get_amap_nearby_bins(lat: float = Query(..., description="纬度"), lng: float = Query(..., description="经度"), radius: int = Query(2000, description="搜索半径(米)，最大50000")):
     """通过高德地图POI周边搜索API查询用户位置附近真实的垃圾桶/回收站/废品回收点"""
     try:
+        if not AMAP_KEY:
+            logger.warning("AMAP_KEY 未配置，无法调用高德地图 API")
+            return JSONResponse(content={"success": False, "error": {"code": "E403", "message": "高德地图 API 密钥未配置，请在 .env 中设置 AMAP_KEY 环境变量"}, "points": [], "total": 0})
+
         if radius > 50000:
             radius = 50000
         if radius < 100:
